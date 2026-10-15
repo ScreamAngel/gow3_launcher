@@ -25,6 +25,8 @@ fn update_xml_patches(base_dir: &Path, target_hz: u32) -> Result<(), String> {
     let hex_val = format!("{:02x}{:02x}{:02x}{:02x}", bytes[0], bytes[1], bytes[2], bytes[3]);
 
     let patch_files = [
+        base_dir.join(".runtime/patches/God_of_War_III_Remastered.xml"),
+        base_dir.join("patches/God_of_War_III_Remastered.xml"),
         base_dir.join("CUSA01715-patch/patches/patch.xml"),
         base_dir.join("patches/CUSA01715.xml"),
         base_dir.join("patches/CUSA01623.xml"),

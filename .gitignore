@@ -9,6 +9,7 @@ CUSA01715-patch/
 user/
 out/
 GLCache/
+.runtime/
 vkd3d-proton.cache
 fsr4_shaders/
 .local/

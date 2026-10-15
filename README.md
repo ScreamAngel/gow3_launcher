@@ -23,9 +23,8 @@ Launcher for God Of War 3 PC on Linux
     - 🔍 **Smart Game Scanner & Completeness Check:** Scans drives to locate `eboot.bin` dumps, validates file integrity (`param.sfo`, elf size), and prevents launching corrupted        
   directories.                                                                                                                                                                            
     - 🚨 **Crash & Error Diagnostic Assistant:** Automatically analyzes `gow3_log.txt` on exit. If an unexpected crash occurs, it displays a plain-language diagnosis and recommended fix.
-    - 🔄 **GitHub Upstream Sync & Auto-Updater:** Checks upstream ([R-V-L/gow3_pc](https://github.com/R-V-L/gow3_pc)) for updates. Backs up `run.sh` to `run.sh.bak` and re-applies all   
-  your custom directory paths, 144Hz patches, and VRAM budgets seamlessly.                                                                                                                
-    - 🌐 **Multi-Language Support:** Available in **Turkish 🇹🇷**, **English 🇬🇧**, **German 🇩🇪**, and **Spanish 🇪🇸**.                                                                      
+    - 🔄 **GitHub Upstream Sync & Auto-Updater:** Checks upstream ([R-V-L/gow3_pc](https://github.com/R-V-L/gow3_pc)) for updates and re-applies all your custom directory paths, 144Hz patches, and VRAM budgets seamlessly.                                                                                                                
+   - 🌐 **Multi-Language Support:** Available in **Turkish 🇹🇷**, **English 🇬🇧**, **German 🇩🇪**, and **Spanish 🇪🇸**.                                                                      
                                                                                                                                                                                           
                                                                                                                                                                                        
                                                                                                                                                                                           
@@ -43,62 +42,68 @@ Launcher for God Of War 3 PC on Linux
                                                                                                                                                                                           
    ## 🚀 Quick Start Guide                                                                                                                                                               
                                                                                                                                                                                           
-   ### 1. Installation                                                                                                                                                                   
-   Download this repository:                                                                                                                                                    
-   Extract the zip file into a folder.
-   You can then launch the game using the "gow3-launcher" file found inside.
-   This launcher has been designed to be simple and user-friendly, making things easier for you.
-   It automatically configures the settings files based on your system, detects the game's installation location, and allows you to apply patches. Once you have finished the setup, you can start playing.
-   If any issues arise, you can access the log files directly through the launcher to investigate.
-   The launcher also checks for any available updates. Enjoy the game!                      
+   ### 1. Installation & Setup                                                                                                                                                                   
+   
+   **Option A: Clone with Git**
+   ```bash
+   git clone https://github.com/ScreamAngel/gow3_pclauncher.git
+   cd gow3_pclauncher
+   ./gow3-launcher
+   ```
+
+   **Option B: Download Archive / Release**
+   Download the archive, extract it to any folder, and run `./gow3-launcher`.
+
+   The launcher is completely standalone: it automatically detects your hardware, verifies the game dump, configures settings files, and applies all required patches without requiring external bash scripts.
                                                                                                                                                                                       
                                                                                                                                                                                           
    ### 2. Add Your Game Dump                                                                                                                                                             
-   Place your decrypted PS4 God of War III Remastered game folder (`CUSA01623` or `CUSA01715` containing `eboot.bin`) into this directory, **or** keep it on an external drive and select it through the Launcher.                                                                                                                                                                
+   Place your decrypted PS4 God of War III Remastered game folder (`CUSA01623` or `CUSA01715` containing `eboot.bin`) into this directory, **or** keep it on any internal/external drive and select it through the Launcher.                                                                                                                                                                
                                                                                                                                                                                           
    ### 3. Launch the Game                                                                                                                                                                
    Run the native launcher executable:                                                                                                                                                   
                                                                                                                                                                                   
-   double-click `gow3-launcher` in folder.                                                                                                                                                                      
-                                                                                                                                                                                       
-   *(Alternatively, you can run `launcher.sh` or double-click `god-of-war-3.desktop`)*                                                                                                 
-                                                                                                                                                                                          
-   The launcher will detect your hardware, verify your game files, apply the 144Hz sync and texture fixes, and you're ready to play!                                                     
+   - Double-click `gow3-launcher` in your file manager, or run:
+   ```bash
+   ./gow3-launcher
+   ```
+   - **Direct Launch (Steam Deck / Big Picture)**: You can launch directly into the game without the launcher UI by passing `--play`:
+   ```bash
+   ./gow3-launcher --play
+   ```
                                                                                                                                                                                           
                                                                                                                                                                                       
                                                                                                                                                                                           
-   ## ⚙️ Included Launch Scripts                                                                                                                                                         
+   ## ⚙️ Launcher Architecture                                                                                                                                                         
                                                                                                                                                                                           
-   - **`gow3-launcher`**: The primary standalone Rust GUI launcher.                                                                                                                      
-   - **`launcher.sh`**: Helper bash script to execute the launcher.                                                                                                                      
-   - **`run.sh`**: The underlying engine runner script with tuned environment variables.                                                                                                 
-   - **`start-gow3.sh`**: Headless launcher script for standard desktop usage.
-   - **`start-gow3-deck.sh`**: Optimized startup script for Steam Deck / SteamOS (720p / 60 FPS profile).
-  
-    
-  
+   - **`gow3-launcher`**: Standalone native Rust launcher and engine runner with embedded runtime pipelines.
+   - **Zero Script Clutter**: All preparation, module linking, and patch pipelines are built directly into the launcher executable.                                                                                                                      
+                                                                                                                                                                                          
+                                                                                                                                                                                       
+                                                                                                                                                                                          
    ## 🛠️ Troubleshooting                                                                                                                                                                 
-  
+                                                                                                                                                                                          
    - **Textures turn yellow in snow/bright areas?**  
      Ensure **"Yellow Texture Glitch Fix (Instant Readbacks)"** is checked in the launcher.
    - **Game runs twice as fast on 144Hz+ monitors?**
-   - Ensure **"Refresh Rate (Hz) Sync Patch"** is enabled and your target FPS matches your display.
+     Ensure **"Refresh Rate (Hz) Sync Patch"** is enabled and your target FPS matches your display.
    - **Game crashes during heavy combat or asset streaming?**  
      Check if your GPU has at least 6GB VRAM. You can adjust the VRAM Garbage Collection Budget directly in the launcher.
-  
-    
-  
+                                                                                                                                                                                          
+                                                                                                                                                                                       
+                                                                                                                                                                                          
    ## 🇹🇷 Türkçe Açıklama                                                                                                                                                                 
-  
+                                                                                                                                                                                          
    Bu proje, **God of War® III Remastered** oyununun Linux portunu modern bir grafik arayüz (GUI Launcher) ve performans optimizasyonlarıyla buluşturan açık kaynaklı bir pakettir.      
-  
+                                                                                                                                                                                          
    ### Özellikler:
-   1. **Rust ile Yazılmış Hafif Launcher:** Donanımınızı (GPU, VRAM, RAM, Monitör Hz) otomatik algılar.
-   2. **144 Hz Düzeltmesi:** Yüksek yenileme hızlı monitörlerde oyunun hızlı akmasını (2x speed) engelleyen Delta-Time yaması.
-   3. **Doku Bozulması Koruması:** Karlı sahnelerdeki sararma hatasını çözen Instant Readbacks yaması.
-   4. **Feral GameMode:** Tek tıkla `gamemoderun` performans modu desteği.
-   5. **Akıllı Hata Teşhisi:** Oyun kapanırsa log dosyasını analiz edip hatanın sebebini ve çözümünü pop-up olarak bildirir.
-   6. **GitHub Güncelleme Entegrasyonu:** [R-V-L/gow3_pc](https://github.com/R-V-L/gow3_pc) üzerindeki güncellemeleri kontrol eder, `run.sh` yedeğini alıp ayarlarınızı bozmadan entegre eder.
+   1. **Tek ve Sade Rust Launcher:** Karmaşık `.sh` scriptleri kaldırılmış, tüm pipeline doğrudan `gow3-launcher` içine gömülmüştür.
+   2. **Otomatik Donanım Algılama:** GPU, VRAM, RAM ve monitör yenileme hızınızı (Hz) anında tespit eder.
+   3. **144 Hz Düzeltmesi:** Yüksek yenileme hızlı monitörlerde oyunun hızlı akmasını (2x speed) engelleyen Delta-Time yaması.
+   4. **Doku Bozulması Koruması:** Karlı sahnelerdeki sararma hatasını çözen Instant Readbacks yaması.
+   5. **Feral GameMode:** Tek tıkla `gamemoderun` performans modu desteği.
+   6. **Akıllı Hata Teşhisi:** Oyun kapanırsa log dosyasını analiz edip hatanın sebebini ve çözümünü arayüzde bildirir.
+   7. **Steam / Steam Deck Desteği:** `--play` parametresi ile arayüze girmeden doğrudan oyunu başlatabilme.
   
    
   

@@ -1,0 +1,345 @@
+use std::fs::{self, File};
+use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
+
+use crate::config::LauncherConfig;
+
+// Embedded Python runtime scripts
+pub const SCRIPT_PREPARE: &str = include_str!("../../scripts/prepare.py");
+pub const SCRIPT_LINK_LIBC: &str = include_str!("../../scripts/link_libc.py");
+pub const SCRIPT_LINK_MODULES: &str = include_str!("../../scripts/link_modules.py");
+pub const SCRIPT_CONTENT_PROFILE: &str = include_str!("../../scripts/content_profile.py");
+pub const SCRIPT_LAUNCH_ENV: &str = include_str!("../../scripts/launch_env.py");
+pub const SCRIPT_PATCHES: &str = include_str!("../../scripts/patches.py");
+pub const SCRIPT_MODS: &str = include_str!("../../scripts/mods.py");
+pub const SCRIPT_GRAPHICS_OPTIONS: &str = include_str!("../../scripts/graphics_options.py");
+pub const SCRIPT_SAVE_BACKUP: &str = include_str!("../../scripts/save_backup.py");
+pub const SCRIPT_AUTO_TUNE: &str = include_str!("../../scripts/auto_tune.py");
+pub const SCRIPT_FIND_GAME: &str = include_str!("../../scripts/find_game.py");
+
+// Embedded XML Patches
+pub const PATCH_GOW3_XML: &str = include_str!("../../patches/God_of_War_III_Remastered.xml");
+
+/// Ensures that embedded scripts and patches are unpacked into `.runtime`
+/// if external directories are missing or need refreshing.
+pub fn ensure_runtime_assets(base_dir: &Path) -> Result<(PathBuf, PathBuf), String> {
+    let runtime_dir = base_dir.join(".runtime");
+    let scripts_dir = runtime_dir.join("scripts");
+    let patches_dir = runtime_dir.join("patches");
+
+    fs::create_dir_all(&scripts_dir)
+        .map_err(|e| format!("Failed to create runtime scripts dir: {}", e))?;
+    fs::create_dir_all(&patches_dir)
+        .map_err(|e| format!("Failed to create runtime patches dir: {}", e))?;
+
+    let scripts: &[(&str, &str)] = &[
+        ("prepare.py", SCRIPT_PREPARE),
+        ("link_libc.py", SCRIPT_LINK_LIBC),
+        ("link_modules.py", SCRIPT_LINK_MODULES),
+        ("content_profile.py", SCRIPT_CONTENT_PROFILE),
+        ("launch_env.py", SCRIPT_LAUNCH_ENV),
+        ("patches.py", SCRIPT_PATCHES),
+        ("mods.py", SCRIPT_MODS),
+        ("graphics_options.py", SCRIPT_GRAPHICS_OPTIONS),
+        ("save_backup.py", SCRIPT_SAVE_BACKUP),
+        ("auto_tune.py", SCRIPT_AUTO_TUNE),
+        ("find_game.py", SCRIPT_FIND_GAME),
+    ];
+
+    for (name, content) in scripts {
+        let dest = scripts_dir.join(name);
+        let need_write = if let Ok(meta) = fs::metadata(&dest) {
+            meta.len() != content.len() as u64
+        } else {
+            true
+        };
+        if need_write {
+            let _ = fs::write(&dest, content);
+        }
+    }
+
+    let patch_xml = patches_dir.join("God_of_War_III_Remastered.xml");
+    let need_write_patch = if let Ok(meta) = fs::metadata(&patch_xml) {
+        meta.len() != PATCH_GOW3_XML.len() as u64
+    } else {
+        true
+    };
+    if need_write_patch {
+        let _ = fs::write(&patch_xml, PATCH_GOW3_XML);
+    }
+
+    Ok((scripts_dir, patches_dir))
+}
+
+pub fn find_python() -> Result<String, String> {
+    for cmd in &["python3", "python"] {
+        if let Ok(out) = Command::new(cmd).arg("--version").output() {
+            if out.status.success() {
+                return Ok(cmd.to_string());
+            }
+        }
+    }
+    Err("Python 3 bulunamadı. Lütfen sisteminize 'python3' kurun.".to_string())
+}
+
+/// Executes the full God of War III preparation and probe execution natively from Rust.
+pub fn launch_gow3(
+    base_dir: &Path,
+    config: &LauncherConfig,
+    use_gamemode: bool,
+) -> Result<i32, String> {
+    let game_dir = Path::new(&config.game_dir);
+    if !game_dir.join("eboot.bin").is_file() {
+        return Err("Oyun klasöründe 'eboot.bin' bulunamadı!".to_string());
+    }
+
+    let probe_bin = base_dir.join("bin/gow3-probe");
+    if !probe_bin.is_file() {
+        return Err("Oyun motoru ('bin/gow3-probe') bulunamadı!".to_string());
+    }
+
+    let out_dir = base_dir.join("out");
+    fs::create_dir_all(&out_dir).map_err(|e| format!("'out' klasörü oluşturulamadı: {}", e))?;
+
+    // Ensure assets exist (uses .runtime if scripts/ or patches/ are missing from disk)
+    let (runtime_scripts, runtime_patches) = ensure_runtime_assets(base_dir)?;
+    let scripts_path = if base_dir.join("scripts").is_dir() {
+        base_dir.join("scripts")
+    } else {
+        runtime_scripts
+    };
+    let patches_path = if base_dir.join("patches").is_dir() {
+        base_dir.join("patches")
+    } else {
+        runtime_patches
+    };
+
+    let log_path = base_dir.join("gow3_log.txt");
+    let log_file = File::create(&log_path).map_err(|e| format!("Log dosyası oluşturulamadı: {}", e))?;
+    let log_file_err = log_file
+        .try_clone()
+        .map_err(|e| format!("Log dosyası çoğaltılamadı: {}", e))?;
+
+    let python = find_python()?;
+
+    // 1. Run mods.py
+    let _ = Command::new(&python)
+        .arg(scripts_path.join("mods.py"))
+        .arg(game_dir)
+        .arg("--out")
+        .arg(&out_dir)
+        .arg("--enabled")
+        .arg("1")
+        .env("PYTHONPATH", &scripts_path)
+        .current_dir(base_dir)
+        .stdout(Stdio::from(log_file.try_clone().unwrap()))
+        .stderr(Stdio::from(log_file_err.try_clone().unwrap()))
+        .status();
+
+    // 2. Run prepare.py (ELF parsing and analysis)
+    let status = Command::new(&python)
+        .arg(scripts_path.join("prepare.py"))
+        .arg(game_dir)
+        .arg("--out")
+        .arg(&out_dir)
+        .env("PYTHONPATH", &scripts_path)
+        .current_dir(base_dir)
+        .stdout(Stdio::from(log_file.try_clone().unwrap()))
+        .stderr(Stdio::from(log_file_err.try_clone().unwrap()))
+        .status()
+        .map_err(|e| format!("prepare.py çalıştırılamadı: {}", e))?;
+
+    if !status.success() {
+        return Err("Oyun ikili dosyaları hazırlanamadı (prepare.py başarısız oldu).".to_string());
+    }
+
+    // 3. Run link_libc.py
+    let status = Command::new(&python)
+        .arg(scripts_path.join("link_libc.py"))
+        .arg(game_dir)
+        .arg("--out")
+        .arg(&out_dir)
+        .env("PYTHONPATH", &scripts_path)
+        .current_dir(base_dir)
+        .stdout(Stdio::from(log_file.try_clone().unwrap()))
+        .stderr(Stdio::from(log_file_err.try_clone().unwrap()))
+        .status()
+        .map_err(|e| format!("link_libc.py çalıştırılamadı: {}", e))?;
+
+    if !status.success() {
+        return Err("Sistem kitaplığı bağlanamadı (link_libc.py başarısız oldu).".to_string());
+    }
+
+    // 4. Run link_modules.py
+    let status = Command::new(&python)
+        .arg(scripts_path.join("link_modules.py"))
+        .arg(game_dir)
+        .arg("--out")
+        .arg(&out_dir)
+        .env("PYTHONPATH", &scripts_path)
+        .current_dir(base_dir)
+        .stdout(Stdio::from(log_file.try_clone().unwrap()))
+        .stderr(Stdio::from(log_file_err.try_clone().unwrap()))
+        .status()
+        .map_err(|e| format!("link_modules.py çalıştırılamadı: {}", e))?;
+
+    if !status.success() {
+        return Err("Oyun modülleri bağlanamadı (link_modules.py başarısız oldu).".to_string());
+    }
+
+    // 5. Run content_profile.py
+    let _ = Command::new(&python)
+        .arg(scripts_path.join("content_profile.py"))
+        .arg(game_dir)
+        .arg("--out")
+        .arg(&out_dir)
+        .arg("--sku")
+        .arg("full")
+        .env("PYTHONPATH", &scripts_path)
+        .current_dir(base_dir)
+        .stdout(Stdio::from(log_file.try_clone().unwrap()))
+        .stderr(Stdio::from(log_file_err.try_clone().unwrap()))
+        .status();
+
+    // 6. Run launch_env.py to update graphics state
+    let config_ini = base_dir.join("gow3.ini");
+    let state_json = out_dir.join("graphics_state.json");
+    let mut launch_env_vars = Vec::new();
+
+    if let Ok(out) = Command::new(&python)
+        .arg(scripts_path.join("launch_env.py"))
+        .arg("--game")
+        .arg(game_dir)
+        .arg("--config")
+        .arg(&config_ini)
+        .arg("--state")
+        .arg(&state_json)
+        .env("PYTHONPATH", &scripts_path)
+        .current_dir(base_dir)
+        .output()
+    {
+        if let Ok(val) = serde_json::from_slice::<serde_json::Value>(&out.stdout) {
+            if let Some(updates) = val.get("updates").and_then(|u| u.as_object()) {
+                for (k, v) in updates {
+                    if let Some(s) = v.as_str() {
+                        launch_env_vars.push((k.clone(), s.to_string()));
+                    }
+                }
+            }
+        }
+    }
+
+    // 7. Run patches.py
+    let patches_str = if config.target_fps != 60 {
+        format!(
+            "Bug Fix - Texture Corruption Fix;Skip Any Video With X Button;Frame Rate Patch - {} FPS",
+            config.target_fps
+        )
+    } else {
+        "Bug Fix - Texture Corruption Fix;Skip Any Video With X Button".to_string()
+    };
+
+    let _ = Command::new(&python)
+        .arg(scripts_path.join("patches.py"))
+        .arg("--out")
+        .arg(&out_dir)
+        .arg("--extra")
+        .arg(&patches_str)
+        .arg("--game-dir")
+        .arg(game_dir)
+        .arg("--patches-dir")
+        .arg(&patches_path)
+        .env("PYTHONPATH", &scripts_path)
+        .current_dir(base_dir)
+        .stdout(Stdio::from(log_file.try_clone().unwrap()))
+        .stderr(Stdio::from(log_file_err.try_clone().unwrap()))
+        .status();
+
+    // 8. Execute probe binary
+    let boot_linked = out_dir.join("boot-linked.bin");
+    let content_bin = out_dir.join("content.bin");
+    let patches_bin = out_dir.join("patches.bin");
+    let user_dir = base_dir.join("user");
+
+    let mut cmd = if use_gamemode {
+        let mut c = Command::new("gamemoderun");
+        c.arg(&probe_bin);
+        c
+    } else {
+        Command::new(&probe_bin)
+    };
+
+    cmd.arg(&boot_linked)
+        .arg("--content-profile")
+        .arg(&content_bin)
+        .arg("--patches")
+        .arg(&patches_bin)
+        .arg("--app0")
+        .arg(game_dir)
+        .arg("--user")
+        .arg(&user_dir)
+        .arg("--timeout")
+        .arg("0")
+        .current_dir(base_dir);
+
+    // Set base launch environment variables
+    for (k, v) in launch_env_vars {
+        cmd.env(k, v);
+    }
+
+    // Apply launcher optimization overrides
+    cmd.env("GOW3_PREBUILT", "1");
+    cmd.env("GOW3_FORCE_PATCHES", "1");
+    cmd.env("GOW3_STREAM_MEMORY", "cached");
+    cmd.env("GOW3_FULL_BARRIERS", "1");
+    cmd.env("GOW3_READBACKS", if config.patch_readbacks { "1" } else { "0" });
+    cmd.env("GOW3_READBACK_LINEAR", if config.patch_readbacks { "1" } else { "0" });
+    cmd.env("GOW3_FORCE_READBACK", if config.patch_readbacks { "1" } else { "0" });
+    cmd.env("GOW3_GC_BUDGET_MB", config.vram_gc_budget_mb.to_string());
+    cmd.env("GOW3_DMEM_POOL_MB", config.dmem_mb.to_string());
+    cmd.env("GOW3_DMEM_MB", config.dmem_mb.to_string());
+    cmd.env("GOW3_DEFAULT_ENGINE_FPS", config.target_fps.to_string());
+    cmd.env("GOW3_VBLANK_HZ", config.target_fps.to_string());
+    cmd.env("GOW3_PATCHES", &patches_str);
+    cmd.env("GOW3_PATCHES_ONLY", "1");
+    cmd.env("GOW3_CONFIG", &config_ini);
+    cmd.env("GOW3_GAME_DIR", game_dir);
+
+    // Pipe stdout & stderr to gow3_log.txt
+    cmd.stdout(Stdio::from(log_file));
+    cmd.stderr(Stdio::from(log_file_err));
+
+    let mut child = cmd.spawn().map_err(|e| format!("Oyun başlatılamadı: {}", e))?;
+    let exit_status = child.wait().map_err(|e| format!("Oyun beklenirken hata oluştu: {}", e))?;
+
+    Ok(exit_status.code().unwrap_or(-1))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_find_python() {
+        let py = find_python();
+        assert!(py.is_ok(), "Python 3 should be detected on the system");
+    }
+
+    #[test]
+    fn test_ensure_runtime_assets() {
+        let temp_dir = std::env::temp_dir().join("gow3_test_runtime");
+        let _ = fs::remove_dir_all(&temp_dir);
+
+        let res = ensure_runtime_assets(&temp_dir);
+        assert!(res.is_ok());
+
+        let (scripts_dir, patches_dir) = res.unwrap();
+        assert!(scripts_dir.join("prepare.py").is_file());
+        assert!(scripts_dir.join("link_libc.py").is_file());
+        assert!(scripts_dir.join("link_modules.py").is_file());
+        assert!(scripts_dir.join("patches.py").is_file());
+        assert!(patches_dir.join("God_of_War_III_Remastered.xml").is_file());
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+}

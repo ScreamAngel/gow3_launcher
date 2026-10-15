@@ -6,6 +6,7 @@ mod scanner;
 mod system;
 mod tuner;
 mod updater;
+mod runner;
 
 use app::LauncherApp;
 use eframe::egui;
@@ -19,6 +20,28 @@ fn main() -> eframe::Result<()> {
     } else {
         current_dir
     };
+
+    let args: Vec<String> = std::env::args().collect();
+    if args.iter().any(|a| a == "--play" || a == "--start" || a == "-p") {
+        let config = config::LauncherConfig::load(&base_dir);
+        let gamemode_avail = system::is_gamemode_available();
+        let use_gamemode = gamemode_avail && config.use_gamemode;
+        let _ = tuner::apply_settings(
+            &base_dir,
+            config.target_fps,
+            config.patch_delta_time,
+            config.patch_readbacks,
+            config.vram_gc_budget_mb,
+            config.dmem_mb,
+        );
+        match runner::launch_gow3(&base_dir, &config, use_gamemode) {
+            Ok(code) => std::process::exit(code),
+            Err(e) => {
+                eprintln!("Error launching God of War III: {}", e);
+                std::process::exit(1);
+            }
+        }
+    }
 
     let mut viewport = egui::ViewportBuilder::default()
         .with_title("God of War® III Remastered - Launcher")

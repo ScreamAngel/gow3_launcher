@@ -1,6 +1,5 @@
 use eframe::egui;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::thread;
 
@@ -48,6 +47,9 @@ pub struct LauncherApp {
 impl LauncherApp {
     pub fn new(cc: &eframe::CreationContext<'_>, base_dir: PathBuf) -> Self {
         let mut config = LauncherConfig::load(&base_dir);
+
+        // Ensure runtime assets are unpacked (.runtime/scripts and .runtime/patches)
+        let _ = crate::runner::ensure_runtime_assets(&base_dir);
 
         // Always scan hardware on startup and cache
         let hw = detect_hardware();
@@ -200,12 +202,6 @@ impl LauncherApp {
     }
 
     fn launch_game(&mut self) {
-        let run_sh = self.base_dir.join("run.sh");
-        if !run_sh.is_file() {
-            self.status_message = Some(("❌ 'run.sh' not found!".to_string(), true));
-            return;
-        }
-
         // Apply settings before launching
         self.apply_all_optimizations();
 
@@ -214,29 +210,21 @@ impl LauncherApp {
         self.game_exit_rx = Some(rx);
 
         let base_dir_clone = self.base_dir.clone();
+        let config_clone = self.config.clone();
         let use_gamemode = self.has_gamemode && self.config.use_gamemode;
 
         thread::spawn(move || {
-            let mut cmd = if use_gamemode {
-                let mut c = Command::new("gamemoderun");
-                c.arg("bash").arg("run.sh");
-                c
-            } else {
-                let mut c = Command::new("bash");
-                c.arg("run.sh");
-                c
-            };
-
-            cmd.current_dir(&base_dir_clone);
-            let child = cmd.spawn();
-
-            match child {
-                Ok(mut proc) => {
-                    let status = proc.wait();
-                    let exit_code = status.ok().and_then(|s| s.code());
-                    let _ = tx.send(exit_code);
+            match crate::runner::launch_gow3(&base_dir_clone, &config_clone, use_gamemode) {
+                Ok(code) => {
+                    let _ = tx.send(Some(code));
                 }
-                Err(_) => {
+                Err(err) => {
+                    eprintln!("Launch error: {}", err);
+                    let log_path = base_dir_clone.join("gow3_log.txt");
+                    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(&log_path) {
+                        use std::io::Write;
+                        let _ = writeln!(f, "\n[LAUNCH ERROR] {}", err);
+                    }
                     let _ = tx.send(Some(-1));
                 }
             }

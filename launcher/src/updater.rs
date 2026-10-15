@@ -75,49 +75,49 @@ pub fn apply_github_update(
     config: &mut LauncherConfig,
 ) -> Result<String, String> {
     let run_sh = base_dir.join("run.sh");
-    if !run_sh.is_file() {
-        return Err("'run.sh' dosyası bulunamadı.".to_string());
+    let mut backup_name = String::new();
+
+    if run_sh.is_file() {
+        // 1. Backup existing run.sh
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        backup_name = format!("run.sh.bak_{}", timestamp);
+        let backup_path = base_dir.join(&backup_name);
+        let bak_generic = base_dir.join("run.sh.bak");
+
+        fs::copy(&run_sh, &backup_path).map_err(|e| format!("Yedek oluşturulamadı: {}", e))?;
+        let _ = fs::copy(&run_sh, &bak_generic);
+
+        // 2. Download new run.sh from GitHub raw
+        let raw_url = "https://raw.githubusercontent.com/R-V-L/gow3_pc/main/run.sh";
+        let download = Command::new("curl")
+            .args(["-fsSL", raw_url, "-o", run_sh.to_str().unwrap()])
+            .output()
+            .map_err(|e| format!("run.sh indirilemedi: {}", e))?;
+
+        if !download.status.success() {
+            // Restore backup if download failed
+            let _ = fs::copy(&backup_path, &run_sh);
+            return Err("GitHub üzerinden güncel run.sh indirilemedi.".to_string());
+        }
+
+        // Ensure run.sh is executable
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = fs::set_permissions(&run_sh, fs::Permissions::from_mode(0o755));
+        }
+
+        // 3. Re-integrate user settings into the new run.sh
+        let target_game_path = if !config.game_dir.is_empty() {
+            std::path::PathBuf::from(&config.game_dir)
+        } else {
+            base_dir.join("CUSA01623")
+        };
+        let _ = update_launch_scripts(base_dir, &target_game_path);
     }
-
-    // 1. Backup existing run.sh
-    let timestamp = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
-    let backup_name = format!("run.sh.bak_{}", timestamp);
-    let backup_path = base_dir.join(&backup_name);
-    let bak_generic = base_dir.join("run.sh.bak");
-
-    fs::copy(&run_sh, &backup_path).map_err(|e| format!("Yedek oluşturulamadı: {}", e))?;
-    let _ = fs::copy(&run_sh, &bak_generic);
-
-    // 2. Download new run.sh from GitHub raw
-    let raw_url = "https://raw.githubusercontent.com/R-V-L/gow3_pc/main/run.sh";
-    let download = Command::new("curl")
-        .args(["-fsSL", raw_url, "-o", run_sh.to_str().unwrap()])
-        .output()
-        .map_err(|e| format!("run.sh indirilemedi: {}", e))?;
-
-    if !download.status.success() {
-        // Restore backup if download failed
-        let _ = fs::copy(&backup_path, &run_sh);
-        return Err("GitHub üzerinden güncel run.sh indirilemedi.".to_string());
-    }
-
-    // Ensure run.sh is executable
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let _ = fs::set_permissions(&run_sh, fs::Permissions::from_mode(0o755));
-    }
-
-    // 3. Re-integrate user settings into the new run.sh
-    let target_game_path = if !config.game_dir.is_empty() {
-        std::path::PathBuf::from(&config.game_dir)
-    } else {
-        base_dir.join("CUSA01623")
-    };
-    let _ = update_launch_scripts(base_dir, &target_game_path);
 
     let _ = apply_settings(
         base_dir,
@@ -132,10 +132,14 @@ pub fn apply_github_update(
     config.last_git_commit = update.commit_sha.clone();
     let _ = config.save(base_dir);
 
-    Ok(format!(
-        "run.sh başarıyla güncellendi ve yedeklendi ('{}'). Tüm özel ayarlarınız korundu!",
-        backup_name
-    ))
+    if !backup_name.is_empty() {
+        Ok(format!(
+            "Tüm ayarlar ve run.sh başarıyla güncellendi (Yedek: '{}')!",
+            backup_name
+        ))
+    } else {
+        Ok("Tüm yapılandırma ve optimizasyonlar başarıyla güncellendi!".to_string())
+    }
 }
 
 #[cfg(test)]

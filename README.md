@@ -45,7 +45,8 @@ Launcher for God Of War 3 PC on Linux
                                                                                                                                                                                           
    ### 1. Installation                                                                                                                                                                   
    Download this repository:                                                                                                                                                    
-   Extract the zip file into a folder. (You can use PeaZip)                                                                                                                                                 You can then launch the game using the "gow3-launcher" file found inside.
+   Extract the zip file into a folder.
+   You can then launch the game using the "gow3-launcher" file found inside.
    This launcher has been designed to be simple and user-friendly, making things easier for you.
    It automatically configures the settings files based on your system, detects the game's installation location, and allows you to apply patches. Once you have finished the setup, you can start playing.
    If any issues arise, you can access the log files directly through the launcher to investigate.

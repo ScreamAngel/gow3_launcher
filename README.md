@@ -44,9 +44,12 @@ Launcher for God Of War 3 PC on Linux
    ## 🚀 Quick Start Guide                                                                                                                                                               
                                                                                                                                                                                           
    ### 1. Installation                                                                                                                                                                   
-   Clone or download this repository:                                                                                                                                                    
-   bash git clone https://github.com/ScreamAngel/gow3-linux.git                                                                                                                           
-   cd gow3-linux                                                                                                                                                                         
+   Download this repository:                                                                                                                                                    
+   Extract the zip file into a folder. (You can use PeaZip)                                                                                                                                                 You can then launch the game using the "gow3-launcher" file found inside.
+   This launcher has been designed to be simple and user-friendly, making things easier for you.
+   It automatically configures the settings files based on your system, detects the game's installation location, and allows you to apply patches. Once you have finished the setup, you can start playing.
+   If any issues arise, you can access the log files directly through the launcher to investigate.
+   The launcher also checks for any available updates. Enjoy the game!                      
                                                                                                                                                                                       
                                                                                                                                                                                           
    ### 2. Add Your Game Dump                                                                                                                                                             
@@ -54,10 +57,10 @@ Launcher for God Of War 3 PC on Linux
                                                                                                                                                                                           
    ### 3. Launch the Game                                                                                                                                                                
    Run the native launcher executable:                                                                                                                                                   
-    bash                                                                                                                                                                               
-    ./gow3-launcher                                                                                                                                                                       
+                                                                                                                                                                                  
+   double-click `gow3-launcher` in folder.                                                                                                                                                                      
                                                                                                                                                                                        
-   *(Alternatively, you can run `./launcher.sh` or double-click `god-of-war-3.desktop`)*                                                                                                 
+   *(Alternatively, you can run `launcher.sh` or double-click `god-of-war-3.desktop`)*                                                                                                 
                                                                                                                                                                                           
    The launcher will detect your hardware, verify your game files, apply the 144Hz sync and texture fixes, and you're ready to play!                                                     
                                                                                                                                                                                           

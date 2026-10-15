@@ -52,6 +52,8 @@ Launcher for God Of War 3 PC on Linux
    If any issues arise, you can access the log files directly through the launcher to investigate.
    The launcher also checks for any available updates. Enjoy the game!   
 
+   OR
+
    ### Clone the Repository
    bash                                                                               
    git clone https://github.com/ScreamAngel/gow3_pclauncher.git                          

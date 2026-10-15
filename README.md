@@ -106,6 +106,7 @@ Launcher for God Of War 3 PC on Linux
     - **Launcher & Hardware Tuner:** Built with Rust, [egui/eframe](https://github.com/emilk/egui).
   
     > **Disclaimer:** God of War is a registered trademark of Sony Interactive Entertainment LLC and Santa Monica Studio. This repository **does not contain any copyrighted game assets, ROMs, or binaries**. Users must supply their own legally obtained game files.
+    
 
-    #Licence
-    GNU GPL v2 or later ([LICENSE](https://github.com/R-V-L/gow3_pc/blob/main/LICENSE)). Third-party components keep their own licenses.
+   #Licence
+   GNU GPL v2 or later ([LICENSE](https://github.com/R-V-L/gow3_pc/blob/main/LICENSE)). Third-party components keep their own licenses.

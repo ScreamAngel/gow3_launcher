@@ -1,0 +1,27 @@
+# God of War III Linux - .gitignore
+
+# Game Dumps (Must be provided legally by the user)
+CUSA01623/
+CUSA01715/
+CUSA01715-patch/
+
+# User Data, Saves & Runtime Caches (Auto-generated on launch)
+user/
+out/
+GLCache/
+vkd3d-proton.cache
+fsr4_shaders/
+.local/
+__pycache__/
+
+# Logs & Configs generated during play
+*.log
+gow3_log.txt
+last_run.log
+gow3.ini
+
+# Compiler build artifacts & archives
+launcher/target/
+*.bak*
+*.zip*
+*.tar.gz

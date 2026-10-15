@@ -1,0 +1,18 @@
+{
+  "first_launch_done": true,
+  "language": "tr",
+  "game_dir": "/home/screamangel/İndirilenler/GOW3 Emu Linux/gow3-linux/CUSA01623",
+  "target_fps": 144,
+  "patch_delta_time": true,
+  "patch_readbacks": true,
+  "use_gamemode": true,
+  "vram_gc_budget_mb": 6144,
+  "dmem_mb": 9216,
+  "cached_hardware": {
+    "gpu_name": "NVIDIA GeForce RTX 4070 Laptop GPU",
+    "vram_mb": 8188,
+    "ram_mb": 15603,
+    "refresh_rate_hz": 144
+  },
+  "last_git_commit": "c5638d9956002b8a9f09a240028f6793ddf7b2f8"
+}

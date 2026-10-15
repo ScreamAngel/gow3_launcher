@@ -1,0 +1,166 @@
+use std::fs;
+use std::process::Command;
+use crate::config::CachedHardware;
+
+pub fn detect_hardware() -> CachedHardware {
+    let (gpu_name, vram_mb) = detect_gpu();
+    let ram_mb = detect_ram();
+    let refresh_rate_hz = detect_refresh_rate();
+
+    CachedHardware {
+        gpu_name,
+        vram_mb,
+        ram_mb,
+        refresh_rate_hz,
+    }
+}
+
+pub fn is_gamemode_available() -> bool {
+    Command::new("which")
+        .arg("gamemoderun")
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
+}
+
+fn detect_gpu() -> (String, u64) {
+    // 1. Try nvidia-smi
+    if let Ok(output) = Command::new("nvidia-smi")
+        .args(["--query-gpu=name,memory.total", "--format=csv,noheader,nounits"])
+        .output()
+    {
+        if output.status.success() {
+            let text = String::from_utf8_lossy(&output.stdout);
+            if let Some(line) = text.lines().next() {
+                let parts: Vec<&str> = line.split(',').collect();
+                if parts.len() >= 2 {
+                    let name = parts[0].trim().to_string();
+                    let vram = parts[1].trim().parse::<u64>().unwrap_or(4096);
+                    return (name, vram);
+                }
+            }
+        }
+    }
+
+    // 2. Try AMD / Intel sysfs
+    if let Ok(entries) = glob_vram() {
+        if let Some((name, vram)) = entries {
+            return (name, vram);
+        }
+    }
+
+    // 3. Fallback to lspci
+    if let Ok(output) = Command::new("lspci").output() {
+        if output.status.success() {
+            let text = String::from_utf8_lossy(&output.stdout);
+            for line in text.lines() {
+                if line.contains("VGA compatible controller") || line.contains("3D controller") {
+                    let parts: Vec<&str> = line.split(':').collect();
+                    if parts.len() >= 3 {
+                        return (parts[2].trim().to_string(), 4096);
+                    }
+                }
+            }
+        }
+    }
+
+    ("Bilinmeyen GPU (Genel)".to_string(), 4096)
+}
+
+fn glob_vram() -> Result<Option<(String, u64)>, std::io::Error> {
+    for card_idx in 0..8 {
+        let path = format!("/sys/class/drm/card{}/device/mem_info_vram_total", card_idx);
+        if let Ok(content) = fs::read_to_string(&path) {
+            if let Ok(bytes) = content.trim().parse::<u64>() {
+                let vram_mb = bytes / (1024 * 1024);
+                return Ok(Some(("AMD/Intel Discrete GPU".to_string(), vram_mb)));
+            }
+        }
+    }
+    Ok(None)
+}
+
+fn detect_ram() -> u64 {
+    if let Ok(content) = fs::read_to_string("/proc/meminfo") {
+        for line in content.lines() {
+            if line.starts_with("MemTotal:") {
+                let parts: Vec<&str> = line.split_whitespace().collect();
+                if parts.len() >= 2 {
+                    if let Ok(kb) = parts[1].parse::<u64>() {
+                        return kb / 1024;
+                    }
+                }
+            }
+        }
+    }
+    16384 // Fallback
+}
+
+fn detect_refresh_rate() -> u32 {
+    let mut rates = Vec::new();
+
+    // 1. Try xrandr
+    if let Ok(output) = Command::new("xrandr").output() {
+        if output.status.success() {
+            let text = String::from_utf8_lossy(&output.stdout);
+            for line in text.lines() {
+                if line.contains('*') {
+                    for part in line.split_whitespace() {
+                        if part.contains('*') {
+                            let clean = part.replace('*', "").replace('+', "");
+                            if let Ok(r) = clean.parse::<f32>() {
+                                rates.push(r.round() as u32);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // 2. Try hyprctl monitors
+    if rates.is_empty() {
+        if let Ok(output) = Command::new("hyprctl").args(["monitors"]).output() {
+            if output.status.success() {
+                let text = String::from_utf8_lossy(&output.stdout);
+                for line in text.lines() {
+                    if line.contains("@") && line.contains("Hz") {
+                        if let Some(at_pos) = line.find('@') {
+                            let sub = &line[at_pos + 1..];
+                            if let Some(hz_pos) = sub.find("Hz") {
+                                let num_str = sub[..hz_pos].trim();
+                                if let Ok(r) = num_str.parse::<f32>() {
+                                    rates.push(r.round() as u32);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // 3. Try kscreen-doctor -o
+    if rates.is_empty() {
+        if let Ok(output) = Command::new("kscreen-doctor").args(["-o"]).output() {
+            if output.status.success() {
+                let text = String::from_utf8_lossy(&output.stdout);
+                for line in text.lines() {
+                    if line.contains("@") && line.contains("Hz") {
+                        if let Some(at_pos) = line.find('@') {
+                            let sub = &line[at_pos + 1..];
+                            if let Some(hz_pos) = sub.find("Hz") {
+                                let num_str = sub[..hz_pos].trim();
+                                if let Ok(r) = num_str.parse::<f32>() {
+                                    rates.push(r.round() as u32);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    rates.into_iter().max().unwrap_or(60)
+}

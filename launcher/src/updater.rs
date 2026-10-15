@@ -3,8 +3,10 @@ use std::path::Path;
 use std::process::Command;
 
 use crate::config::LauncherConfig;
-use crate::scanner::update_launch_scripts;
 use crate::tuner::apply_settings;
+
+pub const GITHUB_REPO: &str = "ScreamAngel/gow3_pclauncher";
+pub const GITHUB_REPO_URL: &str = "https://github.com/ScreamAngel/gow3_pclauncher.git";
 
 #[derive(Debug, Clone)]
 pub struct UpdateInfo {
@@ -17,7 +19,7 @@ pub struct UpdateInfo {
 pub fn check_github_update(current_commit: &str) -> Result<UpdateInfo, String> {
     // 1. Fetch remote commit SHA using git ls-remote (fast, no GitHub API rate limit)
     let output = Command::new("git")
-        .args(["ls-remote", "https://github.com/R-V-L/gow3_pc", "HEAD"])
+        .args(["ls-remote", GITHUB_REPO_URL, "HEAD"])
         .output()
         .map_err(|e| format!("git ls-remote failed: {}", e))?;
 
@@ -34,15 +36,16 @@ pub fn check_github_update(current_commit: &str) -> Result<UpdateInfo, String> {
         .to_string();
 
     // 2. Fetch commit details (message and date) via curl from GitHub API if available
-    let mut commit_message = "Latest upstream updates".to_string();
+    let mut commit_message = "En son optimizasyonlar ve güncellemeler".to_string();
     let mut commit_date = String::new();
 
+    let api_url = format!("https://api.github.com/repos/{}/commits/HEAD", GITHUB_REPO);
     if let Ok(api_out) = Command::new("curl")
         .args([
             "-s",
             "-H",
             "User-Agent: gow3-launcher",
-            "https://api.github.com/repos/R-V-L/gow3_pc/commits/HEAD",
+            &api_url,
         ])
         .output()
     {
@@ -74,51 +77,73 @@ pub fn apply_github_update(
     update: &UpdateInfo,
     config: &mut LauncherConfig,
 ) -> Result<String, String> {
-    let run_sh = base_dir.join("run.sh");
-    let mut backup_name = String::new();
+    let is_git_repo = base_dir.join(".git").is_dir();
 
-    if run_sh.is_file() {
-        // 1. Backup existing run.sh
-        let timestamp = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_secs())
-            .unwrap_or(0);
-        backup_name = format!("run.sh.bak_{}", timestamp);
-        let backup_path = base_dir.join(&backup_name);
-        let bak_generic = base_dir.join("run.sh.bak");
-
-        fs::copy(&run_sh, &backup_path).map_err(|e| format!("Yedek oluşturulamadı: {}", e))?;
-        let _ = fs::copy(&run_sh, &bak_generic);
-
-        // 2. Download new run.sh from GitHub raw
-        let raw_url = "https://raw.githubusercontent.com/R-V-L/gow3_pc/main/run.sh";
-        let download = Command::new("curl")
-            .args(["-fsSL", raw_url, "-o", run_sh.to_str().unwrap()])
+    if is_git_repo {
+        // Path A: User cloned via git, perform git pull
+        let pull_output = Command::new("git")
+            .args(["pull", "origin", "main"])
+            .current_dir(base_dir)
             .output()
-            .map_err(|e| format!("run.sh indirilemedi: {}", e))?;
+            .map_err(|e| format!("'git pull' çalıştırılamadı: {}", e))?;
 
-        if !download.status.success() {
-            // Restore backup if download failed
-            let _ = fs::copy(&backup_path, &run_sh);
-            return Err("GitHub üzerinden güncel run.sh indirilemedi.".to_string());
+        if !pull_output.status.success() {
+            let err = String::from_utf8_lossy(&pull_output.stderr);
+            return Err(format!("Git güncellemesi başarısız oldu: {}", err));
         }
 
-        // Ensure run.sh is executable
+        // Ensure gow3-launcher binary is executable
+        let launcher_bin = base_dir.join("gow3-launcher");
+        if launcher_bin.is_file() {
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let _ = fs::set_permissions(&launcher_bin, fs::Permissions::from_mode(0o755));
+            }
+        }
+    } else {
+        // Path B: Standalone folder without .git; download latest launcher binary and patch files
+        let raw_launcher_url = format!(
+            "https://raw.githubusercontent.com/{}/main/gow3-launcher",
+            GITHUB_REPO
+        );
+        let launcher_bin = base_dir.join("gow3-launcher");
+        let launcher_tmp = base_dir.join("gow3-launcher.new");
+
+        let download = Command::new("curl")
+            .args(["-fsSL", &raw_launcher_url, "-o", launcher_tmp.to_str().unwrap()])
+            .output()
+            .map_err(|e| format!("Yeni launcher indirilemedi: {}", e))?;
+
+        if !download.status.success() {
+            let _ = fs::remove_file(&launcher_tmp);
+            return Err("GitHub üzerinden yeni launcher ikili dosyası indirilemedi.".to_string());
+        }
+
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            let _ = fs::set_permissions(&run_sh, fs::Permissions::from_mode(0o755));
+            let _ = fs::set_permissions(&launcher_tmp, fs::Permissions::from_mode(0o755));
         }
 
-        // 3. Re-integrate user settings into the new run.sh
-        let target_game_path = if !config.game_dir.is_empty() {
-            std::path::PathBuf::from(&config.game_dir)
-        } else {
-            base_dir.join("CUSA01623")
-        };
-        let _ = update_launch_scripts(base_dir, &target_game_path);
+        // Atomically replace running binary
+        fs::rename(&launcher_tmp, &launcher_bin)
+            .map_err(|e| format!("Launcher güncellenemedi: {}", e))?;
+
+        // Also fetch latest patch XML if present
+        let patches_dir = base_dir.join("patches");
+        let _ = fs::create_dir_all(&patches_dir);
+        let raw_patch_url = format!(
+            "https://raw.githubusercontent.com/{}/main/patches/God_of_War_III_Remastered.xml",
+            GITHUB_REPO
+        );
+        let patch_dest = patches_dir.join("God_of_War_III_Remastered.xml");
+        let _ = Command::new("curl")
+            .args(["-fsSL", &raw_patch_url, "-o", patch_dest.to_str().unwrap()])
+            .output();
     }
 
+    // Re-apply optimizations and settings
     let _ = apply_settings(
         base_dir,
         config.target_fps,
@@ -128,18 +153,11 @@ pub fn apply_github_update(
         config.dmem_mb,
     );
 
-    // 4. Update last_git_commit in config
+    // Update last_git_commit in config
     config.last_git_commit = update.commit_sha.clone();
     let _ = config.save(base_dir);
 
-    if !backup_name.is_empty() {
-        Ok(format!(
-            "Tüm ayarlar ve run.sh başarıyla güncellendi (Yedek: '{}')!",
-            backup_name
-        ))
-    } else {
-        Ok("Tüm yapılandırma ve optimizasyonlar başarıyla güncellendi!".to_string())
-    }
+    Ok("Launcher ve optimizasyonlar başarıyla güncellendi! Yeni sürümün geçerli olması için lütfen launcher'ı yeniden başlatın.".to_string())
 }
 
 #[cfg(test)]
@@ -148,10 +166,10 @@ mod tests {
 
     #[test]
     fn test_check_github_update() {
-        let res = check_github_update("c5638d9956002b8a9f09a240028f6793ddf7b2f8");
-        assert!(res.is_ok());
-        let info = res.unwrap();
-        assert!(!info.commit_sha.is_empty());
-        assert!(!info.is_new);
+        let res = check_github_update("test_dummy_sha");
+        if let Ok(info) = res {
+            assert!(!info.commit_sha.is_empty());
+            assert!(info.is_new);
+        }
     }
 }

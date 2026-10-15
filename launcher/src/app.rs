@@ -926,7 +926,7 @@ impl eframe::App for LauncherApp {
                         }
 
                         if ui.button(self.t("view_on_github")).clicked() {
-                            ui.ctx().open_url(egui::OpenUrl::new_tab("https://github.com/R-V-L/gow3_pc"));
+                            ui.ctx().open_url(egui::OpenUrl::new_tab("https://github.com/ScreamAngel/gow3_pclauncher"));
                         }
 
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {

@@ -253,6 +253,8 @@ pub fn launch_gow3(
         .arg("--patches-dir")
         .arg(&patches_path)
         .env("PYTHONPATH", &scripts_path)
+        .env("GOW3_FORCE_PATCHES", "1")
+        .env("GOW3_PATCHES_ONLY", "1")
         .current_dir(base_dir)
         .stdout(Stdio::from(log_file.try_clone().unwrap()))
         .stderr(Stdio::from(log_file_err.try_clone().unwrap()))

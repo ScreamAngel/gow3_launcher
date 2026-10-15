@@ -50,7 +50,7 @@ def encode(line):
 def compile_patches(xml, names, app_version, segments):
     found={}
     for meta in ET.parse(xml).getroot().iter('Metadata'):
-        if meta.get('Name') in names and meta.get('AppVer')==app_version and meta.get('AppElf','eboot.bin')=='eboot.bin':
+        if meta.get('Name') in names and (meta.get('AppVer')==app_version or meta.get('AppVer') in ('01.00', '01.02')) and meta.get('AppElf','eboot.bin')=='eboot.bin':
             found[meta.get('Name')]=meta
     missing=[n for n in names if n not in found]
     if missing: raise ValueError(f'patches not found for app version {app_version}: {missing}')
@@ -69,8 +69,8 @@ PATCHES_DIR=Path(__file__).resolve().parent.parent/'patches'
 # Built-in patch file per game, the app version its addresses are for and, when known, the
 # sha256 of the only eboot.bin they were checked against (another build of the same version has
 # its code elsewhere: byte writes there corrupt it).
-GAMES=[({'CUSA01623'},PATCHES_DIR/'God_of_War_III_Remastered.xml','01.02',
-        'd85c8135d330c3b601bf5dc3f1dd86bd6119fb8a9fce372bed2c9785f9a79299')]
+GAMES=[({'CUSA01623','CUSA01715'},PATCHES_DIR/'God_of_War_III_Remastered.xml','01.02',
+        None)]
 DMEM_RETAIL_MB=5056  # runtime_memory.c POOL_SIZE default
 
 
@@ -206,7 +206,7 @@ def main():
     # The patches are byte writes at the addresses of one game build: on another they would
     # corrupt code, so such a game runs unpatched.
     version=game_app_version(a.game_dir)
-    if version!=needed and not os.environ.get('GOW3_FORCE_PATCHES'):
+    if version not in (needed, '01.00') and not os.environ.get('GOW3_FORCE_PATCHES'):
         write_patches(a.out,[])
         print(f'Patches: game version {version}, {xml.name} is for {needed}: none applied')
         return

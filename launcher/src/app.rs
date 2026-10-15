@@ -523,12 +523,19 @@ impl eframe::App for LauncherApp {
                 ui.horizontal(|ui| {
                     ui.checkbox(&mut self.config.patch_delta_time, egui::RichText::new(hz_label).strong());
                     ui.label(target_fps_label);
+                    let current_text = if self.config.target_fps == 60 {
+                        "60 FPS (Orijinal Hız - Önerilen)".to_string()
+                    } else {
+                        format!("{} FPS (Deneysel)", self.config.target_fps)
+                    };
                     egui::ComboBox::from_id_salt("hz_combo")
-                        .selected_text(format!("{} FPS / Hz", self.config.target_fps))
+                        .selected_text(current_text)
                         .show_ui(ui, |ui| {
-                            for hz in [60, 120, 144, 165, 240] {
-                                ui.selectable_value(&mut self.config.target_fps, hz, format!("{} Hz", hz));
-                            }
+                            ui.selectable_value(&mut self.config.target_fps, 60, "60 FPS (Orijinal Hız - Kararlı & Önerilen)");
+                            ui.selectable_value(&mut self.config.target_fps, 120, "120 FPS (Deneysel Yüksek Hız)");
+                            ui.selectable_value(&mut self.config.target_fps, 144, "144 FPS (Deneysel Yüksek Hız)");
+                            ui.selectable_value(&mut self.config.target_fps, 165, "165 FPS (Deneysel Yüksek Hız)");
+                            ui.selectable_value(&mut self.config.target_fps, 240, "240 FPS (Deneysel Yüksek Hız)");
                         });
                 });
                 ui.label(egui::RichText::new(hz_desc).color(egui::Color32::LIGHT_GRAY).size(11.0));

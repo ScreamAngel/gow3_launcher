@@ -1,8 +1,8 @@
 {
   "first_launch_done": true,
   "language": "tr",
-  "game_dir": "/home/screamangel/İndirilenler/GOW3 Emu Linux/gow3-linux/CUSA01623",
-  "target_fps": 144,
+  "game_dir": "/home/screamangel/İndirilenler/GOW3 Emu Linux/CUSA01623",
+  "target_fps": 60,
   "patch_delta_time": true,
   "patch_readbacks": true,
   "use_gamemode": true,

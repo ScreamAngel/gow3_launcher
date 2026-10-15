@@ -13,7 +13,7 @@ pub fn apply_settings(
         update_xml_patches(base_dir, target_hz)?;
     }
     update_run_sh(base_dir, target_hz, patch_readbacks, vram_gc_budget_mb, dmem_mb)?;
-    update_gow3_ini(base_dir, patch_readbacks, vram_gc_budget_mb)?;
+    update_gow3_ini(base_dir, target_hz, patch_readbacks, vram_gc_budget_mb)?;
     update_user_config_toml(base_dir, vram_gc_budget_mb)?;
 
     Ok(())
@@ -137,7 +137,12 @@ fn replace_or_insert_env(content: &mut String, var_name: &str, value: &str) {
     }
 }
 
-fn update_gow3_ini(base_dir: &Path, patch_readbacks: bool, vram_gc_budget_mb: u64) -> Result<(), String> {
+fn update_gow3_ini(
+    base_dir: &Path,
+    target_hz: u32,
+    patch_readbacks: bool,
+    vram_gc_budget_mb: u64,
+) -> Result<(), String> {
     let ini_path = base_dir.join("gow3.ini");
     if !ini_path.is_file() {
         return Ok(());
@@ -150,6 +155,10 @@ fn update_gow3_ini(base_dir: &Path, patch_readbacks: bool, vram_gc_budget_mb: u6
     replace_ini_key(&mut content, "readbackLinearImages", readbacks_val);
     replace_ini_key(&mut content, "stale_readback", "0");
     replace_ini_key(&mut content, "budget", &vram_gc_budget_mb.to_string());
+    replace_ini_key(&mut content, "engine_fps", &target_hz.to_string());
+    replace_ini_key(&mut content, "fps_limit", &target_hz.to_string());
+    replace_ini_key(&mut content, "frames_queued", "1");
+    replace_ini_key(&mut content, "vsync", "1");
 
     fs::write(&ini_path, content).map_err(|e| e.to_string())?;
     Ok(())
@@ -161,16 +170,18 @@ fn replace_ini_key(content: &mut String, key: &str, val: &str) {
 
     for line in content.lines() {
         let trimmed = line.trim();
-        if trimmed.starts_with(key) && trimmed.contains('=') {
-            lines.push(format!("{} = {}", key, val));
-            found = true;
-        } else {
-            lines.push(line.to_string());
+        if let Some((k, _)) = trimmed.split_once('=') {
+            if k.trim() == key {
+                lines.push(format!("{}={}", key, val));
+                found = true;
+                continue;
+            }
         }
+        lines.push(line.to_string());
     }
 
     if !found {
-        lines.push(format!("{} = {}", key, val));
+        lines.push(format!("{}={}", key, val));
     }
 
     *content = lines.join("\n");

@@ -11,6 +11,50 @@ use crate::system::{detect_hardware, is_gamemode_available};
 use crate::tuner::apply_settings;
 use crate::updater::{apply_github_update, check_github_update, UpdateInfo};
 
+/// A custom animated pill toggle switch matching modern mobile/desktop toggle designs.
+pub fn toggle_switch(ui: &mut egui::Ui, on: &mut bool) -> egui::Response {
+    let desired_size = egui::vec2(42.0, 24.0);
+    let (rect, mut response) = ui.allocate_exact_size(desired_size, egui::Sense::click());
+    if response.clicked() {
+        *on = !*on;
+        response.mark_changed();
+    }
+    response.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Checkbox, true, *on, ""));
+
+    if ui.is_rect_visible(rect) {
+        let how_on = ui.ctx().animate_bool(response.id, *on);
+        let radius = 0.5 * rect.height();
+
+        // Interpolate capsule background color:
+        // OFF: Dark charcoal gray (rgb 62, 64, 71)
+        // ON: Soft periwinkle / lavender blue (rgb 175, 195, 248)
+        let bg_r = (62.0 + (175.0 - 62.0) * how_on) as u8;
+        let bg_g = (64.0 + (195.0 - 64.0) * how_on) as u8;
+        let bg_b = (71.0 + (248.0 - 71.0) * how_on) as u8;
+        let bg_color = egui::Color32::from_rgb(bg_r, bg_g, bg_b);
+
+        ui.painter().rect_filled(rect, radius, bg_color);
+
+        // Circular knob
+        let padding = 2.5;
+        let knob_radius = radius - padding;
+        let left_x = rect.left() + radius;
+        let right_x = rect.right() - radius;
+        let knob_x = egui::lerp(left_x..=right_x, how_on);
+        let knob_center = egui::pos2(knob_x, rect.center().y);
+
+        // Interpolate knob color: pure white when OFF, dark navy when ON
+        let knob_r = (255.0 + (28.0 - 255.0) * how_on) as u8;
+        let knob_g = (255.0 + (35.0 - 255.0) * how_on) as u8;
+        let knob_b = (255.0 + (58.0 - 255.0) * how_on) as u8;
+        let knob_color = egui::Color32::from_rgb(knob_r, knob_g, knob_b);
+
+        ui.painter().circle_filled(knob_center, knob_radius, knob_color);
+    }
+
+    response
+}
+
 pub struct LauncherApp {
     base_dir: PathBuf,
     config: LauncherConfig,
@@ -516,12 +560,18 @@ impl eframe::App for LauncherApp {
                 let hz_desc = self.t("hz_desc");
                 let readback_label = self.t("readback_patch");
                 let readback_desc = self.t("readback_desc");
+                let skip_cinematics_label = self.t("skip_cinematics");
+                let skip_cinematics_desc = self.t("skip_cinematics_desc");
                 let gamemode_label = self.t("gamemode_toggle");
                 let gamemode_desc = self.t("gamemode_desc");
 
-                // Refresh Rate Patch
+                // 1. Refresh Rate / Hz Sync Toggle
                 ui.horizontal(|ui| {
-                    ui.checkbox(&mut self.config.patch_delta_time, egui::RichText::new(hz_label).strong());
+                    toggle_switch(ui, &mut self.config.patch_delta_time);
+                    if ui.add(egui::Label::new(egui::RichText::new(hz_label).strong()).sense(egui::Sense::click())).clicked() {
+                        self.config.patch_delta_time = !self.config.patch_delta_time;
+                    }
+                    ui.add_space(8.0);
                     ui.label(target_fps_label);
                     let current_text = if self.config.target_fps == 60 {
                         "60 FPS (Orijinal Hız - Önerilen)".to_string()
@@ -540,18 +590,34 @@ impl eframe::App for LauncherApp {
                 });
                 ui.label(egui::RichText::new(hz_desc).color(egui::Color32::LIGHT_GRAY).size(11.0));
 
-                ui.add_space(6.0);
-                // Yellow Texture Readback Patch
+                ui.add_space(8.0);
+                // 2. Yellow Texture Readback Patch Toggle
                 ui.horizontal(|ui| {
-                    ui.checkbox(&mut self.config.patch_readbacks, egui::RichText::new(readback_label).strong());
+                    toggle_switch(ui, &mut self.config.patch_readbacks);
+                    if ui.add(egui::Label::new(egui::RichText::new(readback_label).strong()).sense(egui::Sense::click())).clicked() {
+                        self.config.patch_readbacks = !self.config.patch_readbacks;
+                    }
                 });
                 ui.label(egui::RichText::new(readback_desc).color(egui::Color32::LIGHT_GRAY).size(11.0));
 
-                // Feral GameMode Checkbox (if system has gamemoderun)
+                ui.add_space(8.0);
+                // 3. Skip Cinematics with 'X' Button Toggle (NEW!)
+                ui.horizontal(|ui| {
+                    toggle_switch(ui, &mut self.config.skip_cinematics);
+                    if ui.add(egui::Label::new(egui::RichText::new(skip_cinematics_label).strong()).sense(egui::Sense::click())).clicked() {
+                        self.config.skip_cinematics = !self.config.skip_cinematics;
+                    }
+                });
+                ui.label(egui::RichText::new(skip_cinematics_desc).color(egui::Color32::LIGHT_GRAY).size(11.0));
+
+                // 4. Feral GameMode Toggle (if system has gamemoderun)
                 if self.has_gamemode {
-                    ui.add_space(6.0);
+                    ui.add_space(8.0);
                     ui.horizontal(|ui| {
-                        ui.checkbox(&mut self.config.use_gamemode, egui::RichText::new(gamemode_label).strong());
+                        toggle_switch(ui, &mut self.config.use_gamemode);
+                        if ui.add(egui::Label::new(egui::RichText::new(gamemode_label).strong()).sense(egui::Sense::click())).clicked() {
+                            self.config.use_gamemode = !self.config.use_gamemode;
+                        }
                     });
                     ui.label(egui::RichText::new(gamemode_desc).color(egui::Color32::LIGHT_GRAY).size(11.0));
                 }

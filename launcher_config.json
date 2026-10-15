@@ -5,6 +5,7 @@
   "target_fps": 60,
   "patch_delta_time": true,
   "patch_readbacks": true,
+  "skip_cinematics": true,
   "use_gamemode": true,
   "vram_gc_budget_mb": 6144,
   "dmem_mb": 9216,

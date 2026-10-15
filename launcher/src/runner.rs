@@ -230,14 +230,17 @@ pub fn launch_gow3(
     }
 
     // 7. Run patches.py
-    let patches_str = if config.target_fps != 60 {
-        format!(
-            "Bug Fix - Texture Corruption Fix;Skip Any Video With X Button;Frame Rate Patch - {} FPS",
-            config.target_fps
-        )
-    } else {
-        "Bug Fix - Texture Corruption Fix;Skip Any Video With X Button".to_string()
-    };
+    let mut patch_list = Vec::new();
+    if config.patch_readbacks {
+        patch_list.push("Bug Fix - Texture Corruption Fix".to_string());
+    }
+    if config.skip_cinematics {
+        patch_list.push("Skip Any Video With X Button".to_string());
+    }
+    if config.target_fps != 60 && config.patch_delta_time {
+        patch_list.push(format!("Frame Rate Patch - {} FPS", config.target_fps));
+    }
+    let patches_str = patch_list.join(";");
 
     let _ = Command::new(&python)
         .arg(scripts_path.join("patches.py"))

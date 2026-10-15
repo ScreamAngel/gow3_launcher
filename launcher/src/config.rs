@@ -36,6 +36,8 @@ pub struct LauncherConfig {
     #[serde(default = "default_true")]
     pub patch_readbacks: bool,
     #[serde(default = "default_true")]
+    pub skip_cinematics: bool,
+    #[serde(default = "default_true")]
     pub use_gamemode: bool,
     #[serde(default = "default_vram_budget")]
     pub vram_gc_budget_mb: u64,
@@ -51,7 +53,7 @@ fn default_language() -> String {
     "tr".to_string()
 }
 fn default_target_fps() -> u32 {
-    144
+    60
 }
 fn default_true() -> bool {
     true
@@ -75,6 +77,7 @@ impl Default for LauncherConfig {
             target_fps: default_target_fps(),
             patch_delta_time: true,
             patch_readbacks: true,
+            skip_cinematics: true,
             use_gamemode: true,
             vram_gc_budget_mb: default_vram_budget(),
             dmem_mb: default_dmem(),

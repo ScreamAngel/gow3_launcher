@@ -57,16 +57,16 @@ jobs:
 
       - name: Prepare binary
         run: |
-          Copy-Item launcher/target/release/launcher.exe -Destination ./gow3-launcher.exe
+          Copy-Item launcher/target/release/launcher.exe -Destination ./gow3-launcher-win.exe
 
       - name: Upload Windows Artifact
         uses: actions/upload-artifact@v4
         with:
           name: gow3-launcher-windows
-          path: ./gow3-launcher.exe
+          path: ./gow3-launcher-win.exe
 
   publish-release:
-    name: Publish GitHub Release
+    name: Publish Release & Sync Windows Binary
     needs: [build-linux, build-windows]
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
@@ -86,28 +86,37 @@ jobs:
           name: gow3-launcher-windows
           path: ./artifacts/
 
+      - name: Commit Windows launcher to repo root
+        run: |
+          cp ./artifacts/gow3-launcher-win.exe ./gow3-launcher-win.exe
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add gow3-launcher-win.exe
+          git diff --quiet && git diff --staged --quiet || (git commit -m "chore(build): sync gow3-launcher-win.exe to repo root [skip ci]" && git push origin main)
+
       - name: Create or Update GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest
-          name: "God of War III Native Launcher (Latest Build)"
+          name: "God of War III Native Launcher (Dual-Boot & Cross-Platform)"
           body: |
             ## 🚀 God of War III Remastered - Native Launcher (Linux & Windows)
 
-            Otomatik olarak derlenmiş en son sürümler:
-            - **Linux**: `gow3-launcher`
-            - **Windows**: `gow3-launcher.exe`
+            Aynı klasörde yan yana çalışabilen yerel ikili dosyalar:
+            - 🐧 **Linux**: `gow3-launcher`
+            - 🪟 **Windows / Dual-Boot**: `gow3-launcher-win.exe`
 
             ### ✨ Özellikler
-            - Modern animasyonlu kayan düğmeler (Switch UI)
-            - Kararlı 60 FPS / 120 FPS / 144 FPS / 240 FPS desteği
-            - Sinematikleri kumandanın **X** tuşuyla anında geçme yaması (Açılıp kapatılabilir)
-            - Sarı doku bozulmasını önleme yaması (Instant readbacks)
-            - Dahili otomatik donanım ve monitör Hz optimizasyonu
-            - 4 farklı dil desteği (Türkçe, English, Deutsch, Español)
-            - Otomatik self-updater ve GitHub eşitlemesi
+            - **Dual-Boot Desteği:** Aynı klasörde hem Windows hem Linux için yan yana bağımsız launcher'lar!
+            - **Modern Kayan Anahtarlar:** Klasik kutucuklar yerine animasyonlu Switch teması
+            - **Kararlı 60 FPS / 120 FPS / 144 FPS / 240 FPS Pacing:** Fizik hızlanma sorunu olmadan akıcı oynanış
+            - **Sinematikleri 'X' Tuşuyla Atlama Yaması:** Ara sahneleri kumandanızın X tuşuyla geçebilme seçeneği
+            - **Sarı Doku Hatası Önleme Yaması (Instant Readbacks):** Karlı ve parlak sahnelerdeki renk bozulmasını engeller
+            - **Dahili Donanım ve Ekran Hz Tespiti:** GPU, VRAM, RAM ve ekran yenileme hızına göre otomatik yapılandırma
+            - **4 Farklı Dil Desteği:** Türkçe 🇹🇷, English 🇬🇧, Deutsch 🇩🇪, Español 🇪🇸
+            - **%100 Rust Uyumlu Self-Updater:** Doğrudan GitHub üzerinden en son sürüme tek tıkla güncelleme
           files: |
             ./artifacts/gow3-launcher
-            ./artifacts/gow3-launcher.exe
+            ./artifacts/gow3-launcher-win.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -48,11 +48,14 @@ Launcher for God Of War 3 PC on Linux
    ```bash
    git clone https://github.com/ScreamAngel/gow3_pclauncher.git
    cd gow3_pclauncher
-   ./gow3-launcher
    ```
+   - 🐧 **On Linux**: `./gow3-launcher`
+   - 🪟 **On Windows**: `gow3-launcher-win.exe`
 
-   **Option B: Download Archive / Release**
-   Download the archive, extract it to any folder, and run `./gow3-launcher`.
+   **Option B: Download Pre-compiled Binaries (GitHub Releases)**
+   Download the executables directly from the GitHub Releases tab:
+   - **Linux**: `gow3-launcher`
+   - **Windows / Dual-Boot**: `gow3-launcher-win.exe`
 
    The launcher is completely standalone: it automatically detects your hardware, verifies the game dump, configures settings files, and applies all required patches without requiring external bash scripts.
                                                                                                                                                                                       
@@ -61,16 +64,19 @@ Launcher for God Of War 3 PC on Linux
    Place your decrypted PS4 God of War III Remastered game folder (`CUSA01623` or `CUSA01715` containing `eboot.bin`) into this directory, **or** keep it on any internal/external drive and select it through the Launcher.                                                                                                                                                                
                                                                                                                                                                                           
    ### 3. Launch the Game                                                                                                                                                                
-   Run the native launcher executable:                                                                                                                                                   
+   Run the launcher executable matching your current operating system:                                                                                                                                                   
                                                                                                                                                                                   
-   - Double-click `gow3-launcher` in your file manager, or run:
-   ```bash
-   ./gow3-launcher
-   ```
-   - **Direct Launch (Steam Deck / Big Picture)**: You can launch directly into the game without the launcher UI by passing `--play`:
+   - **Linux**: Run `./gow3-launcher` (or double-click in your file manager)
+   - **Windows**: Double-click `gow3-launcher-win.exe`
+   - **Direct Launch (Steam / Steam Deck / Big Picture)**: You can launch directly into the game without the launcher UI by passing `--play`:
    ```bash
    ./gow3-launcher --play
+   # on Windows:
+   .\gow3-launcher-win.exe --play
    ```
+
+   ### 🔄 Dual-Boot Ready
+   Both `gow3-launcher` and `gow3-launcher-win.exe` live side-by-side in the same directory. If you dual-boot between Linux and Windows, you can play on either operating system seamlessly while sharing the same game dumps and configurations!
                                                                                                                                                                                           
                                                                                                                                                                                       
                                                                                                                                                                                           

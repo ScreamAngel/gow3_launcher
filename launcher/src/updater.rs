@@ -77,6 +77,12 @@ pub fn apply_github_update(
     update: &UpdateInfo,
     config: &mut LauncherConfig,
 ) -> Result<String, String> {
+    let binary_name = if cfg!(target_os = "windows") {
+        "gow3-launcher.exe"
+    } else {
+        "gow3-launcher"
+    };
+
     let is_git_repo = base_dir.join(".git").is_dir();
 
     if is_git_repo {
@@ -92,8 +98,8 @@ pub fn apply_github_update(
             return Err(format!("Git güncellemesi başarısız oldu: {}", err));
         }
 
-        // Ensure gow3-launcher binary is executable
-        let launcher_bin = base_dir.join("gow3-launcher");
+        // Ensure launcher binary is executable
+        let launcher_bin = base_dir.join(binary_name);
         if launcher_bin.is_file() {
             #[cfg(unix)]
             {
@@ -104,11 +110,11 @@ pub fn apply_github_update(
     } else {
         // Path B: Standalone folder without .git; download latest launcher binary and patch files
         let raw_launcher_url = format!(
-            "https://raw.githubusercontent.com/{}/main/gow3-launcher",
-            GITHUB_REPO
+            "https://raw.githubusercontent.com/{}/main/{}",
+            GITHUB_REPO, binary_name
         );
-        let launcher_bin = base_dir.join("gow3-launcher");
-        let launcher_tmp = base_dir.join("gow3-launcher.new");
+        let launcher_bin = base_dir.join(binary_name);
+        let launcher_tmp = base_dir.join(format!("{}.new", binary_name));
 
         let download = Command::new("curl")
             .args(["-fsSL", &raw_launcher_url, "-o", launcher_tmp.to_str().unwrap()])
@@ -124,6 +130,13 @@ pub fn apply_github_update(
         {
             use std::os::unix::fs::PermissionsExt;
             let _ = fs::set_permissions(&launcher_tmp, fs::Permissions::from_mode(0o755));
+        }
+
+        #[cfg(target_os = "windows")]
+        {
+            let launcher_old = base_dir.join(format!("{}.old", binary_name));
+            let _ = fs::remove_file(&launcher_old);
+            let _ = fs::rename(&launcher_bin, &launcher_old);
         }
 
         // Atomically replace running binary

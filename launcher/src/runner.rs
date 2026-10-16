@@ -72,14 +72,14 @@ pub fn ensure_runtime_assets(base_dir: &Path) -> Result<(PathBuf, PathBuf), Stri
 }
 
 pub fn find_python() -> Result<String, String> {
-    for cmd in &["python3", "python"] {
+    for cmd in &["python3", "python", "py"] {
         if let Ok(out) = Command::new(cmd).arg("--version").output() {
             if out.status.success() {
                 return Ok(cmd.to_string());
             }
         }
     }
-    Err("Python 3 bulunamadı. Lütfen sisteminize 'python3' kurun.".to_string())
+    Err("Python 3 bulunamadı. Lütfen sisteminize 'python' kurun.".to_string())
 }
 
 /// Executes the full God of War III preparation and probe execution natively from Rust.
@@ -93,10 +93,17 @@ pub fn launch_gow3(
         return Err("Oyun klasöründe 'eboot.bin' bulunamadı!".to_string());
     }
 
-    let probe_bin = base_dir.join("bin/gow3-probe");
-    if !probe_bin.is_file() {
-        return Err("Oyun motoru ('bin/gow3-probe') bulunamadı!".to_string());
-    }
+    let probe_candidates = [
+        base_dir.join("bin/gow3-probe"),
+        base_dir.join("bin/gow3-probe.exe"),
+        base_dir.join("out/gow3-probe"),
+        base_dir.join("out/gow3-probe.exe"),
+        base_dir.join("gow3-probe.exe"),
+    ];
+    let probe_bin = probe_candidates
+        .into_iter()
+        .find(|p| p.is_file())
+        .ok_or_else(|| "Oyun motoru ('gow3-probe' / 'gow3-probe.exe') bulunamadı!".to_string())?;
 
     let out_dir = base_dir.join("out");
     fs::create_dir_all(&out_dir).map_err(|e| format!("'out' klasörü oluşturulamadı: {}", e))?;

@@ -56,13 +56,31 @@ pub fn is_valid_game_dir(path: &Path) -> bool {
 
 pub fn scan_for_game() -> Vec<GameCandidate> {
     let mut candidates = Vec::new();
-    let home = std::env::var("HOME").unwrap_or_else(|_| "/home".to_string());
-    let mut scan_roots = vec![PathBuf::from(&home)];
+    let mut scan_roots = Vec::new();
 
-    for root_str in &["/run/media", "/media", "/mnt"] {
-        let p = PathBuf::from(root_str);
-        if p.is_dir() {
-            scan_roots.push(p);
+    #[cfg(target_os = "windows")]
+    {
+        if let Ok(userprofile) = std::env::var("USERPROFILE") {
+            scan_roots.push(PathBuf::from(userprofile));
+        }
+        for drive in b'C'..=b'Z' {
+            let p = PathBuf::from(format!("{}:\\", drive as char));
+            if p.is_dir() {
+                scan_roots.push(p);
+            }
+        }
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let home = std::env::var("HOME").unwrap_or_else(|_| "/home".to_string());
+        scan_roots.push(PathBuf::from(&home));
+
+        for root_str in &["/run/media", "/media", "/mnt"] {
+            let p = PathBuf::from(root_str);
+            if p.is_dir() {
+                scan_roots.push(p);
+            }
         }
     }
 
@@ -95,7 +113,17 @@ fn scan_recursive(dir: &Path, depth: usize, max_depth: usize, results: &mut Vec<
 
         let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
         // Skip hidden, system, and cache directories
-        if name.starts_with('.') || name == "node_modules" || name == ".cache" || name == ".local" || name == "target" {
+        if name.starts_with('.')
+            || name.eq_ignore_ascii_case("node_modules")
+            || name.eq_ignore_ascii_case(".cache")
+            || name.eq_ignore_ascii_case(".local")
+            || name.eq_ignore_ascii_case("target")
+            || name.eq_ignore_ascii_case("Windows")
+            || name.eq_ignore_ascii_case("Program Files")
+            || name.eq_ignore_ascii_case("Program Files (x86)")
+            || name.eq_ignore_ascii_case("ProgramData")
+            || name.eq_ignore_ascii_case("AppData")
+        {
             continue;
         }
 

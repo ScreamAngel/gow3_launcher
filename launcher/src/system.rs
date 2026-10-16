@@ -16,13 +16,21 @@ pub fn detect_hardware() -> CachedHardware {
 }
 
 pub fn is_gamemode_available() -> bool {
-    Command::new("which")
-        .arg("gamemoderun")
-        .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false)
+    #[cfg(target_os = "windows")]
+    {
+        false
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        Command::new("which")
+            .arg("gamemoderun")
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false)
+    }
 }
 
+#[cfg(not(target_os = "windows"))]
 fn detect_gpu() -> (String, u64) {
     // 1. Try nvidia-smi
     if let Ok(output) = Command::new("nvidia-smi")
@@ -67,6 +75,7 @@ fn detect_gpu() -> (String, u64) {
     ("Bilinmeyen GPU (Genel)".to_string(), 4096)
 }
 
+#[cfg(not(target_os = "windows"))]
 fn glob_vram() -> Result<Option<(String, u64)>, std::io::Error> {
     for card_idx in 0..8 {
         let path = format!("/sys/class/drm/card{}/device/mem_info_vram_total", card_idx);
@@ -80,6 +89,7 @@ fn glob_vram() -> Result<Option<(String, u64)>, std::io::Error> {
     Ok(None)
 }
 
+#[cfg(not(target_os = "windows"))]
 fn detect_ram() -> u64 {
     if let Ok(content) = fs::read_to_string("/proc/meminfo") {
         for line in content.lines() {
@@ -96,6 +106,7 @@ fn detect_ram() -> u64 {
     16384 // Fallback
 }
 
+#[cfg(not(target_os = "windows"))]
 fn detect_refresh_rate() -> u32 {
     let mut rates = Vec::new();
 
@@ -124,7 +135,7 @@ fn detect_refresh_rate() -> u32 {
             if output.status.success() {
                 let text = String::from_utf8_lossy(&output.stdout);
                 for line in text.lines() {
-                    if line.contains("@") && line.contains("Hz") {
+                    if line.contains('@') && line.contains("Hz") {
                         if let Some(at_pos) = line.find('@') {
                             let sub = &line[at_pos + 1..];
                             if let Some(hz_pos) = sub.find("Hz") {
@@ -146,7 +157,7 @@ fn detect_refresh_rate() -> u32 {
             if output.status.success() {
                 let text = String::from_utf8_lossy(&output.stdout);
                 for line in text.lines() {
-                    if line.contains("@") && line.contains("Hz") {
+                    if line.contains('@') && line.contains("Hz") {
                         if let Some(at_pos) = line.find('@') {
                             let sub = &line[at_pos + 1..];
                             if let Some(hz_pos) = sub.find("Hz") {
@@ -163,4 +174,69 @@ fn detect_refresh_rate() -> u32 {
     }
 
     rates.into_iter().max().unwrap_or(60)
+}
+
+#[cfg(target_os = "windows")]
+fn detect_gpu() -> (String, u64) {
+    if let Ok(output) = Command::new("powershell")
+        .args([
+            "-NoProfile",
+            "-Command",
+            "Get-CimInstance Win32_VideoController | Select-Object -First 1 -Property Name,AdapterRAM | ConvertTo-Json",
+        ])
+        .output()
+    {
+        if output.status.success() {
+            let text = String::from_utf8_lossy(&output.stdout);
+            if let Ok(val) = serde_json::from_str::<serde_json::Value>(&text) {
+                let name = val["Name"].as_str().unwrap_or("Windows DirectX/Vulkan GPU").to_string();
+                let vram_bytes = val["AdapterRAM"].as_u64().unwrap_or(4 * 1024 * 1024 * 1024);
+                let vram_mb = vram_bytes / (1024 * 1024);
+                return (name, vram_mb.max(4096));
+            }
+        }
+    }
+    ("Windows DirectX/Vulkan GPU".to_string(), 4096)
+}
+
+#[cfg(target_os = "windows")]
+fn detect_ram() -> u64 {
+    if let Ok(output) = Command::new("powershell")
+        .args([
+            "-NoProfile",
+            "-Command",
+            "(Get-CimInstance Win32_OperatingSystem).TotalVisibleMemorySize",
+        ])
+        .output()
+    {
+        if output.status.success() {
+            let text = String::from_utf8_lossy(&output.stdout);
+            if let Ok(kb) = text.trim().parse::<u64>() {
+                return kb / 1024;
+            }
+        }
+    }
+    16384
+}
+
+#[cfg(target_os = "windows")]
+fn detect_refresh_rate() -> u32 {
+    if let Ok(output) = Command::new("powershell")
+        .args([
+            "-NoProfile",
+            "-Command",
+            "(Get-CimInstance Win32_VideoController | Select-Object -First 1).CurrentRefreshRate",
+        ])
+        .output()
+    {
+        if output.status.success() {
+            let text = String::from_utf8_lossy(&output.stdout);
+            if let Ok(hz) = text.trim().parse::<u32>() {
+                if hz > 0 {
+                    return hz;
+                }
+            }
+        }
+    }
+    60
 }

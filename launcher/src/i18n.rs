@@ -46,7 +46,7 @@ pub fn text(lang: Language, key: &str) -> &'static str {
     match (lang, key) {
         // Turkish
         (Language::Turkish, "app_title") => "GOD OF WAR® III REMASTERED",
-        (Language::Turkish, "app_subtitle") => "Linux Native Port Launcher & Hardware Optimizer",
+        (Language::Turkish, "app_subtitle") => "Linux & Windows Port Launcher & Donanım Yöneticisi",
         (Language::Turkish, "sys_hardware") => "🖥️  Sistem Donanımı",
         (Language::Turkish, "locked_auto") => "🔒 Kilitli (Otomatik Algılandı)",
         (Language::Turkish, "gpu") => "Ekran Kartı (GPU)",
@@ -108,7 +108,7 @@ pub fn text(lang: Language, key: &str) -> &'static str {
 
         // English
         (Language::English, "app_title") => "GOD OF WAR® III REMASTERED",
-        (Language::English, "app_subtitle") => "Linux Native Port Launcher & Hardware Optimizer",
+        (Language::English, "app_subtitle") => "Linux & Windows Native Port Launcher & Hardware Optimizer",
         (Language::English, "sys_hardware") => "🖥️  System Hardware",
         (Language::English, "locked_auto") => "🔒 Locked (Auto-detected)",
         (Language::English, "gpu") => "Graphics Card (GPU)",
@@ -170,7 +170,7 @@ pub fn text(lang: Language, key: &str) -> &'static str {
 
         // German
         (Language::German, "app_title") => "GOD OF WAR® III REMASTERED",
-        (Language::German, "app_subtitle") => "Linux Nativer Launcher & Hardware-Optimierer",
+        (Language::German, "app_subtitle") => "Linux & Windows Nativer Launcher & Hardware-Optimierer",
         (Language::German, "sys_hardware") => "🖥️  System-Hardware",
         (Language::German, "locked_auto") => "🔒 Gesperrt (Automatisch erkannt)",
         (Language::German, "gpu") => "Grafikkarte (GPU)",
@@ -232,7 +232,7 @@ pub fn text(lang: Language, key: &str) -> &'static str {
 
         // Spanish
         (Language::Spanish, "app_title") => "GOD OF WAR® III REMASTERED",
-        (Language::Spanish, "app_subtitle") => "Lanzador y Optimizador Nativo para Linux",
+        (Language::Spanish, "app_subtitle") => "Lanzador y Optimizador para Linux y Windows",
         (Language::Spanish, "sys_hardware") => "🖥️  Hardware del Sistema",
         (Language::Spanish, "locked_auto") => "🔒 Bloqueado (Detectado)",
         (Language::Spanish, "gpu") => "Tarjeta Gráfica (GPU)",

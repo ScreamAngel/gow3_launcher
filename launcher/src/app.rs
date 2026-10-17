@@ -77,6 +77,10 @@ pub struct LauncherApp {
     is_game_running: bool,
     game_exit_rx: Option<Receiver<Option<i32>>>,
 
+    // Python dependency state
+    is_downloading_python: bool,
+    python_dl_rx: Option<Receiver<Result<String, String>>>,
+
     // Modals
     show_first_launch_modal: bool,
     active_crash_diagnosis: Option<CrashDiagnosis>,
@@ -120,6 +124,8 @@ impl LauncherApp {
             update_modal: None,
             is_game_running: false,
             game_exit_rx: None,
+            is_downloading_python: false,
+            python_dl_rx: None,
             show_first_launch_modal: is_first,
             active_crash_diagnosis: None,
             show_log_modal: false,
@@ -245,6 +251,21 @@ impl LauncherApp {
         });
     }
 
+    fn start_python_download(&mut self) {
+        if self.is_downloading_python {
+            return;
+        }
+        self.is_downloading_python = true;
+        let (tx, rx) = channel();
+        self.python_dl_rx = Some(rx);
+
+        let base_dir_clone = self.base_dir.clone();
+        thread::spawn(move || {
+            let res = crate::runner::download_portable_python(&base_dir_clone);
+            let _ = tx.send(res);
+        });
+    }
+
     fn launch_game(&mut self) {
         // Apply settings before launching
         self.apply_all_optimizations();
@@ -323,6 +344,22 @@ impl eframe::App for LauncherApp {
                     }
                     Err(e) => {
                         self.status_message = Some((format!("❌ {}", e), true));
+                    }
+                }
+            }
+        }
+
+        // 4. Check background python downloader thread
+        if let Some(ref rx) = self.python_dl_rx {
+            if let Ok(res) = rx.try_recv() {
+                self.is_downloading_python = false;
+                self.python_dl_rx = None;
+                match res {
+                    Ok(_) => {
+                        self.status_message = Some((self.t("python_download_success").to_string(), false));
+                    }
+                    Err(e) => {
+                        self.status_message = Some((format!("{}{}", self.t("python_download_err"), e), true));
                     }
                 }
             }
@@ -488,6 +525,51 @@ impl eframe::App for LauncherApp {
                         ui.label(egui::RichText::new(self.t("refresh_rate")).color(egui::Color32::LIGHT_GRAY).size(11.0));
                         ui.label(egui::RichText::new(format!("{} Hz", hw.refresh_rate_hz)).color(egui::Color32::from_rgb(130, 205, 135)).strong());
                     });
+                });
+
+                ui.add_space(8.0);
+                ui.separator();
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new(self.t("python_dep")).color(egui::Color32::LIGHT_GRAY).size(12.0));
+                    let has_py = crate::runner::find_python(&self.base_dir).is_ok();
+                    if has_py {
+                        ui.label(
+                            egui::RichText::new(self.t("python_ready"))
+                                .color(egui::Color32::from_rgb(102, 225, 106))
+                                .strong()
+                                .size(12.0),
+                        );
+                    } else {
+                        ui.label(
+                            egui::RichText::new(self.t("python_missing"))
+                                .color(egui::Color32::from_rgb(239, 83, 80))
+                                .strong()
+                                .size(12.0),
+                        );
+
+                        ui.add_space(8.0);
+                        if self.is_downloading_python {
+                            ui.spinner();
+                            ui.label(
+                                egui::RichText::new(self.t("python_downloading"))
+                                    .color(egui::Color32::from_rgb(255, 213, 79))
+                                    .size(12.0),
+                            );
+                        } else {
+                            let dl_btn = egui::Button::new(
+                                egui::RichText::new(self.t("python_download"))
+                                    .size(11.0)
+                                    .color(egui::Color32::WHITE)
+                                    .strong(),
+                            )
+                            .fill(egui::Color32::from_rgb(45, 120, 185))
+                            .corner_radius(egui::CornerRadius::same(5));
+
+                            if ui.add(dl_btn).clicked() {
+                                self.start_python_download();
+                            }
+                        }
+                    }
                 });
             });
 

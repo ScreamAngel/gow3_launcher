@@ -5,7 +5,7 @@ Launcher for God Of War 3 PC on Linux
                                                                                                                                                                                           
    An optimized Linux port and native graphical launcher for **God of War® III Remastered** (*CUSA01623 / CUSA01715*), featuring hardware auto-tuning, 144Hz Delta-Time synchronization, crash diagnostics, and upstream GitHub integration.                                                                                                                                     
                                                                                                                                                                                           
-   [![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20Steam%20Windows%20Deck-orange.svg)](https://kernel.org)                                                                        
+   [![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20Steam%20Deck%207C%20Windows-orange.svg)](https://kernel.org)                                                                        
    [![Launcher](https://img.shields.io/badge/Launcher-Rust%20%2F%20egui-blue.svg)](https://www.rust-lang.org)                                                                            
    [![Vulkan](https://img.shields.io/badge/Graphics-Vulkan%201.3-red.svg)](https://www.vulkan.org)                                                                                       
    [![License](https://img.shields.io/badge/License-GPLv2-green.svg)](LICENSE)                                                                                                           

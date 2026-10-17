@@ -289,7 +289,7 @@ impl LauncherApp {
 
         let base_dir_clone = self.base_dir.clone();
         thread::spawn(move || {
-            let res = crate::runner::download_windows_engine(&base_dir_clone);
+            let res = crate::runner::download_engine(&base_dir_clone);
             let _ = tx.send(res);
         });
     }
@@ -402,6 +402,7 @@ impl eframe::App for LauncherApp {
                 match res {
                     Ok(_) => {
                         self.has_engine = true;
+                        self.has_python = crate::runner::find_python(&self.base_dir).is_ok();
                         self.status_message = Some((self.t("engine_download_success").to_string(), false));
                     }
                     Err(e) => {
@@ -617,11 +618,17 @@ impl eframe::App for LauncherApp {
                     }
                 });
 
-                #[cfg(target_os = "windows")]
-                if !self.has_engine {
-                    ui.add_space(6.0);
-                    ui.horizontal(|ui| {
-                        ui.label(egui::RichText::new("⚙️ Windows Motoru:").color(egui::Color32::LIGHT_GRAY).size(12.0));
+                ui.add_space(6.0);
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new(self.t("engine_label")).color(egui::Color32::LIGHT_GRAY).size(12.0));
+                    if self.has_engine {
+                        ui.label(
+                            egui::RichText::new(self.t("engine_ready"))
+                                .color(egui::Color32::from_rgb(102, 225, 106))
+                                .strong()
+                                .size(12.0),
+                        );
+                    } else {
                         ui.label(
                             egui::RichText::new(self.t("engine_missing"))
                                 .color(egui::Color32::from_rgb(239, 83, 80))
@@ -651,8 +658,8 @@ impl eframe::App for LauncherApp {
                                 self.start_engine_download();
                             }
                         }
-                    });
-                }
+                    }
+                });
             });
 
             // --- 2. GAME DIRECTORY CARD ---

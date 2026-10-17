@@ -118,12 +118,14 @@ pub fn download_portable_python(base_dir: &Path) -> Result<String, String> {
     {
         let ps_code = format!(
             r#"
+            $ProgressPreference = 'SilentlyContinue';
+            [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12;
             $url = 'https://www.python.org/ftp/python/3.11.9/python-3.11.9-embed-amd64.zip';
             $zip = Join-Path $env:TEMP 'gow3_python_embed.zip';
             $dest = '{}';
-            [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12;
+            if (Test-Path $zip) {{ Remove-Item $zip -Force }};
             Write-Host 'Downloading Python 3.11 embed package...';
-            Invoke-WebRequest -Uri $url -OutFile $zip;
+            (New-Object System.Net.WebClient).DownloadFile($url, $zip);
             if (!(Test-Path $dest)) {{ New-Item -ItemType Directory -Path $dest -Force | Out-Null }};
             Write-Host 'Extracting archive...';
             Expand-Archive -Path $zip -DestinationPath $dest -Force;
@@ -133,7 +135,7 @@ pub fn download_portable_python(base_dir: &Path) -> Result<String, String> {
         );
 
         let status = Command::new("powershell")
-            .args(["-NoProfile", "-Command", &ps_code])
+            .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", &ps_code])
             .status()
             .map_err(|e| format!("PowerShell ile Python indirme komutu çalıştırılamadı: {}", e))?;
 
@@ -215,38 +217,59 @@ pub fn download_windows_engine(base_dir: &Path) -> Result<String, String> {
     {
         let ps_code = format!(
             r#"
+            $ProgressPreference = 'SilentlyContinue';
+            [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12;
             $url = 'https://github.com/FelipePrado0/gow3_pc/releases/download/windows-v2.4.1/gow3-windows.zip';
             $zip = Join-Path $env:TEMP 'gow3_win_download.zip';
             $tempDir = Join-Path $env:TEMP 'gow3_win_extracted';
-            [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12;
-            Write-Host 'Downloading Windows engine binaries...';
-            Invoke-WebRequest -Uri $url -OutFile $zip;
-            Write-Host 'Extracting Windows binaries...';
+            if (Test-Path $tempDir) {{ Remove-Item $tempDir -Recurse -Force }};
+            if (Test-Path $zip) {{ Remove-Item $zip -Force }};
+            Write-Host 'Downloading Windows engine package (~74MB)...';
+            (New-Object System.Net.WebClient).DownloadFile($url, $zip);
+            Write-Host 'Extracting Windows package...';
             Expand-Archive -Path $zip -DestinationPath $tempDir -Force;
-            $sourceBin = Join-Path $tempDir 'gow3-windows\bin';
-            $destBin = '{}';
-            if (!(Test-Path $destBin)) {{ New-Item -ItemType Directory -Path $destBin -Force | Out-Null }};
-            Copy-Item "$sourceBin\*" -Destination $destBin -Recurse -Force;
+
+            $probe = Get-ChildItem -Path $tempDir -Recurse -Filter "gow3-probe.exe" | Select-Object -First 1;
+            if ($probe) {{
+                $sourceBin = $probe.DirectoryName;
+                $destBin = '{dest_bin}';
+                if (!(Test-Path $destBin)) {{ New-Item -ItemType Directory -Path $destBin -Force | Out-Null }};
+                Copy-Item "$sourceBin\*" -Destination $destBin -Recurse -Force;
+            }} else {{
+                throw "gow3-probe.exe extracted archive icinde bulunamadi!";
+            }}
+
+            $base = '{base_dir}';
+            $scripts = Get-ChildItem -Path $tempDir -Recurse -Directory -Filter "scripts" | Select-Object -First 1;
+            if ($scripts -and !(Test-Path (Join-Path $base 'scripts'))) {{
+                Copy-Item $scripts.FullName -Destination $base -Recurse -Force;
+            }}
+            $patches = Get-ChildItem -Path $tempDir -Recurse -Directory -Filter "patches" | Select-Object -First 1;
+            if ($patches -and !(Test-Path (Join-Path $base 'patches'))) {{
+                Copy-Item $patches.FullName -Destination $base -Recurse -Force;
+            }}
+
             Remove-Item $tempDir -Recurse -Force;
             Remove-Item $zip -Force;
             "#,
-            dest_bin.to_string_lossy().replace('\'', "''")
+            dest_bin = dest_bin.to_string_lossy().replace('\'', "''"),
+            base_dir = base_dir.to_string_lossy().replace('\'', "''")
         );
 
         let status = Command::new("powershell")
-            .args(["-NoProfile", "-Command", &ps_code])
+            .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", &ps_code])
             .status()
             .map_err(|e| format!("PowerShell Windows motoru indirme komutu çalıştırılamadı: {}", e))?;
 
         if !status.success() {
-            return Err("PowerShell üzerinden Windows motoru indirilemedi.".to_string());
+            return Err("PowerShell üzerinden Windows motor paketi indirilemedi veya açılamadı.".to_string());
         }
 
         if find_game_engine(base_dir).is_some() {
             return Ok("Windows oyun motoru başarıyla kuruldu!".to_string());
         }
 
-        Err("Windows oyun motoru kurulamadı.".to_string())
+        Err("Windows oyun motoru ('bin/gow3-probe.exe') arşivden çıkarılamadı.".to_string())
     }
 
     #[cfg(not(target_os = "windows"))]
@@ -255,23 +278,107 @@ pub fn download_windows_engine(base_dir: &Path) -> Result<String, String> {
     }
 }
 
+#[allow(dead_code)]
+pub fn download_linux_engine(base_dir: &Path) -> Result<String, String> {
+    let dest_bin = base_dir.join("bin");
+    let _ = fs::create_dir_all(&dest_bin);
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let url = "https://github.com/FelipePrado0/gow3_pc/releases/download/windows-v2.4.1/gow3-x86_64.AppImage";
+        let temp_dir = std::env::temp_dir().join("gow3_linux_extracted");
+        let _ = fs::remove_dir_all(&temp_dir);
+        let _ = fs::create_dir_all(&temp_dir);
+        let appimage_path = temp_dir.join("gow3-x86_64.AppImage");
+
+        let dl_status = Command::new("curl")
+            .args(["-sL", url, "-o", &appimage_path.to_string_lossy()])
+            .status();
+
+        let success = match dl_status {
+            Ok(s) if s.success() => true,
+            _ => {
+                Command::new("wget")
+                    .args(["-q", url, "-O", &appimage_path.to_string_lossy()])
+                    .status()
+                    .map(|s| s.success())
+                    .unwrap_or(false)
+            }
+        };
+
+        if !success {
+            let _ = fs::remove_dir_all(&temp_dir);
+            return Err("Linux AppImage paketi indirilemedi (curl/wget başarısız oldu).".to_string());
+        }
+
+        let _ = Command::new("chmod")
+            .args(["+x", &appimage_path.to_string_lossy()])
+            .status();
+
+        let ext_status = Command::new(&appimage_path)
+            .arg("--appimage-extract")
+            .current_dir(&temp_dir)
+            .status();
+
+        if let Ok(st) = ext_status {
+            if st.success() {
+                let squash_bin = temp_dir.join("squashfs-root/bin");
+                if squash_bin.is_dir() {
+                    let _ = Command::new("cp")
+                        .args(["-r", &format!("{}/.", squash_bin.to_string_lossy()), &dest_bin.to_string_lossy()])
+                        .status();
+                    let _ = Command::new("chmod")
+                        .args(["+x", &dest_bin.join("gow3-probe").to_string_lossy()])
+                        .status();
+                }
+            }
+        }
+
+        let _ = fs::remove_dir_all(&temp_dir);
+
+        if find_game_engine(base_dir).is_some() {
+            return Ok("Linux oyun motoru başarıyla kuruldu!".to_string());
+        }
+
+        Err("Linux oyun motoru paketten çıkarılamadı.".to_string())
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        Err("Bu fonksiyon yalnızca Linux üzerinde çalışır.".to_string())
+    }
+}
+
+pub fn download_engine(base_dir: &Path) -> Result<String, String> {
+    #[cfg(target_os = "windows")]
+    {
+        download_windows_engine(base_dir)
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        download_linux_engine(base_dir)
+    }
+}
+
 pub fn ensure_game_engine(base_dir: &Path) -> Result<PathBuf, String> {
+    if let Some(p) = find_game_engine(base_dir) {
+        return Ok(p);
+    }
+
+    // Try automatic download if missing
+    let _ = download_engine(base_dir);
     if let Some(p) = find_game_engine(base_dir) {
         return Ok(p);
     }
 
     #[cfg(target_os = "windows")]
     {
-        let _ = download_windows_engine(base_dir);
-        if let Some(p) = find_game_engine(base_dir) {
-            return Ok(p);
-        }
-        return Err("Windows için oyun motoru ('bin/gow3-probe.exe') bulunamadı! Mevcut klasörde yalnızca Linux motoru bulunuyor. Lütfen arayüzdeki '📥 Windows Motorunu İndir' butonuna basarak Windows motorunu kurun.".to_string());
+        Err("Windows için oyun motoru ('bin/gow3-probe.exe') bulunamadı! Lütfen arayüzdeki '📥 Motoru İndir' butonuna basarak indirin.".to_string())
     }
 
     #[cfg(not(target_os = "windows"))]
     {
-        Err("Linux oyun motoru ('bin/gow3-probe') bulunamadı!".to_string())
+        Err("Linux için oyun motoru ('bin/gow3-probe') bulunamadı! Lütfen arayüzdeki '📥 Motoru İndir' butonuna basarak indirin.".to_string())
     }
 }
 
@@ -499,6 +606,20 @@ pub fn launch_gow3(
     cmd.env("GOW3_PATCHES_ONLY", "1");
     cmd.env("GOW3_CONFIG", &config_ini);
     cmd.env("GOW3_GAME_DIR", game_dir);
+
+    // Prepend bin directory to PATH so Windows/Linux loaders find bundled libraries
+    let bin_dir = base_dir.join("bin");
+    if bin_dir.is_dir() {
+        if let Some(existing_path) = std::env::var_os("PATH") {
+            let mut paths = vec![bin_dir.clone()];
+            paths.extend(std::env::split_paths(&existing_path));
+            if let Ok(new_path) = std::env::join_paths(paths) {
+                cmd.env("PATH", new_path);
+            }
+        } else {
+            cmd.env("PATH", &bin_dir);
+        }
+    }
 
     // Pipe stdout & stderr to gow3_log.txt
     cmd.stdout(Stdio::from(log_file));

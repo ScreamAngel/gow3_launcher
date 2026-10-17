@@ -112,6 +112,10 @@ pub fn text(lang: Language, key: &str) -> &'static str {
         (Language::Turkish, "python_downloading") => "⏳ Python 3 indiriliyor ve hazırlanıyor...",
         (Language::Turkish, "python_download_success") => "✅ Taşınabilir Python 3 başarıyla kuruldu ve hazırlandı!",
         (Language::Turkish, "python_download_err") => "❌ Python 3 indirilemedi: ",
+        (Language::Turkish, "engine_missing") => "Windows Motoru Eksik!",
+        (Language::Turkish, "engine_download") => "📥 Windows Motorunu İndir (~74 MB)",
+        (Language::Turkish, "engine_downloading") => "⏳ Windows motoru indiriliyor ve kuruluyor...",
+        (Language::Turkish, "engine_download_success") => "✅ Windows oyun motoru başarıyla kuruldu!",
 
         // English
         (Language::English, "app_title") => "GOD OF WAR® III REMASTERED",
@@ -181,6 +185,10 @@ pub fn text(lang: Language, key: &str) -> &'static str {
         (Language::English, "python_downloading") => "⏳ Downloading & configuring Python 3...",
         (Language::English, "python_download_success") => "✅ Portable Python 3 installed and configured successfully!",
         (Language::English, "python_download_err") => "❌ Failed to download Python 3: ",
+        (Language::English, "engine_missing") => "Windows Engine Missing!",
+        (Language::English, "engine_download") => "📥 Download Windows Engine (~74 MB)",
+        (Language::English, "engine_downloading") => "⏳ Downloading and installing Windows engine...",
+        (Language::English, "engine_download_success") => "✅ Windows game engine installed successfully!",
 
         // German
         (Language::German, "app_title") => "GOD OF WAR® III REMASTERED",
@@ -250,6 +258,10 @@ pub fn text(lang: Language, key: &str) -> &'static str {
         (Language::German, "python_downloading") => "⏳ Python 3 wird heruntergeladen und eingerichtet...",
         (Language::German, "python_download_success") => "✅ Portables Python 3 erfolgreich eingerichtet!",
         (Language::German, "python_download_err") => "❌ Fehler beim Herunterladen von Python 3: ",
+        (Language::German, "engine_missing") => "Windows-Engine fehlt!",
+        (Language::German, "engine_download") => "📥 Windows-Engine herunterladen (~74 MB)",
+        (Language::German, "engine_downloading") => "⏳ Windows-Engine wird heruntergeladen...",
+        (Language::German, "engine_download_success") => "✅ Windows Spiel-Engine erfolgreich installiert!",
 
         // Spanish
         (Language::Spanish, "app_title") => "GOD OF WAR® III REMASTERED",
@@ -319,6 +331,10 @@ pub fn text(lang: Language, key: &str) -> &'static str {
         (Language::Spanish, "python_downloading") => "⏳ Descargando y configurando Python 3...",
         (Language::Spanish, "python_download_success") => "✅ ¡Python 3 portable configurado con éxito!",
         (Language::Spanish, "python_download_err") => "❌ Error al descargar Python 3: ",
+        (Language::Spanish, "engine_missing") => "¡Falta el motor de Windows!",
+        (Language::Spanish, "engine_download") => "📥 Descargar Motor de Windows (~74 MB)",
+        (Language::Spanish, "engine_downloading") => "⏳ Descargando e instalando el motor de Windows...",
+        (Language::Spanish, "engine_download_success") => "✅ ¡Motor de Windows instalado con éxito!",
 
         _ => "",
     }

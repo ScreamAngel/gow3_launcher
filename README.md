@@ -132,5 +132,6 @@ Launcher for God Of War 3 PC on Linux
   Windows support is now available!
     
 
-   #Licence
-   GNU GPL v2 or later ([LICENSE](https://github.com/R-V-L/gow3_pc/blob/main/LICENSE)). Third-party components keep their own licenses.
+   
+  ##Licence
+  GNU GPL v2 or later ([LICENSE](https://github.com/R-V-L/gow3_pc/blob/main/LICENSE)). Third-party components keep their own licenses.

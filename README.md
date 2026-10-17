@@ -1,11 +1,11 @@
 # gow3_pclauncher
-Launcher for God Of War 3 PC on Linux
+Launcher for God Of War 3 PC on Linux and Windows
 
  # ⚡ God of War® III Remastered - Linux Port & Native Launcher                                                                                                                        
                                                                                                                                                                                           
    An optimized Linux port and native graphical launcher for **God of War® III Remastered** (*CUSA01623 / CUSA01715*), featuring hardware auto-tuning, 144Hz Delta-Time synchronization, crash diagnostics, and upstream GitHub integration.                                                                                                                                     
                                                                                                                                                                                           
-   [![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20Steam%20Deck-orange.svg)](https://kernel.org)                                                                        
+   [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20Steam%20Deck-orange.svg)](https://kernel.org)                                                                        
    [![Launcher](https://img.shields.io/badge/Launcher-Rust%20%2F%20egui-blue.svg)](https://www.rust-lang.org)                                                                            
    [![Vulkan](https://img.shields.io/badge/Graphics-Vulkan%201.3-red.svg)](https://www.vulkan.org)                                                                                       
    [![License](https://img.shields.io/badge/License-GPLv2-green.svg)](LICENSE)                                                                                                           
@@ -32,7 +32,7 @@ Launcher for God Of War 3 PC on Linux
                                                                                                                                                                                           
    | Component | Minimum | Recommended |                                                                                                                                                 
    |---|---|---|                                                                                                                                                                         
-   | **OS** | Linux (Arch, Ubuntu, Fedora, SteamOS, Debian) | Any modern 64-bit Linux distro |                                                                                           
+   | **OS** | Linux (Arch, Ubuntu, Fedora, SteamOS, Debian) and Windows 10-11 | Any modern 64-bit Linux distro |                                                                                         
    | **CPU** | 6-core x86_64 processor | 8-core / 16-thread modern CPU |                                                                                                                 
    | **GPU** | Vulkan 1.3 compatible (4 GB VRAM) | Vulkan 1.3+ (6 GB+ VRAM, Nvidia / AMD) |                                                                                              
    | **RAM** | 8 GB | 16 GB+ |                                                                                                                                                           
@@ -55,7 +55,7 @@ Launcher for God Of War 3 PC on Linux
    **Option B: Download Pre-compiled Binaries (GitHub Releases)**
    Download the executables directly from the GitHub Releases tab:
    - **Linux**: `gow3-launcher`
-   - **Windows / Dual-Boot**: `gow3-launcher-win.exe`
+   - **Windows**: `gow3-launcher-win.exe`
 
    The launcher is completely standalone: it automatically detects your hardware, verifies the game dump, configures settings files, and applies all required patches without requiring external bash scripts.
                                                                                                                                                                                       
@@ -115,12 +115,12 @@ Launcher for God Of War 3 PC on Linux
   
    ## 📜 Credits & Acknowledgments                                                                                                                                                       
 
-   - **Original Project:** https://github.com/FelipePrado0/gow3_pc
+   - **Original Project:** [FelipePrado0](https://github.com/FelipePrado0/gow3_pc)
    - **Upstream Linux Port & Probe:** Developed by [R-V-L](https://github.com/R-V-L/gow3_pc) and community contributors.
    - **Launcher & Hardware Tuner:** Built with Rust, [egui/eframe](https://github.com/emilk/egui).
   
    > **Disclaimer:** God of War is a registered trademark of Sony Interactive Entertainment LLC and Santa Monica Studio. This repository **does not contain any copyrighted game assets, ROMs, or binaries**. Users must supply their own legally obtained game files.
     
 
-   #Licence
+  ## License
    GNU GPL v2 or later ([LICENSE](https://github.com/R-V-L/gow3_pc/blob/main/LICENSE)). Third-party components keep their own licenses.

@@ -185,6 +185,96 @@ pub fn ensure_python(base_dir: &Path) -> Result<String, String> {
     download_portable_python(base_dir)
 }
 
+pub fn find_game_engine(base_dir: &Path) -> Option<PathBuf> {
+    #[cfg(target_os = "windows")]
+    let probe_candidates = [
+        base_dir.join("bin/gow3-probe.exe"),
+        base_dir.join("out/gow3-probe.exe"),
+        base_dir.join("gow3-probe.exe"),
+        base_dir.join("bin/gow3.exe"),
+        base_dir.join("gow3.exe"),
+        base_dir.join("God of War III.exe"),
+    ];
+
+    #[cfg(not(target_os = "windows"))]
+    let probe_candidates = [
+        base_dir.join("bin/gow3-probe"),
+        base_dir.join("out/gow3-probe"),
+        base_dir.join("gow3-probe"),
+    ];
+
+    probe_candidates.into_iter().find(|p| p.is_file())
+}
+
+#[allow(dead_code)]
+pub fn download_windows_engine(base_dir: &Path) -> Result<String, String> {
+    let dest_bin = base_dir.join("bin");
+    let _ = fs::create_dir_all(&dest_bin);
+
+    #[cfg(target_os = "windows")]
+    {
+        let ps_code = format!(
+            r#"
+            $url = 'https://github.com/FelipePrado0/gow3_pc/releases/download/windows-v2.4.1/gow3-windows.zip';
+            $zip = Join-Path $env:TEMP 'gow3_win_download.zip';
+            $tempDir = Join-Path $env:TEMP 'gow3_win_extracted';
+            [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12;
+            Write-Host 'Downloading Windows engine binaries...';
+            Invoke-WebRequest -Uri $url -OutFile $zip;
+            Write-Host 'Extracting Windows binaries...';
+            Expand-Archive -Path $zip -DestinationPath $tempDir -Force;
+            $sourceBin = Join-Path $tempDir 'gow3-windows\bin';
+            $destBin = '{}';
+            if (!(Test-Path $destBin)) {{ New-Item -ItemType Directory -Path $destBin -Force | Out-Null }};
+            Copy-Item "$sourceBin\*" -Destination $destBin -Recurse -Force;
+            Remove-Item $tempDir -Recurse -Force;
+            Remove-Item $zip -Force;
+            "#,
+            dest_bin.to_string_lossy().replace('\'', "''")
+        );
+
+        let status = Command::new("powershell")
+            .args(["-NoProfile", "-Command", &ps_code])
+            .status()
+            .map_err(|e| format!("PowerShell Windows motoru indirme komutu çalıştırılamadı: {}", e))?;
+
+        if !status.success() {
+            return Err("PowerShell üzerinden Windows motoru indirilemedi.".to_string());
+        }
+
+        if find_game_engine(base_dir).is_some() {
+            return Ok("Windows oyun motoru başarıyla kuruldu!".to_string());
+        }
+
+        Err("Windows oyun motoru kurulamadı.".to_string())
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err("Bu fonksiyon yalnızca Windows üzerinde çalışır.".to_string())
+    }
+}
+
+pub fn ensure_game_engine(base_dir: &Path) -> Result<PathBuf, String> {
+    if let Some(p) = find_game_engine(base_dir) {
+        return Ok(p);
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        let _ = download_windows_engine(base_dir);
+        if let Some(p) = find_game_engine(base_dir) {
+            return Ok(p);
+        }
+        return Err("Windows için oyun motoru ('bin/gow3-probe.exe') bulunamadı! Mevcut klasörde yalnızca Linux motoru bulunuyor. Lütfen arayüzdeki '📥 Windows Motorunu İndir' butonuna basarak Windows motorunu kurun.".to_string());
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err("Linux oyun motoru ('bin/gow3-probe') bulunamadı!".to_string())
+    }
+}
+
 /// Executes the full God of War III preparation and probe execution natively from Rust.
 pub fn launch_gow3(
     base_dir: &Path,
@@ -196,17 +286,7 @@ pub fn launch_gow3(
         return Err("Oyun klasöründe 'eboot.bin' bulunamadı!".to_string());
     }
 
-    let probe_candidates = [
-        base_dir.join("bin/gow3-probe"),
-        base_dir.join("bin/gow3-probe.exe"),
-        base_dir.join("out/gow3-probe"),
-        base_dir.join("out/gow3-probe.exe"),
-        base_dir.join("gow3-probe.exe"),
-    ];
-    let probe_bin = probe_candidates
-        .into_iter()
-        .find(|p| p.is_file())
-        .ok_or_else(|| "Oyun motoru ('gow3-probe' / 'gow3-probe.exe') bulunamadı!".to_string())?;
+    let probe_bin = ensure_game_engine(base_dir)?;
 
     let out_dir = base_dir.join("out");
     fs::create_dir_all(&out_dir).map_err(|e| format!("'out' klasörü oluşturulamadı: {}", e))?;

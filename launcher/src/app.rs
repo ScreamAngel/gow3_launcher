@@ -78,8 +78,14 @@ pub struct LauncherApp {
     game_exit_rx: Option<Receiver<Option<i32>>>,
 
     // Python dependency state
+    has_python: bool,
     is_downloading_python: bool,
     python_dl_rx: Option<Receiver<Result<String, String>>>,
+
+    // Engine dependency state
+    has_engine: bool,
+    is_downloading_engine: bool,
+    engine_dl_rx: Option<Receiver<Result<String, String>>>,
 
     // Modals
     show_first_launch_modal: bool,
@@ -108,6 +114,8 @@ impl LauncherApp {
         let is_first = !config.first_launch_done;
         let game_valid = is_valid_game_dir(Path::new(&config.game_dir));
         let gamemode_avail = is_gamemode_available();
+        let has_python = crate::runner::find_python(&base_dir).is_ok();
+        let has_engine = crate::runner::find_game_engine(&base_dir).is_some();
 
         let mut app = Self {
             base_dir,
@@ -124,8 +132,12 @@ impl LauncherApp {
             update_modal: None,
             is_game_running: false,
             game_exit_rx: None,
+            has_python,
             is_downloading_python: false,
             python_dl_rx: None,
+            has_engine,
+            is_downloading_engine: false,
+            engine_dl_rx: None,
             show_first_launch_modal: is_first,
             active_crash_diagnosis: None,
             show_log_modal: false,
@@ -266,6 +278,22 @@ impl LauncherApp {
         });
     }
 
+    #[allow(dead_code)]
+    fn start_engine_download(&mut self) {
+        if self.is_downloading_engine {
+            return;
+        }
+        self.is_downloading_engine = true;
+        let (tx, rx) = channel();
+        self.engine_dl_rx = Some(rx);
+
+        let base_dir_clone = self.base_dir.clone();
+        thread::spawn(move || {
+            let res = crate::runner::download_windows_engine(&base_dir_clone);
+            let _ = tx.send(res);
+        });
+    }
+
     fn launch_game(&mut self) {
         // Apply settings before launching
         self.apply_all_optimizations();
@@ -356,10 +384,28 @@ impl eframe::App for LauncherApp {
                 self.python_dl_rx = None;
                 match res {
                     Ok(_) => {
+                        self.has_python = true;
                         self.status_message = Some((self.t("python_download_success").to_string(), false));
                     }
                     Err(e) => {
                         self.status_message = Some((format!("{}{}", self.t("python_download_err"), e), true));
+                    }
+                }
+            }
+        }
+
+        // 5. Check background engine downloader thread
+        if let Some(ref rx) = self.engine_dl_rx {
+            if let Ok(res) = rx.try_recv() {
+                self.is_downloading_engine = false;
+                self.engine_dl_rx = None;
+                match res {
+                    Ok(_) => {
+                        self.has_engine = true;
+                        self.status_message = Some((self.t("engine_download_success").to_string(), false));
+                    }
+                    Err(e) => {
+                        self.status_message = Some((format!("❌ {}", e), true));
                     }
                 }
             }
@@ -531,8 +577,7 @@ impl eframe::App for LauncherApp {
                 ui.separator();
                 ui.horizontal(|ui| {
                     ui.label(egui::RichText::new(self.t("python_dep")).color(egui::Color32::LIGHT_GRAY).size(12.0));
-                    let has_py = crate::runner::find_python(&self.base_dir).is_ok();
-                    if has_py {
+                    if self.has_python {
                         ui.label(
                             egui::RichText::new(self.t("python_ready"))
                                 .color(egui::Color32::from_rgb(102, 225, 106))
@@ -571,6 +616,43 @@ impl eframe::App for LauncherApp {
                         }
                     }
                 });
+
+                #[cfg(target_os = "windows")]
+                if !self.has_engine {
+                    ui.add_space(6.0);
+                    ui.horizontal(|ui| {
+                        ui.label(egui::RichText::new("⚙️ Windows Motoru:").color(egui::Color32::LIGHT_GRAY).size(12.0));
+                        ui.label(
+                            egui::RichText::new(self.t("engine_missing"))
+                                .color(egui::Color32::from_rgb(239, 83, 80))
+                                .strong()
+                                .size(12.0),
+                        );
+
+                        ui.add_space(8.0);
+                        if self.is_downloading_engine {
+                            ui.spinner();
+                            ui.label(
+                                egui::RichText::new(self.t("engine_downloading"))
+                                    .color(egui::Color32::from_rgb(255, 213, 79))
+                                    .size(12.0),
+                            );
+                        } else {
+                            let dl_btn = egui::Button::new(
+                                egui::RichText::new(self.t("engine_download"))
+                                    .size(11.0)
+                                    .color(egui::Color32::WHITE)
+                                    .strong(),
+                            )
+                            .fill(egui::Color32::from_rgb(180, 80, 45))
+                            .corner_radius(egui::CornerRadius::same(5));
+
+                            if ui.add(dl_btn).clicked() {
+                                self.start_engine_download();
+                            }
+                        }
+                    });
+                }
             });
 
             // --- 2. GAME DIRECTORY CARD ---

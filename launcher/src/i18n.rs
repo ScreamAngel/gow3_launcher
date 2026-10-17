@@ -105,6 +105,13 @@ pub fn text(lang: Language, key: &str) -> &'static str {
         (Language::Turkish, "latest_commit") => "Son Değişiklik:",
         (Language::Turkish, "commit_date") => "Tarih:",
         (Language::Turkish, "view_on_github") => "🌐 GitHub'da Görüntüle",
+        (Language::Turkish, "python_dep") => "Python 3 Bağımlılığı:",
+        (Language::Turkish, "python_ready") => "Kurulu / Hazır",
+        (Language::Turkish, "python_missing") => "Bulunamadı",
+        (Language::Turkish, "python_download") => "📥 Taşınabilir Python 3 İndir (~10 MB, Kurulumsuz)",
+        (Language::Turkish, "python_downloading") => "⏳ Python 3 indiriliyor ve hazırlanıyor...",
+        (Language::Turkish, "python_download_success") => "✅ Taşınabilir Python 3 başarıyla kuruldu ve hazırlandı!",
+        (Language::Turkish, "python_download_err") => "❌ Python 3 indirilemedi: ",
 
         // English
         (Language::English, "app_title") => "GOD OF WAR® III REMASTERED",
@@ -167,6 +174,13 @@ pub fn text(lang: Language, key: &str) -> &'static str {
         (Language::English, "latest_commit") => "Latest Commit:",
         (Language::English, "commit_date") => "Date:",
         (Language::English, "view_on_github") => "🌐 View on GitHub",
+        (Language::English, "python_dep") => "Python 3 Dependency:",
+        (Language::English, "python_ready") => "Installed / Ready",
+        (Language::English, "python_missing") => "Not Found",
+        (Language::English, "python_download") => "📥 Download Portable Python 3 (~10 MB, No Install)",
+        (Language::English, "python_downloading") => "⏳ Downloading & configuring Python 3...",
+        (Language::English, "python_download_success") => "✅ Portable Python 3 installed and configured successfully!",
+        (Language::English, "python_download_err") => "❌ Failed to download Python 3: ",
 
         // German
         (Language::German, "app_title") => "GOD OF WAR® III REMASTERED",
@@ -229,6 +243,13 @@ pub fn text(lang: Language, key: &str) -> &'static str {
         (Language::German, "latest_commit") => "Letzter Commit:",
         (Language::German, "commit_date") => "Datum:",
         (Language::German, "view_on_github") => "🌐 Auf GitHub ansehen",
+        (Language::German, "python_dep") => "Python 3 Abhängigkeit:",
+        (Language::German, "python_ready") => "Installiert / Bereit",
+        (Language::German, "python_missing") => "Nicht gefunden",
+        (Language::German, "python_download") => "📥 Portables Python 3 herunterladen (~10 MB, Ohne Installation)",
+        (Language::German, "python_downloading") => "⏳ Python 3 wird heruntergeladen und eingerichtet...",
+        (Language::German, "python_download_success") => "✅ Portables Python 3 erfolgreich eingerichtet!",
+        (Language::German, "python_download_err") => "❌ Fehler beim Herunterladen von Python 3: ",
 
         // Spanish
         (Language::Spanish, "app_title") => "GOD OF WAR® III REMASTERED",
@@ -291,6 +312,13 @@ pub fn text(lang: Language, key: &str) -> &'static str {
         (Language::Spanish, "latest_commit") => "Último Commit:",
         (Language::Spanish, "commit_date") => "Fecha:",
         (Language::Spanish, "view_on_github") => "🌐 Ver en GitHub",
+        (Language::Spanish, "python_dep") => "Dependencia Python 3:",
+        (Language::Spanish, "python_ready") => "Instalado / Listo",
+        (Language::Spanish, "python_missing") => "No encontrado",
+        (Language::Spanish, "python_download") => "📥 Descargar Python 3 portable (~10 MB, Sin instalación)",
+        (Language::Spanish, "python_downloading") => "⏳ Descargando y configurando Python 3...",
+        (Language::Spanish, "python_download_success") => "✅ ¡Python 3 portable configurado con éxito!",
+        (Language::Spanish, "python_download_err") => "❌ Error al descargar Python 3: ",
 
         _ => "",
     }

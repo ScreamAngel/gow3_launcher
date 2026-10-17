@@ -71,15 +71,118 @@ pub fn ensure_runtime_assets(base_dir: &Path) -> Result<(PathBuf, PathBuf), Stri
     Ok((scripts_dir, patches_dir))
 }
 
-pub fn find_python() -> Result<String, String> {
-    for cmd in &["python3", "python", "py"] {
-        if let Ok(out) = Command::new(cmd).arg("--version").output() {
-            if out.status.success() {
-                return Ok(cmd.to_string());
+/// Finds an available Python 3 interpreter (checking local runtime bundle first, then system PATH)
+pub fn find_python(base_dir: &Path) -> Result<String, String> {
+    // 1. Check local runtime python folder (.runtime/python/python.exe or bin/python3)
+    let candidates = [
+        base_dir.join(".runtime/python/python.exe"),
+        base_dir.join(".runtime/python/python"),
+        base_dir.join(".runtime/python/bin/python3"),
+        base_dir.join(".runtime/python/bin/python"),
+        base_dir.join("python/python.exe"),
+    ];
+    for p in &candidates {
+        if p.is_file() {
+            if let Ok(out) = Command::new(p).arg("--version").output() {
+                if out.status.success() {
+                    return Ok(p.to_string_lossy().to_string());
+                }
             }
         }
     }
-    Err("Python 3 bulunamadı. Lütfen sisteminize 'python' kurun.".to_string())
+
+    // 2. Check system-wide Python
+    for cmd in &["python3", "python", "py"] {
+        if let Ok(out) = Command::new(cmd).arg("--version").output() {
+            if out.status.success() {
+                let stdout = String::from_utf8_lossy(&out.stdout);
+                let stderr = String::from_utf8_lossy(&out.stderr);
+                let combined = format!("{} {}", stdout, stderr);
+                if combined.contains("Python 3.") {
+                    return Ok(cmd.to_string());
+                }
+            }
+        }
+    }
+
+    Err("Python 3 bulunamadı. Lütfen taşınabilir Python paketini indirin veya sisteminize kurun.".to_string())
+}
+
+/// Automatically downloads and configures official portable Python 3 runtime into `.runtime/python`
+pub fn download_portable_python(base_dir: &Path) -> Result<String, String> {
+    let runtime_dir = base_dir.join(".runtime");
+    let python_dir = runtime_dir.join("python");
+    let _ = fs::create_dir_all(&python_dir);
+
+    #[cfg(target_os = "windows")]
+    {
+        let ps_code = format!(
+            r#"
+            $url = 'https://www.python.org/ftp/python/3.11.9/python-3.11.9-embed-amd64.zip';
+            $zip = Join-Path $env:TEMP 'gow3_python_embed.zip';
+            $dest = '{}';
+            [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12;
+            Write-Host 'Downloading Python 3.11 embed package...';
+            Invoke-WebRequest -Uri $url -OutFile $zip;
+            if (!(Test-Path $dest)) {{ New-Item -ItemType Directory -Path $dest -Force | Out-Null }};
+            Write-Host 'Extracting archive...';
+            Expand-Archive -Path $zip -DestinationPath $dest -Force;
+            Remove-Item $zip -Force;
+            "#,
+            python_dir.to_string_lossy().replace('\'', "''")
+        );
+
+        let status = Command::new("powershell")
+            .args(["-NoProfile", "-Command", &ps_code])
+            .status()
+            .map_err(|e| format!("PowerShell ile Python indirme komutu çalıştırılamadı: {}", e))?;
+
+        if !status.success() {
+            return Err("PowerShell üzerinden Python 3 indirilemedi.".to_string());
+        }
+
+        // Configure python311._pth to enable import site and recognize scripts directory
+        let pth_file = python_dir.join("python311._pth");
+        let pth_content = "python311.zip\n.\n..\n..\\scripts\n..\\..\\scripts\nimport site\n";
+        let _ = fs::write(pth_file, pth_content);
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        // On Linux / macOS fallback: if curl and unzip exist, download embed (usable with wine or testing)
+        let zip_path = runtime_dir.join("python_embed.zip");
+        let curl_res = Command::new("curl")
+            .args([
+                "-sL",
+                "https://www.python.org/ftp/python/3.11.9/python-3.11.9-embed-amd64.zip",
+                "-o",
+                &zip_path.to_string_lossy(),
+            ])
+            .status();
+
+        if let Ok(st) = curl_res {
+            if st.success() {
+                let _ = Command::new("unzip")
+                    .args(["-o", "-q", &zip_path.to_string_lossy(), "-d", &python_dir.to_string_lossy()])
+                    .status();
+                let _ = fs::remove_file(&zip_path);
+
+                let pth_file = python_dir.join("python311._pth");
+                let pth_content = "python311.zip\n.\n..\nimport site\n";
+                let _ = fs::write(pth_file, pth_content);
+            }
+        }
+    }
+
+    find_python(base_dir).map_err(|_| "Python 3 indirildi ancak doğrulanamadı.".to_string())
+}
+
+/// Ensures Python 3 is available, automatically downloading portable package if missing
+pub fn ensure_python(base_dir: &Path) -> Result<String, String> {
+    if let Ok(py) = find_python(base_dir) {
+        return Ok(py);
+    }
+    download_portable_python(base_dir)
 }
 
 /// Executes the full God of War III preparation and probe execution natively from Rust.
@@ -127,7 +230,7 @@ pub fn launch_gow3(
         .try_clone()
         .map_err(|e| format!("Log dosyası çoğaltılamadı: {}", e))?;
 
-    let python = find_python()?;
+    let python = ensure_python(base_dir)?;
 
     // 1. Run mods.py
     let _ = Command::new(&python)
@@ -333,7 +436,7 @@ mod tests {
 
     #[test]
     fn test_find_python() {
-        let py = find_python();
+        let py = find_python(Path::new("."));
         assert!(py.is_ok(), "Python 3 should be detected on the system");
     }
 

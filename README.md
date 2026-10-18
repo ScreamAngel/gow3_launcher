@@ -24,8 +24,8 @@ Launcher for God Of War 3 PC on Linux and Windows
   directories.                                                                                                                                                                            
     - 🚨 **Crash & Error Diagnostic Assistant:** Automatically analyzes `gow3_log.txt` on exit. If an unexpected crash occurs, it displays a plain-language diagnosis and recommended fix.
     - 🔄 **GitHub Upstream Sync & Auto-Updater:** Checks upstream ([R-V-L/gow3_pc](https://github.com/R-V-L/gow3_pc)) for updates and re-applies all your custom directory paths, 144Hz patches, and VRAM budgets seamlessly.                                                                                                                
-   - 🌐 **Multi-Language Support:** Available in **Turkish 🇹🇷**, **English 🇬🇧**, **German 🇩🇪**, and **Spanish 🇪🇸**.                                                                      
-                                                                                                                                                                                          
+   - 🌐 **Multi-Language Support:** Available in **Turkish 🇹🇷**, **English 🇬🇧**, **German 🇩🇪**, and **Spanish 🇪🇸**.                                                                     
+
                                                                                                                                                                                        
                                                                                                                                                                                           
    ## 📋 System Requirements                                                                                                                                                             
@@ -58,6 +58,10 @@ Launcher for God Of War 3 PC on Linux and Windows
    - **Windows**: `gow3-launcher-win.exe`
 
    The launcher is completely standalone: it automatically detects your hardware, verifies the game dump, configures settings files, and applies all required patches without requiring external bash scripts.
+
+
+   <img width="1920" height="1016" alt="gow3_launcher_win_BJ42UCuIvf" src="https://github.com/user-attachments/assets/3d57aaed-8869-446e-bdb7-89491275039d" />
+
                                                                                                                                                                                       
                                                                                                                                                                                           
    ### 2. Add Your Game Dump                                                                                                                                                             
@@ -74,6 +78,9 @@ Launcher for God Of War 3 PC on Linux and Windows
    # on Windows:
    .\gow3-launcher-win.exe --play
    ```
+
+<img width="1920" height="1080" alt="gow3-probe_Hz51yYBACH" src="https://github.com/user-attachments/assets/651de8e7-15b9-454c-ab6d-a09dbd71f44e" />
+
 
    ### 🔄 Dual-Boot Ready
    Both `gow3-launcher` and `gow3-launcher-win.exe` live side-by-side in the same directory. If you dual-boot between Linux and Windows, you can play on either operating system seamlessly while sharing the same game dumps and configurations!

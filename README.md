@@ -40,9 +40,7 @@ Launcher for God Of War 3 PC on Linux and Windows
 
 
    <p align="center">
-  <a href="https://www.youtube.com/watch?v=-yGAEjdQGzE">
-    <img src="https://youtube.com" alt="God Of War III Remastered PC kurulum" width="600">
-  </a>
+  <a href="https://www.youtube.com/watch?v=-yGAEjdQGzE"><img width="1920" height="1080" alt="vlc_ie5PhePn2o" src="https://github.com/user-attachments/assets/190f531e-55b0-4a4a-b883-440cd615a18a" /></a>
 </p>
 
                                                                                                                                                                                           

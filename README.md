@@ -39,7 +39,12 @@ Launcher for God Of War 3 PC on Linux and Windows
    | **Dependencies** | Python 3, Vulkan drivers | `gamemode` (optional) |     
 
 
-   [![God Of War III Remastered PC kurulum](https://youtube.com)](https://www.youtube.com/watch?v=-yGAEjdQGzE)
+   <p align="center">
+  <a href="https://www.youtube.com/watch?v=-yGAEjdQGzE">
+    <img src="https://youtube.com" alt="God Of War III Remastered PC kurulum" width="600">
+  </a>
+</p>
+
                                                                                                                                                                                           
                                                                                                                                                                                        
                                                                                                                                                                                           

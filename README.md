@@ -36,7 +36,10 @@ Launcher for God Of War 3 PC on Linux and Windows
    | **CPU** | 6-core x86_64 processor | 8-core / 16-thread modern CPU |                                                                                                                 
    | **GPU** | Vulkan 1.3 compatible (4 GB VRAM) | Vulkan 1.3+ (6 GB+ VRAM, Nvidia / AMD) |                                                                                              
    | **RAM** | 8 GB | 16 GB+ |                                                                                                                                                           
-   | **Dependencies** | Python 3, Vulkan drivers | `gamemode` (optional) |                                                                                                               
+   | **Dependencies** | Python 3, Vulkan drivers | `gamemode` (optional) |     
+
+
+   [![God Of War III Remastered PC kurulum](https://youtube.com)](https://www.youtube.com/watch?v=-yGAEjdQGzE)
                                                                                                                                                                                           
                                                                                                                                                                                        
                                                                                                                                                                                           

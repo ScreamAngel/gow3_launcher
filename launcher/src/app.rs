@@ -214,6 +214,25 @@ impl LauncherApp {
         self.is_game_valid = is_valid_game_dir(Path::new(&self.config.game_dir));
         if self.is_game_valid {
             self.scan_failed_empty = false;
+            if let Some((_, is_err)) = self.status_message {
+                if is_err {
+                    self.status_message = Some((self.t("game_valid").to_string(), false));
+                }
+            }
+        }
+    }
+
+    fn set_game_directory(&mut self, path: &Path, ctx: &egui::Context) {
+        self.config.game_dir = path.to_string_lossy().to_string();
+        let _ = update_launch_scripts(&self.base_dir, path);
+        let _ = self.config.save(&self.base_dir);
+        self.check_game_validity();
+        self.load_textures(ctx);
+        self.scan_failed_empty = false;
+        if self.is_game_valid {
+            self.status_message = Some((self.t("game_valid").to_string(), false));
+        } else {
+            self.status_message = Some((self.t("game_invalid").to_string(), true));
         }
     }
 
@@ -689,12 +708,7 @@ impl eframe::App for LauncherApp {
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         if ui.button(egui::RichText::new(self.t("manual_select")).strong()).clicked() {
                             if let Some(folder) = rfd::FileDialog::new().pick_folder() {
-                                self.config.game_dir = folder.to_string_lossy().to_string();
-                                let _ = update_launch_scripts(&self.base_dir, &folder);
-                                let _ = self.config.save(&self.base_dir);
-                                self.check_game_validity();
-                                self.load_textures(&ctx);
-                                self.scan_failed_empty = false;
+                                self.set_game_directory(&folder, &ctx);
                             }
                         }
 
@@ -927,12 +941,7 @@ impl eframe::App for LauncherApp {
 
                                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                                             if ui.button(egui::RichText::new(self.t("select_this")).color(egui::Color32::from_rgb(105, 225, 110)).strong()).clicked() {
-                                                self.config.game_dir = c.path.to_string_lossy().to_string();
-                                                let _ = update_launch_scripts(&self.base_dir, &c.path);
-                                                let _ = self.config.save(&self.base_dir);
-                                                self.check_game_validity();
-                                                self.load_textures(&ctx);
-                                                self.scan_failed_empty = false;
+                                                self.set_game_directory(&c.path, &ctx);
                                                 self.found_candidates_modal = None;
                                                 let selected_name = c.title.clone();
                                                 self.status_message = Some((format!("✅ {} seçildi ve kaydedildi!", selected_name), false));
@@ -1005,12 +1014,7 @@ impl eframe::App for LauncherApp {
 
                         if ui.add(manual_btn).clicked() {
                             if let Some(folder) = rfd::FileDialog::new().pick_folder() {
-                                self.config.game_dir = folder.to_string_lossy().to_string();
-                                let _ = update_launch_scripts(&self.base_dir, &folder);
-                                let _ = self.config.save(&self.base_dir);
-                                self.check_game_validity();
-                                self.load_textures(&ctx);
-                                self.scan_failed_empty = false;
+                                self.set_game_directory(&folder, &ctx);
                                 self.show_game_not_found_modal = false;
                             }
                         }

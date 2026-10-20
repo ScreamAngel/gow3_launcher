@@ -1,0 +1,153 @@
+name: Build & Release Single Executables (AppImage & Portable Exe)
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-linux:
+    name: Build Linux AppImage & Binary
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev libudev-dev libwayland-dev libxkbcommon-dev libx11-dev libxcursor-dev libxi-dev libxrandr-dev libgl1-mesa-dev wget
+
+      - name: Build Linux Launcher (Release)
+        working-directory: launcher
+        run: cargo build --release
+
+      - name: Build AppImage
+        run: |
+          mkdir -p AppDir/usr/bin
+          mkdir -p AppDir/usr/share/applications
+          mkdir -p AppDir/usr/share/icons/hicolor/256x256/apps
+          cp launcher/target/release/launcher AppDir/usr/bin/gow3-launcher
+          cp gow3.png AppDir/usr/share/icons/hicolor/256x256/apps/gow3.png
+          cp gow3.png AppDir/gow3.png
+
+          cat << 'EOF' > AppDir/gow3-launcher.desktop
+          [Desktop Entry]
+          Name=God of War III Launcher
+          Exec=gow3-launcher
+          Icon=gow3
+          Type=Application
+          Categories=Game;
+          Terminal=false
+          EOF
+          cp AppDir/gow3-launcher.desktop AppDir/usr/share/applications/
+
+          cat << 'EOF' > AppDir/AppRun
+          #!/bin/bash
+          HERE="$(dirname "$(readlink -f "${0}")")"
+          export PATH="${HERE}/usr/bin:${PATH}"
+          exec "${HERE}/usr/bin/gow3-launcher" "$@"
+          EOF
+          chmod +x AppDir/AppRun
+
+          wget -q https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage -O appimagetool
+          chmod +x appimagetool
+          ./appimagetool --appimage-extract
+          ARCH=x86_64 ./squashfs-root/AppRun AppDir God_of_War_III_Launcher-x86_64.AppImage
+
+          cp launcher/target/release/launcher ./gow3-launcher
+
+      - name: Upload Linux Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-artifacts
+          path: |
+            God_of_War_III_Launcher-x86_64.AppImage
+            gow3-launcher
+
+  build-windows:
+    name: Build Windows Portable Exe
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build Windows Launcher (Release)
+        working-directory: launcher
+        run: cargo build --release
+
+      - name: Prepare Windows Executables
+        run: |
+          Copy-Item launcher/target/release/launcher.exe -Destination ./gow3-launcher-win.exe
+          Copy-Item launcher/target/release/launcher.exe -Destination ./God_of_War_III_Launcher-Windows.exe
+
+      - name: Upload Windows Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-artifacts
+          path: |
+            gow3-launcher-win.exe
+            God_of_War_III_Launcher-Windows.exe
+
+  publish-release:
+    name: Publish Release with Assets
+    needs: [build-linux, build-windows]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download Linux artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-artifacts
+          path: ./dist/
+
+      - name: Download Windows artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-artifacts
+          path: ./dist/
+
+      - name: Create or Update GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: "God of War III Launcher ${{ github.ref_name }}"
+          draft: false
+          prerelease: false
+          make_latest: true
+          body: |
+            ## 🚀 God of War III Remastered - Single Executable Release
+
+            Tek tıkla çalışan taşınabilir yürütülebilir dosyalar (Single Executables):
+
+            ### 📦 İndirme Seçenekleri:
+            - 🐧 **Linux (AppImage - Tek Dosya Kurulumsuz):** [`God_of_War_III_Launcher-x86_64.AppImage`](./God_of_War_III_Launcher-x86_64.AppImage)
+              - *Kullanım:* İndirin, sağ tıklayıp özelliklerden "Çalıştırılabilir yap" (veya `chmod +x`) deyin ve çift tıklayın!
+            - 🪟 **Windows (Portable Exe - Kurulumsuz):** [`God_of_War_III_Launcher-Windows.exe`](./God_of_War_III_Launcher-Windows.exe) / [`gow3-launcher-win.exe`](./gow3-launcher-win.exe)
+            - 🐧 **Linux (Native ELF):** [`gow3-launcher`](./gow3-launcher)
+
+            ### ✨ Yenilikler (${{ github.ref_name }})
+            - **AppImage Desteği:** Linux üzerinde bağımlılık derdi olmadan tek tıkla çalışan resmi AppImage paketi.
+            - **Windows Portable Exe:** Harici dosyalara ihtiyaç duymadan kendi simgesi ve arayüzüyle açılan taşınabilir Windows sürümü.
+            - **Akıllı Konum & Donanım Tespiti:** Launcher artık doğrudan kendi bulunduğu dizini tanır, taşınabilir çalışır.
+            - **Gelişmiş Oyun Arama:** Disklerde oyun bulunamadığında açıklayıcı modal uyarı penceresi ve anlık doğrulama.
+            - **Otomatik Yama & FPS Ayarları:** 60/120/144/240 Hz pacing, sarı doku önleme ve sinematik atlama.
+          files: |
+            ./dist/God_of_War_III_Launcher-x86_64.AppImage
+            ./dist/God_of_War_III_Launcher-Windows.exe
+            ./dist/gow3-launcher-win.exe
+            ./dist/gow3-launcher
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

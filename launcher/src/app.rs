@@ -197,16 +197,19 @@ impl LauncherApp {
             }
         }
 
-        // Remastered title logo: gow3-remastered.png
+        // Remastered title logo: gow3-remastered.png (checks base_dir, then embedded fallback)
         let logo_path = self.base_dir.join("gow3-remastered.png");
-        if logo_path.is_file() {
-            if let Ok(img) = image::open(&logo_path) {
-                let size = [img.width() as _, img.height() as _];
-                let img_buffer = img.to_rgba8();
-                let pixels = img_buffer.as_flat_samples();
-                let color_img = egui::ColorImage::from_rgba_unmultiplied(size, pixels.as_slice());
-                self.logo_texture = Some(ctx.load_texture("gow3_remastered_logo", color_img, Default::default()));
-            }
+        let logo_img = if logo_path.is_file() {
+            image::open(&logo_path).ok()
+        } else {
+            image::load_from_memory(include_bytes!("../../gow3-remastered.png")).ok()
+        };
+        if let Some(img) = logo_img {
+            let size = [img.width() as _, img.height() as _];
+            let img_buffer = img.to_rgba8();
+            let pixels = img_buffer.as_flat_samples();
+            let color_img = egui::ColorImage::from_rgba_unmultiplied(size, pixels.as_slice());
+            self.logo_texture = Some(ctx.load_texture("gow3_remastered_logo", color_img, Default::default()));
         }
     }
 

@@ -13,12 +13,24 @@ use eframe::egui;
 use std::path::PathBuf;
 
 fn main() -> eframe::Result<()> {
-    // Determine base_dir: If running inside 'launcher' folder, go up to parent, else use current dir
-    let current_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-    let base_dir = if current_dir.ends_with("launcher") {
-        current_dir.parent().unwrap_or(&current_dir).to_path_buf()
+    // Determine base_dir:
+    // 1. If running as an AppImage, use the directory where the .AppImage file is located
+    // 2. If running as standalone executable, use the folder containing the binary
+    // 3. Fallback to current working directory
+    let base_dir = if let Ok(appimage) = std::env::var("APPIMAGE") {
+        PathBuf::from(appimage).parent().unwrap_or(&PathBuf::from(".")).to_path_buf()
+    } else if let Ok(exe_path) = std::env::current_exe() {
+        let exe_dir = exe_path.parent().unwrap_or(&PathBuf::from(".")).to_path_buf();
+        let cur = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        if cur.ends_with("launcher") {
+            cur.parent().unwrap_or(&cur).to_path_buf()
+        } else if exe_dir.ends_with("target/release") || exe_dir.ends_with("target/debug") {
+            cur
+        } else {
+            exe_dir
+        }
     } else {
-        current_dir
+        std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
     };
 
     let args: Vec<String> = std::env::args().collect();
@@ -49,19 +61,23 @@ fn main() -> eframe::Result<()> {
         .with_min_inner_size([650.0, 550.0])
         .with_resizable(true);
 
-    // Try load window icon
-    let icon_path = base_dir.join("gow3.png");
-    if icon_path.is_file() {
-        if let Ok(img) = image::open(&icon_path) {
-            let width = img.width();
-            let height = img.height();
-            let rgba = img.to_rgba8().into_raw();
-            viewport = viewport.with_icon(egui::IconData {
-                rgba,
-                width,
-                height,
-            });
-        }
+    // Try load window icon: check base_dir first, then fallback to embedded asset
+    let icon_data = if let Ok(img) = image::open(base_dir.join("gow3.png")) {
+        let width = img.width();
+        let height = img.height();
+        let rgba = img.to_rgba8().into_raw();
+        Some(egui::IconData { rgba, width, height })
+    } else if let Ok(img) = image::load_from_memory(include_bytes!("../../gow3.png")) {
+        let width = img.width();
+        let height = img.height();
+        let rgba = img.to_rgba8().into_raw();
+        Some(egui::IconData { rgba, width, height })
+    } else {
+        None
+    };
+
+    if let Some(icon) = icon_data {
+        viewport = viewport.with_icon(icon);
     }
 
     let native_options = eframe::NativeOptions {

@@ -67,6 +67,8 @@ pub struct LauncherApp {
     is_scanning: bool,
     scan_rx: Option<Receiver<Vec<GameCandidate>>>,
     found_candidates_modal: Option<Vec<GameCandidate>>,
+    show_game_not_found_modal: bool,
+    scan_failed_empty: bool,
 
     // Updater state
     is_checking_update: bool,
@@ -127,6 +129,8 @@ impl LauncherApp {
             is_scanning: false,
             scan_rx: None,
             found_candidates_modal: None,
+            show_game_not_found_modal: false,
+            scan_failed_empty: false,
             is_checking_update: false,
             update_rx: None,
             update_modal: None,
@@ -208,6 +212,9 @@ impl LauncherApp {
 
     fn check_game_validity(&mut self) {
         self.is_game_valid = is_valid_game_dir(Path::new(&self.config.game_dir));
+        if self.is_game_valid {
+            self.scan_failed_empty = false;
+        }
     }
 
     fn apply_all_optimizations(&mut self) {
@@ -239,6 +246,7 @@ impl LauncherApp {
 
     fn start_game_scan(&mut self) {
         self.is_scanning = true;
+        self.scan_failed_empty = false;
         let (tx, rx): (Sender<Vec<GameCandidate>>, Receiver<Vec<GameCandidate>>) = channel();
         self.scan_rx = Some(rx);
 
@@ -335,14 +343,12 @@ impl eframe::App for LauncherApp {
                 self.is_scanning = false;
                 self.scan_rx = None;
                 if candidates.is_empty() {
-                    let msg = match self.current_lang {
-                        Language::Turkish => "⚠️ Disklerde eksiksiz ve geçerli God of War III klasörü bulunamadı.",
-                        Language::English => "⚠️ No complete and valid God of War III directory found on drives.",
-                        Language::German => "⚠️ Kein vollständiger God of War III Ordner auf den Laufwerken gefunden.",
-                        Language::Spanish => "⚠️ No se encontró ninguna carpeta completa y válida en los discos.",
-                    };
+                    let msg = self.t("scan_not_found_inline");
                     self.status_message = Some((msg.to_string(), true));
+                    self.scan_failed_empty = true;
+                    self.show_game_not_found_modal = true;
                 } else {
+                    self.scan_failed_empty = false;
                     // Open the candidates selection modal so the user chooses the exact one
                     self.found_candidates_modal = Some(candidates);
                 }
@@ -688,6 +694,7 @@ impl eframe::App for LauncherApp {
                                 let _ = self.config.save(&self.base_dir);
                                 self.check_game_validity();
                                 self.load_textures(&ctx);
+                                self.scan_failed_empty = false;
                             }
                         }
 
@@ -700,7 +707,7 @@ impl eframe::App for LauncherApp {
                     });
                 });
 
-                // Validation badge
+                // Validation badge & Scan status
                 ui.add_space(4.0);
                 if self.is_game_valid {
                     ui.label(
@@ -714,6 +721,25 @@ impl eframe::App for LauncherApp {
                             .color(egui::Color32::from_rgb(245, 90, 85))
                             .strong(),
                     );
+                }
+
+                if self.scan_failed_empty {
+                    ui.add_space(6.0);
+                    egui::Frame::group(ui.style())
+                        .fill(egui::Color32::from_rgba_unmultiplied(65, 20, 20, 215))
+                        .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgb(245, 80, 80)))
+                        .inner_margin(10.0)
+                        .corner_radius(egui::CornerRadius::same(6))
+                        .show(ui, |ui| {
+                            ui.horizontal(|ui| {
+                                ui.label(egui::RichText::new("⚠️").size(18.0));
+                                ui.label(
+                                    egui::RichText::new(self.t("scan_not_found_inline"))
+                                        .color(egui::Color32::from_rgb(255, 140, 140))
+                                        .strong(),
+                                );
+                            });
+                        });
                 }
             });
 
@@ -906,6 +932,7 @@ impl eframe::App for LauncherApp {
                                                 let _ = self.config.save(&self.base_dir);
                                                 self.check_game_validity();
                                                 self.load_textures(&ctx);
+                                                self.scan_failed_empty = false;
                                                 self.found_candidates_modal = None;
                                                 let selected_name = c.title.clone();
                                                 self.status_message = Some((format!("✅ {} seçildi ve kaydedildi!", selected_name), false));
@@ -923,6 +950,80 @@ impl eframe::App for LauncherApp {
                             self.found_candidates_modal = None;
                         }
                     });
+                });
+        }
+
+        // --- MODAL: GAME NOT FOUND WARNING ---
+        if self.show_game_not_found_modal {
+            egui::Window::new(self.t("game_not_found_modal_title"))
+                .collapsible(false)
+                .resizable(false)
+                .default_width(520.0)
+                .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
+                .show(&ctx, |ui| {
+                    ui.vertical_centered(|ui| {
+                        ui.add_space(6.0);
+                        ui.label(
+                            egui::RichText::new("⚠️")
+                                .size(36.0)
+                                .color(egui::Color32::from_rgb(255, 175, 50)),
+                        );
+                        ui.add_space(4.0);
+                        ui.label(
+                            egui::RichText::new(self.t("game_not_found_title"))
+                                .size(17.0)
+                                .strong()
+                                .color(egui::Color32::from_rgb(255, 105, 105)),
+                        );
+                        ui.add_space(6.0);
+                    });
+
+                    let box_frame = egui::Frame::group(ui.style())
+                        .fill(egui::Color32::from_rgba_unmultiplied(35, 22, 22, 225))
+                        .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(230, 60, 60, 110)))
+                        .inner_margin(12.0)
+                        .corner_radius(egui::CornerRadius::same(8));
+
+                    box_frame.show(ui, |ui| {
+                        ui.label(
+                            egui::RichText::new(self.t("game_not_found_desc"))
+                                .size(13.0)
+                                .color(egui::Color32::from_rgb(225, 225, 230)),
+                        );
+                    });
+
+                    ui.add_space(10.0);
+                    ui.horizontal(|ui| {
+                        let manual_btn = egui::Button::new(
+                            egui::RichText::new(self.t("manual_select"))
+                                .strong()
+                                .color(egui::Color32::WHITE),
+                        )
+                        .fill(egui::Color32::from_rgb(45, 105, 205))
+                        .corner_radius(egui::CornerRadius::same(6))
+                        .min_size(egui::vec2(130.0, 32.0));
+
+                        if ui.add(manual_btn).clicked() {
+                            if let Some(folder) = rfd::FileDialog::new().pick_folder() {
+                                self.config.game_dir = folder.to_string_lossy().to_string();
+                                let _ = update_launch_scripts(&self.base_dir, &folder);
+                                let _ = self.config.save(&self.base_dir);
+                                self.check_game_validity();
+                                self.load_textures(&ctx);
+                                self.scan_failed_empty = false;
+                                self.show_game_not_found_modal = false;
+                            }
+                        }
+
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            let close_btn = egui::Button::new(self.t("close"))
+                                .min_size(egui::vec2(90.0, 32.0));
+                            if ui.add(close_btn).clicked() {
+                                self.show_game_not_found_modal = false;
+                            }
+                        });
+                    });
+                    ui.add_space(4.0);
                 });
         }
 

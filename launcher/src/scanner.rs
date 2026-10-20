@@ -15,10 +15,13 @@ pub fn is_valid_game_dir(path: &Path) -> bool {
         return false;
     }
 
-    let eboot = path.join("eboot.bin");
-    if !eboot.is_file() {
+    let eboot = if path.join("eboot.bin").is_file() {
+        path.join("eboot.bin")
+    } else if path.join("EBOOT.BIN").is_file() {
+        path.join("EBOOT.BIN")
+    } else {
         return false;
-    }
+    };
 
     // 1. Verify eboot.bin size (genuine God of War III eboot is > 1MB, typically ~4.5MB)
     if let Ok(meta) = fs::metadata(&eboot) {
@@ -30,10 +33,17 @@ pub fn is_valid_game_dir(path: &Path) -> bool {
     }
 
     // 2. Verify sce_sys/param.sfo exists and has data
-    let sfo = path.join("sce_sys/param.sfo");
-    if !sfo.is_file() {
+    let sfo = if path.join("sce_sys/param.sfo").is_file() {
+        path.join("sce_sys/param.sfo")
+    } else if path.join("sce_sys/PARAM.SFO").is_file() {
+        path.join("sce_sys/PARAM.SFO")
+    } else if path.join("SCE_SYS/param.sfo").is_file() {
+        path.join("SCE_SYS/param.sfo")
+    } else if path.join("SCE_SYS/PARAM.SFO").is_file() {
+        path.join("SCE_SYS/PARAM.SFO")
+    } else {
         return false;
-    }
+    };
     if let Ok(meta) = fs::metadata(&sfo) {
         if meta.len() < 100 {
             return false;
@@ -43,13 +53,13 @@ pub fn is_valid_game_dir(path: &Path) -> bool {
     }
 
     // 3. Verify at least one essential game directory exists (sce_module, EXEC, or language packs)
-    let has_modules = path.join("sce_module").is_dir();
-    let has_exec = path.join("EXEC").is_dir();
+    let has_modules = path.join("sce_module").is_dir() || path.join("SCE_MODULE").is_dir();
+    let has_exec = path.join("EXEC").is_dir() || path.join("exec").is_dir();
     let has_lang = [
         "ENGLISH", "DUTCH", "FRENCH", "GERMAN", "ITALIAN", "POLISH", "PORTUGUESE", "RUSSIAN", "SPANISH", "data",
     ]
     .iter()
-    .any(|lang| path.join(lang).is_dir());
+    .any(|lang| path.join(lang).is_dir() || path.join(lang.to_lowercase()).is_dir());
 
     has_modules || has_exec || has_lang
 }
@@ -57,6 +67,10 @@ pub fn is_valid_game_dir(path: &Path) -> bool {
 pub fn scan_for_game() -> Vec<GameCandidate> {
     let mut candidates = Vec::new();
     let mut scan_roots = Vec::new();
+
+    if let Ok(cur) = std::env::current_dir() {
+        scan_roots.push(cur);
+    }
 
     #[cfg(target_os = "windows")]
     {

@@ -38,15 +38,8 @@ fn main() -> eframe::Result<()> {
         let config = config::LauncherConfig::load(&base_dir);
         let gamemode_avail = system::is_gamemode_available();
         let use_gamemode = gamemode_avail && config.use_gamemode;
-        let _ = tuner::apply_settings(
-            &base_dir,
-            config.target_fps,
-            config.patch_delta_time,
-            config.patch_readbacks,
-            config.vram_gc_budget_mb,
-            config.dmem_mb,
-        );
-        match runner::launch_gow3(&base_dir, &config, use_gamemode) {
+        let _ = tuner::apply_settings(&base_dir, &config);
+        match runner::launch_gow3(&base_dir, &config, use_gamemode, None) {
             Ok(code) => std::process::exit(code),
             Err(e) => {
                 eprintln!("Error launching God of War III: {}", e);

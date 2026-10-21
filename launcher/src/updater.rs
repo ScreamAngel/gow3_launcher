@@ -161,14 +161,7 @@ pub fn apply_github_update(
     }
 
     // Re-apply optimizations and settings
-    let _ = apply_settings(
-        base_dir,
-        config.target_fps,
-        config.patch_delta_time,
-        config.patch_readbacks,
-        config.vram_gc_budget_mb,
-        config.dmem_mb,
-    );
+    let _ = apply_settings(base_dir, config);
 
     // Update last_git_commit in config
     config.last_git_commit = update.commit_sha.clone();

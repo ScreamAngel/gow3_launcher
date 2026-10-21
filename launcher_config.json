@@ -1,7 +1,7 @@
 {
   "first_launch_done": true,
   "language": "tr",
-  "game_dir": "/home/screamangel/İndirilenler/GOW3 Emu Linux/.CUSA01715",
+  "game_dir": "/home/screamangel/İndirilenler/GOW3 Emu Linux/CUSA01715",
   "target_fps": 60,
   "patch_delta_time": true,
   "patch_readbacks": true,
@@ -10,10 +10,42 @@
   "vram_gc_budget_mb": 6144,
   "dmem_mb": 9216,
   "cached_hardware": {
-    "gpu_name": "NVIDIA GeForce RTX 4070 Laptop GPU",
-    "vram_mb": 8188,
-    "ram_mb": 15603,
-    "refresh_rate_hz": 144
+    "gpu_name": "Windows DirectX/Vulkan GPU",
+    "vram_mb": 4096,
+    "ram_mb": 16384,
+    "refresh_rate_hz": 60
   },
-  "last_git_commit": "c5638d9956002b8a9f09a240028f6793ddf7b2f8"
+  "last_git_commit": "0b4abe07acb711848d1b5d72402a9de8c0ad9844",
+  "display_mode": "Borderless",
+  "vsync": true,
+  "background_controller_input": false,
+  "is_motion_controls_enabled": true,
+  "deadzone_left": 2,
+  "deadzone_right": 2,
+  "keyboard_bindings": {
+    "triangle": "c",
+    "circle": "b",
+    "cross": "n",
+    "square": "v",
+    "l1": "q",
+    "r1": "u",
+    "l2": "e",
+    "r2": "o",
+    "l3": "x",
+    "r3": "m",
+    "options": "enter",
+    "touchpad_center": "space",
+    "pad_up": "up",
+    "pad_down": "down",
+    "pad_left": "left",
+    "pad_right": "right",
+    "axis_left_x_minus": "a",
+    "axis_left_x_plus": "d",
+    "axis_left_y_minus": "w",
+    "axis_left_y_plus": "s",
+    "axis_right_x_minus": "j",
+    "axis_right_x_plus": "l",
+    "axis_right_y_minus": "i",
+    "axis_right_y_plus": "k"
+  }
 }

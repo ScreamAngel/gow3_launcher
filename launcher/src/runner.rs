@@ -1,6 +1,8 @@
 use std::fs::{self, File};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::Arc;
 
 use crate::config::LauncherConfig;
 
@@ -382,11 +384,172 @@ pub fn ensure_game_engine(base_dir: &Path) -> Result<PathBuf, String> {
     }
 }
 
+/// Force terminates any running game processes (probe / wine / gamemoderun) on the system.
+pub fn kill_game_processes(pid: u32) {
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+
+        if pid > 0 {
+            let _ = Command::new("taskkill")
+                .args(["/F", "/T", "/PID", &pid.to_string()])
+                .creation_flags(CREATE_NO_WINDOW)
+                .output();
+        }
+        let _ = Command::new("taskkill")
+            .args(["/F", "/T", "/IM", "gow3-probe.exe"])
+            .creation_flags(CREATE_NO_WINDOW)
+            .output();
+        let _ = Command::new("taskkill")
+            .args(["/F", "/T", "/IM", "gow3.exe"])
+            .creation_flags(CREATE_NO_WINDOW)
+            .output();
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let my_pid = std::process::id();
+        if pid > 0 && pid != my_pid {
+            let _ = Command::new("kill")
+                .args(["-9", &pid.to_string()])
+                .output();
+            let _ = Command::new("pkill")
+                .args(["-9", "-P", &pid.to_string()])
+                .output();
+        }
+        let _ = Command::new("pkill")
+            .args(["-9", "-x", "gow3-probe"])
+            .output();
+        let _ = Command::new("pkill")
+            .args(["-9", "-f", "gow3-probe"])
+            .output();
+        let _ = Command::new("pkill")
+            .args(["-9", "-f", "gow3-probe.exe"])
+            .output();
+    }
+}
+
+#[cfg(target_os = "windows")]
+pub fn adjust_windows_windowed_mode(target_pid: u32) {
+    std::thread::spawn(move || {
+        use std::ffi::c_void;
+        use std::time::{Duration, Instant};
+
+        #[repr(C)]
+        struct RECT {
+            left: i32,
+            top: i32,
+            right: i32,
+            bottom: i32,
+        }
+
+        struct EnumContext {
+            pid: u32,
+            hwnd: *mut c_void,
+        }
+
+        unsafe extern "system" {
+            fn GetWindowThreadProcessId(hwnd: *mut c_void, lpdwProcessId: *mut u32) -> u32;
+            fn EnumWindows(lpEnumFunc: unsafe extern "system" fn(*mut c_void, isize) -> i32, lParam: isize) -> i32;
+            fn IsWindowVisible(hwnd: *mut c_void) -> i32;
+            fn GetWindowLongPtrA(hWnd: *mut c_void, nIndex: i32) -> isize;
+            fn SetWindowLongPtrA(hWnd: *mut c_void, nIndex: i32, dwNewLong: isize) -> isize;
+            fn SetWindowPos(hWnd: *mut c_void, hWndInsertAfter: *mut c_void, X: i32, Y: i32, cx: i32, cy: i32, uFlags: u32) -> i32;
+            fn ShowWindow(hWnd: *mut c_void, nCmdShow: i32) -> i32;
+            fn SystemParametersInfoA(uiAction: u32, uiParam: u32, pvParam: *mut c_void, fWinIni: u32) -> i32;
+            fn GetSystemMetrics(nIndex: i32) -> i32;
+        }
+
+        unsafe extern "system" fn enum_proc(hwnd: *mut c_void, lparam: isize) -> i32 {
+            unsafe {
+                let ctx = &mut *(lparam as *mut EnumContext);
+                let mut proc_id = 0u32;
+                GetWindowThreadProcessId(hwnd, &mut proc_id);
+                if proc_id == ctx.pid && IsWindowVisible(hwnd) != 0 {
+                    ctx.hwnd = hwnd;
+                    return 0;
+                }
+            }
+            1
+        }
+
+        let start = Instant::now();
+        let mut target_hwnd: *mut c_void = std::ptr::null_mut();
+
+        while start.elapsed() < Duration::from_secs(15) {
+            let mut ctx = EnumContext {
+                pid: target_pid,
+                hwnd: std::ptr::null_mut(),
+            };
+            unsafe {
+                EnumWindows(enum_proc, &mut ctx as *mut _ as isize);
+            }
+            if !ctx.hwnd.is_null() {
+                target_hwnd = ctx.hwnd;
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(150));
+        }
+
+        if target_hwnd.is_null() {
+            return;
+        }
+
+        std::thread::sleep(Duration::from_millis(600));
+
+        unsafe {
+            let mut work_area: RECT = std::mem::zeroed();
+            const SPI_GETWORKAREA: u32 = 0x0030;
+            let ok = SystemParametersInfoA(SPI_GETWORKAREA, 0, &mut work_area as *mut _ as *mut c_void, 0);
+
+            let screen_w = if ok != 0 { work_area.right - work_area.left } else { GetSystemMetrics(0) };
+            let screen_h = if ok != 0 { work_area.bottom - work_area.top } else { GetSystemMetrics(1) };
+
+            let (win_w, win_h) = if screen_w >= 2560 && screen_h >= 1440 {
+                (1920, 1080)
+            } else if screen_w > 1680 && screen_h > 940 {
+                (1600, 900)
+            } else if screen_w > 1360 && screen_h > 760 {
+                (1280, 720)
+            } else {
+                ((screen_w * 85 / 100).max(800), (screen_h * 85 / 100).max(600))
+            };
+
+            let pos_x = work_area.left + ((screen_w - win_w) / 2).max(10);
+            let pos_y = work_area.top + ((screen_h - win_h) / 2).max(10);
+
+            const GWL_STYLE: i32 = -16;
+            const WS_OVERLAPPEDWINDOW: isize = 0x00CF0000;
+            const WS_VISIBLE: isize = 0x10000000;
+            let current_style = GetWindowLongPtrA(target_hwnd, GWL_STYLE);
+            SetWindowLongPtrA(target_hwnd, GWL_STYLE, current_style | WS_OVERLAPPEDWINDOW | WS_VISIBLE);
+
+            const SWP_FRAMECHANGED: u32 = 0x0020;
+            const SWP_SHOWWINDOW: u32 = 0x0040;
+            const SWP_NOZORDER: u32 = 0x0004;
+            const SW_RESTORE: i32 = 9;
+
+            ShowWindow(target_hwnd, SW_RESTORE);
+            SetWindowPos(
+                target_hwnd,
+                std::ptr::null_mut(),
+                pos_x,
+                pos_y,
+                win_w,
+                win_h,
+                SWP_NOZORDER | SWP_FRAMECHANGED | SWP_SHOWWINDOW,
+            );
+        }
+    });
+}
+
 /// Executes the full God of War III preparation and probe execution natively from Rust.
 pub fn launch_gow3(
     base_dir: &Path,
     config: &LauncherConfig,
     use_gamemode: bool,
+    running_pid: Option<Arc<AtomicU32>>,
 ) -> Result<i32, String> {
     let game_dir = Path::new(&config.game_dir);
     if !game_dir.join("eboot.bin").is_file() {
@@ -606,6 +769,32 @@ pub fn launch_gow3(
     cmd.env("GOW3_PATCHES_ONLY", "1");
     cmd.env("GOW3_CONFIG", &config_ini);
     cmd.env("GOW3_GAME_DIR", game_dir);
+    cmd.env(
+        "GOW3_FULLSCREEN",
+        if config.display_mode != crate::config::DisplayMode::Windowed {
+            "1"
+        } else {
+            "0"
+        },
+    );
+
+    // Apply Controller and Keyboard mapping overrides
+    let key_map = config.build_gow3_key_map();
+    let pad_map = config.build_gow3_pad_map();
+    cmd.env("GOW3_KEY_MAP", &key_map);
+    cmd.env("GOW3_PAD_MAP", pad_map);
+    cmd.env(
+        "SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS",
+        if config.background_controller_input {
+            "1"
+        } else {
+            "0"
+        },
+    );
+    if config.deadzone_left > 0 {
+        let dz = (config.deadzone_left as f32 / 100.0 * 32767.0) as u32;
+        cmd.env("SDL_LINUX_JOYSTICK_DEADZONE", dz.to_string());
+    }
 
     // Prepend bin directory to PATH so Windows/Linux loaders find bundled libraries
     let bin_dir = base_dir.join("bin");
@@ -626,9 +815,23 @@ pub fn launch_gow3(
     cmd.stderr(Stdio::from(log_file_err));
 
     let mut child = cmd.spawn().map_err(|e| format!("Oyun başlatılamadı: {}", e))?;
-    let exit_status = child.wait().map_err(|e| format!("Oyun beklenirken hata oluştu: {}", e))?;
+    if let Some(ref pid_holder) = running_pid {
+        pid_holder.store(child.id(), Ordering::SeqCst);
+    }
 
-    Ok(exit_status.code().unwrap_or(-1))
+    #[cfg(target_os = "windows")]
+    if config.display_mode == crate::config::DisplayMode::Windowed {
+        adjust_windows_windowed_mode(child.id());
+    }
+
+    let exit_status = child.wait().map_err(|e| format!("Oyun beklenirken hata oluştu: {}", e));
+
+    if let Some(ref pid_holder) = running_pid {
+        pid_holder.store(0, Ordering::SeqCst);
+    }
+
+    let status = exit_status?;
+    Ok(status.code().unwrap_or(-1))
 }
 
 #[cfg(test)]

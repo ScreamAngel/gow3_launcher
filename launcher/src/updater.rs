@@ -78,11 +78,7 @@ pub fn apply_github_update(
     config: &mut LauncherConfig,
 ) -> Result<String, String> {
     let binary_name = if cfg!(target_os = "windows") {
-        if base_dir.join("gow3_launcher_win.exe").is_file() {
-            "gow3_launcher_win.exe"
-        } else {
-            "gow3-launcher-win.exe"
-        }
+        "gow3-launcher-win.exe"
     } else {
         "gow3-launcher"
     };

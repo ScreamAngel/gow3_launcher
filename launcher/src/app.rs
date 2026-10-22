@@ -147,6 +147,40 @@ pub fn format_key_display(key_str: &str) -> String {
     }
 }
 
+fn render_stat_tile(
+    ui: &mut egui::Ui,
+    icon: &str,
+    title: &str,
+    value: &str,
+    badge: Option<(&str, egui::Color32)>,
+) {
+    egui::Frame::group(ui.style())
+        .fill(egui::Color32::from_rgba_unmultiplied(24, 26, 36, 210))
+        .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(255, 255, 255, 22)))
+        .inner_margin(egui::Margin::symmetric(10, 8))
+        .corner_radius(egui::CornerRadius::same(8))
+        .show(ui, |ui| {
+            ui.set_min_width(ui.available_width());
+            ui.horizontal(|ui| {
+                ui.label(egui::RichText::new(icon).size(15.0));
+                ui.label(egui::RichText::new(title).color(egui::Color32::from_rgb(165, 170, 185)).size(11.0));
+            });
+            ui.add_space(2.0);
+            ui.label(egui::RichText::new(value).color(egui::Color32::WHITE).strong().size(13.0));
+            if let Some((b_text, b_color)) = badge {
+                ui.add_space(3.0);
+                egui::Frame::new()
+                    .fill(egui::Color32::from_rgba_unmultiplied(b_color.r(), b_color.g(), b_color.b(), 35))
+                    .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(b_color.r(), b_color.g(), b_color.b(), 110)))
+                    .corner_radius(egui::CornerRadius::same(4))
+                    .inner_margin(egui::Margin::symmetric(6, 2))
+                    .show(ui, |ui| {
+                        ui.label(egui::RichText::new(b_text).color(b_color).size(10.0).strong());
+                    });
+            }
+        });
+}
+
 fn render_binding_row(
     ui: &mut egui::Ui,
     label: &str,
@@ -156,33 +190,55 @@ fn render_binding_row(
     next_listening: &mut Option<KeyBindingTarget>,
 ) {
     ui.horizontal(|ui| {
-        ui.label(egui::RichText::new(label).size(12.5));
+        let ps_icon = match target {
+            KeyBindingTarget::Triangle => Some(("▲", egui::Color32::from_rgb(0, 230, 118))),
+            KeyBindingTarget::Circle => Some(("●", egui::Color32::from_rgb(255, 61, 0))),
+            KeyBindingTarget::Cross => Some(("✖", egui::Color32::from_rgb(41, 121, 255))),
+            KeyBindingTarget::Square => Some(("■", egui::Color32::from_rgb(255, 64, 129))),
+            KeyBindingTarget::L1 | KeyBindingTarget::L2 | KeyBindingTarget::L3 => Some(("L", egui::Color32::from_rgb(255, 215, 0))),
+            KeyBindingTarget::R1 | KeyBindingTarget::R2 | KeyBindingTarget::R3 => Some(("R", egui::Color32::from_rgb(255, 140, 0))),
+            KeyBindingTarget::PadUp | KeyBindingTarget::PadDown | KeyBindingTarget::PadLeft | KeyBindingTarget::PadRight => Some(("✦", egui::Color32::from_rgb(180, 205, 255))),
+            _ => None,
+        };
+
+        if let Some((sym, col)) = ps_icon {
+            ui.label(egui::RichText::new(sym).color(col).strong().size(13.0));
+        }
+
+        ui.label(egui::RichText::new(label).size(12.5).color(egui::Color32::from_rgb(230, 230, 235)));
+
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             let is_listening = listening_for == Some(target);
             let btn_text = if is_listening {
-                "👉 [ Basın... / ESC ]".to_string()
+                "▶ Tuşa basınız... (Esc)".to_string()
             } else {
                 format_key_display(current_key)
             };
 
             let text_color = if is_listening {
-                egui::Color32::from_rgb(255, 220, 80)
+                egui::Color32::from_rgb(255, 230, 120)
             } else {
                 egui::Color32::WHITE
             };
 
-            let bg_color = if is_listening {
-                egui::Color32::from_rgb(180, 50, 50)
+            let (bg_color, stroke) = if is_listening {
+                let time = ui.ctx().input(|i| i.time);
+                let pulse = ((time * 4.0).sin() * 0.5 + 0.5) as f32;
+                ui.ctx().request_repaint();
+                let r = (160.0 + 50.0 * pulse) as u8;
+                let stroke_col = egui::Color32::from_rgb(255, (200.0 + 55.0 * pulse) as u8, 80);
+                (egui::Color32::from_rgb(r, 45, 45), egui::Stroke::new(1.5, stroke_col))
             } else {
-                egui::Color32::from_rgb(46, 50, 62)
+                (egui::Color32::from_rgb(38, 42, 54), egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(255, 255, 255, 25)))
             };
 
             let btn = egui::Button::new(
                 egui::RichText::new(btn_text).strong().size(12.0).color(text_color),
             )
-            .min_size(egui::vec2(130.0, 26.0))
+            .min_size(egui::vec2(145.0, 28.0))
             .fill(bg_color)
-            .corner_radius(egui::CornerRadius::same(5));
+            .stroke(stroke)
+            .corner_radius(egui::CornerRadius::same(6));
 
             if ui.add(btn).clicked() {
                 if is_listening {
@@ -197,7 +253,7 @@ fn render_binding_row(
 
 /// A custom animated pill toggle switch matching modern mobile/desktop toggle designs.
 pub fn toggle_switch(ui: &mut egui::Ui, on: &mut bool) -> egui::Response {
-    let desired_size = egui::vec2(42.0, 24.0);
+    let desired_size = egui::vec2(44.0, 24.0);
     let (rect, mut response) = ui.allocate_exact_size(desired_size, egui::Sense::click());
     if response.clicked() {
         *on = !*on;
@@ -209,12 +265,26 @@ pub fn toggle_switch(ui: &mut egui::Ui, on: &mut bool) -> egui::Response {
         let how_on = ui.ctx().animate_bool(response.id, *on);
         let radius = 0.5 * rect.height();
 
-        let bg_r = (62.0 + (175.0 - 62.0) * how_on) as u8;
-        let bg_g = (64.0 + (195.0 - 64.0) * how_on) as u8;
-        let bg_b = (71.0 + (248.0 - 71.0) * how_on) as u8;
-        let bg_color = egui::Color32::from_rgb(bg_r, bg_g, bg_b);
+        // Background transition: dark slate when off -> vibrant spartan red when on
+        let off_bg = egui::Color32::from_rgb(46, 50, 62);
+        let on_bg = egui::Color32::from_rgb(215, 45, 45);
+        let bg_color = egui::Color32::from_rgb(
+            egui::lerp((off_bg.r() as f32)..=(on_bg.r() as f32), how_on) as u8,
+            egui::lerp((off_bg.g() as f32)..=(on_bg.g() as f32), how_on) as u8,
+            egui::lerp((off_bg.b() as f32)..=(on_bg.b() as f32), how_on) as u8,
+        );
 
+        let stroke = egui::Stroke::new(
+            1.0,
+            egui::Color32::from_rgba_unmultiplied(
+                255,
+                (100.0 * how_on) as u8,
+                (100.0 * how_on) as u8,
+                (40.0 + 80.0 * how_on) as u8,
+            ),
+        );
         ui.painter().rect_filled(rect, radius, bg_color);
+        ui.painter().rect_stroke(rect, radius, stroke, egui::StrokeKind::Inside);
 
         let padding = 2.5;
         let knob_radius = radius - padding;
@@ -223,11 +293,16 @@ pub fn toggle_switch(ui: &mut egui::Ui, on: &mut bool) -> egui::Response {
         let knob_x = egui::lerp(left_x..=right_x, how_on);
         let knob_center = egui::pos2(knob_x, rect.center().y);
 
-        let knob_r = (255.0 + (28.0 - 255.0) * how_on) as u8;
-        let knob_g = (255.0 + (35.0 - 255.0) * how_on) as u8;
-        let knob_b = (255.0 + (58.0 - 255.0) * how_on) as u8;
-        let knob_color = egui::Color32::from_rgb(knob_r, knob_g, knob_b);
+        // Knob halo when ON
+        if how_on > 0.05 {
+            ui.painter().circle_filled(
+                knob_center,
+                knob_radius + 2.5 * how_on,
+                egui::Color32::from_rgba_unmultiplied(255, 80, 70, (45.0 * how_on) as u8),
+            );
+        }
 
+        let knob_color = egui::Color32::from_rgb(250, 250, 252);
         ui.painter().circle_filled(knob_center, knob_radius, knob_color);
     }
 
@@ -776,45 +851,57 @@ impl eframe::App for LauncherApp {
                 ui.label(egui::RichText::new(msg).color(color).strong());
             }
 
-            // --- NAVIGATION TABS ---
-            ui.horizontal(|ui| {
-                let game_active = self.active_tab == ActiveTab::Game;
-                let config_active = self.active_tab == ActiveTab::Config;
+            // --- NAVIGATION TABS (SEGMENTED MODERN BAR) ---
+            egui::Frame::new()
+                .fill(egui::Color32::from_rgba_unmultiplied(16, 17, 24, 230))
+                .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(255, 255, 255, 22)))
+                .corner_radius(egui::CornerRadius::same(10))
+                .inner_margin(egui::Margin::same(4))
+                .show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        let game_active = self.active_tab == ActiveTab::Game;
+                        let config_active = self.active_tab == ActiveTab::Config;
 
-                let tab_btn = |text: &str, active: bool| {
-                    let text_color = if active {
-                        egui::Color32::WHITE
-                    } else {
-                        egui::Color32::from_rgb(180, 185, 200)
-                    };
-                    let bg_color = if active {
-                        egui::Color32::from_rgb(215, 45, 45)
-                    } else {
-                        egui::Color32::from_rgba_unmultiplied(35, 38, 50, 200)
-                    };
+                        let render_tab = |ui: &mut egui::Ui, text: &str, active: bool| -> bool {
+                            let (bg_color, text_color, stroke) = if active {
+                                (
+                                    egui::Color32::from_rgb(215, 45, 45),
+                                    egui::Color32::WHITE,
+                                    egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(255, 120, 120, 160)),
+                                )
+                            } else {
+                                (
+                                    egui::Color32::TRANSPARENT,
+                                    egui::Color32::from_rgb(175, 180, 195),
+                                    egui::Stroke::NONE,
+                                )
+                            };
 
-                    egui::Button::new(
-                        egui::RichText::new(text).size(14.0).strong().color(text_color),
-                    )
-                    .fill(bg_color)
-                    .corner_radius(egui::CornerRadius::same(8))
-                    .min_size(egui::vec2(210.0, 36.0))
-                };
+                            let btn = egui::Button::new(
+                                egui::RichText::new(text).size(14.0).strong().color(text_color),
+                            )
+                            .fill(bg_color)
+                            .stroke(stroke)
+                            .corner_radius(egui::CornerRadius::same(8))
+                            .min_size(egui::vec2(210.0, 36.0));
 
-                if ui.add(tab_btn(self.t("tab_game_perf"), game_active)).clicked() {
-                    self.active_tab = ActiveTab::Game;
-                }
-                ui.add_space(8.0);
-                if ui.add(tab_btn(self.t("tab_config_controls"), config_active)).clicked() {
-                    self.active_tab = ActiveTab::Config;
-                }
-            });
+                            ui.add(btn).clicked()
+                        };
+
+                        if render_tab(ui, self.t("tab_game_perf"), game_active) {
+                            self.active_tab = ActiveTab::Game;
+                        }
+                        if render_tab(ui, self.t("tab_config_controls"), config_active) {
+                            self.active_tab = ActiveTab::Config;
+                        }
+                    });
+                });
 
             let card_frame = egui::Frame::group(ui.style())
-                .fill(egui::Color32::from_rgba_unmultiplied(18, 18, 24, 215))
-                .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(220, 50, 50, 75)))
-                .inner_margin(12.0)
-                .corner_radius(egui::CornerRadius::same(10));
+                .fill(egui::Color32::from_rgba_unmultiplied(16, 17, 24, 225))
+                .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(225, 55, 50, 75)))
+                .inner_margin(14.0)
+                .corner_radius(egui::CornerRadius::same(12));
 
             // ==========================================
             // TAB 1: GAME & PERFORMANCE
@@ -852,22 +939,19 @@ impl eframe::App for LauncherApp {
 
                     ui.columns(4, |cols| {
                         cols[0].vertical(|ui| {
-                            ui.label(egui::RichText::new(self.t("gpu")).color(egui::Color32::LIGHT_GRAY).size(11.0));
-                            ui.label(egui::RichText::new(&hw.gpu_name).strong());
+                            render_stat_tile(ui, "🎮", self.t("gpu"), &hw.gpu_name, None);
                         });
                         cols[1].vertical(|ui| {
-                            ui.label(egui::RichText::new(self.t("vram")).color(egui::Color32::LIGHT_GRAY).size(11.0));
-                            ui.label(egui::RichText::new(format!("{} MB (~{} GB)", hw.vram_mb, hw.vram_mb / 1024)).color(vram_color).strong());
-                            ui.label(egui::RichText::new(vram_badge).color(vram_color).size(10.0));
+                            let vram_val = format!("{} MB (~{} GB)", hw.vram_mb, hw.vram_mb / 1024);
+                            render_stat_tile(ui, "⚡", self.t("vram"), &vram_val, Some((&vram_badge, vram_color)));
                         });
                         cols[2].vertical(|ui| {
-                            ui.label(egui::RichText::new(self.t("ram")).color(egui::Color32::LIGHT_GRAY).size(11.0));
-                            ui.label(egui::RichText::new(format!("{} MB (~{} GB)", hw.ram_mb, (hw.ram_mb as f32 / 1024.0).round())).color(ram_color).strong());
-                            ui.label(egui::RichText::new(ram_badge).color(ram_color).size(10.0));
+                            let ram_val = format!("{} MB (~{} GB)", hw.ram_mb, (hw.ram_mb as f32 / 1024.0).round());
+                            render_stat_tile(ui, "🧠", self.t("ram"), &ram_val, Some((&ram_badge, ram_color)));
                         });
                         cols[3].vertical(|ui| {
-                            ui.label(egui::RichText::new(self.t("refresh_rate")).color(egui::Color32::LIGHT_GRAY).size(11.0));
-                            ui.label(egui::RichText::new(format!("{} Hz", hw.refresh_rate_hz)).color(egui::Color32::from_rgb(130, 205, 135)).strong());
+                            let hz_val = format!("{} Hz", hw.refresh_rate_hz);
+                            render_stat_tile(ui, "🖥️", self.t("refresh_rate"), &hz_val, Some(("• Akıcı Ekran", egui::Color32::from_rgb(130, 215, 140))));
                         });
                     });
 
@@ -1137,18 +1221,26 @@ impl eframe::App for LauncherApp {
                                 ui.add_space((available_w - total_w) / 2.0);
                             }
 
-                            ui.add_enabled(
-                                false,
-                                egui::Button::new(
-                                    egui::RichText::new(self.t("play_running"))
-                                        .size(17.0)
-                                        .color(egui::Color32::from_rgb(130, 225, 140))
-                                        .strong(),
-                                )
-                                .fill(egui::Color32::from_rgb(32, 50, 38))
-                                .corner_radius(egui::CornerRadius::same(10))
-                                .min_size(egui::vec2(210.0, 56.0)),
-                            );
+                            let time = ctx.input(|i| i.time);
+                            let pulse = ((time * 3.0).sin() * 0.5 + 0.5) as f32;
+                            ctx.request_repaint();
+
+                            let emerald_r = (25.0 + 15.0 * pulse) as u8;
+                            let emerald_g = (65.0 + 30.0 * pulse) as u8;
+                            let emerald_b = (40.0 + 15.0 * pulse) as u8;
+
+                            let running_btn = egui::Button::new(
+                                egui::RichText::new(self.t("play_running"))
+                                    .size(17.0)
+                                    .color(egui::Color32::from_rgb(140, 255, 155))
+                                    .strong(),
+                            )
+                            .fill(egui::Color32::from_rgb(emerald_r, emerald_g, emerald_b))
+                            .stroke(egui::Stroke::new(1.5, egui::Color32::from_rgba_unmultiplied(100, 255, 120, (120.0 + 100.0 * pulse) as u8)))
+                            .corner_radius(egui::CornerRadius::same(10))
+                            .min_size(egui::vec2(220.0, 56.0));
+
+                            ui.add_enabled(false, running_btn);
 
                             let force_quit_btn = egui::Button::new(
                                 egui::RichText::new(self.t("force_quit_btn"))
@@ -1156,7 +1248,8 @@ impl eframe::App for LauncherApp {
                                     .color(egui::Color32::WHITE)
                                     .strong(),
                             )
-                            .fill(egui::Color32::from_rgb(215, 45, 45))
+                            .fill(egui::Color32::from_rgb(220, 42, 42))
+                            .stroke(egui::Stroke::new(1.5, egui::Color32::from_rgba_unmultiplied(255, 120, 120, 180)))
                             .corner_radius(egui::CornerRadius::same(10))
                             .min_size(egui::vec2(190.0, 56.0));
 
@@ -1165,23 +1258,41 @@ impl eframe::App for LauncherApp {
                             }
                         });
                     } else if self.is_game_valid {
+                        let time = ctx.input(|i| i.time);
+                        let pulse = ((time * 2.6).sin() * 0.5 + 0.5) as f32; // 0.0 to 1.0
+                        ctx.request_repaint();
+
+                        let r = (215.0 + 35.0 * pulse) as u8;
+                        let g = (40.0 + 30.0 * pulse) as u8;
+                        let b = 40u8;
+                        let btn_color = egui::Color32::from_rgb(r, g, b);
+                        let border_color = egui::Color32::from_rgba_unmultiplied(
+                            255,
+                            (120.0 + 80.0 * pulse) as u8,
+                            80,
+                            (140.0 + 100.0 * pulse) as u8,
+                        );
+
                         let play_btn = egui::Button::new(
                             egui::RichText::new(self.t("play_ready"))
                                 .size(22.0)
                                 .color(egui::Color32::WHITE)
                                 .strong(),
                         )
-                        .fill(egui::Color32::from_rgb(215, 45, 45))
-                        .corner_radius(egui::CornerRadius::same(10))
-                        .min_size(egui::vec2(340.0, 56.0));
+                        .fill(btn_color)
+                        .stroke(egui::Stroke::new(1.8 + pulse * 1.2, border_color))
+                        .corner_radius(egui::CornerRadius::same(12))
+                        .min_size(egui::vec2(360.0, 58.0));
 
                         if ui.add(play_btn).clicked() {
                             self.launch_game();
                         }
+                        ui.add_space(2.0);
                         ui.label(
                             egui::RichText::new(self.t("play_subtitle"))
-                                .color(egui::Color32::from_rgb(105, 225, 110))
-                                .size(12.0),
+                                .color(egui::Color32::from_rgb(115, 235, 120))
+                                .size(12.0)
+                                .strong(),
                         );
                     } else {
                         let play_btn = egui::Button::new(
@@ -1447,6 +1558,22 @@ impl eframe::App for LauncherApp {
 
             ui.add_space(10.0);
         });
+
+        // Dim background if any modal dialog is currently active
+        let modal_active = self.found_candidates_modal.is_some()
+            || self.show_game_not_found_modal
+            || self.show_first_launch_modal
+            || self.active_crash_diagnosis.is_some()
+            || self.show_log_modal
+            || self.update_modal.is_some();
+
+        if modal_active {
+            ui.painter().rect_filled(
+                ui.max_rect(),
+                0.0,
+                egui::Color32::from_rgba_unmultiplied(6, 7, 10, 195),
+            );
+        }
 
         // --- MODAL 1: CANDIDATES SELECTION (WHEN AUTO SCAN FINISHES) ---
         if let Some(ref candidates) = self.found_candidates_modal.clone() {

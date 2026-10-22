@@ -130,10 +130,10 @@ pub fn format_key_display(key_str: &str) -> String {
         "kp7" => "Numpad 7".to_string(),
         "kp8" => "Numpad 8".to_string(),
         "kp9" => "Numpad 9".to_string(),
-        "up" => "↑ (Yukarı)".to_string(),
-        "down" => "↓ (Aşağı)".to_string(),
-        "left" => "← (Sol)".to_string(),
-        "right" => "→ (Sağ)".to_string(),
+        "up" => "Yukarı (Up)".to_string(),
+        "down" => "Aşağı (Down)".to_string(),
+        "left" => "Sol (Left)".to_string(),
+        "right" => "Sağ (Right)".to_string(),
         "space" => "Space".to_string(),
         "enter" => "Enter".to_string(),
         "tab" => "Tab".to_string(),
@@ -149,7 +149,8 @@ pub fn format_key_display(key_str: &str) -> String {
 
 fn render_stat_tile(
     ui: &mut egui::Ui,
-    icon: &str,
+    tag: &str,
+    tag_color: egui::Color32,
     title: &str,
     value: &str,
     badge: Option<(&str, egui::Color32)>,
@@ -162,7 +163,14 @@ fn render_stat_tile(
         .show(ui, |ui| {
             ui.set_min_width(ui.available_width());
             ui.horizontal(|ui| {
-                ui.label(egui::RichText::new(icon).size(15.0));
+                egui::Frame::new()
+                    .fill(egui::Color32::from_rgba_unmultiplied(tag_color.r(), tag_color.g(), tag_color.b(), 35))
+                    .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(tag_color.r(), tag_color.g(), tag_color.b(), 120)))
+                    .corner_radius(egui::CornerRadius::same(4))
+                    .inner_margin(egui::Margin::symmetric(5, 2))
+                    .show(ui, |ui| {
+                        ui.label(egui::RichText::new(tag).color(tag_color).size(10.0).strong());
+                    });
                 ui.label(egui::RichText::new(title).color(egui::Color32::from_rgb(165, 170, 185)).size(11.0));
             });
             ui.add_space(2.0);
@@ -181,6 +189,109 @@ fn render_stat_tile(
         });
 }
 
+fn paint_ps_badge(ui: &mut egui::Ui, target: KeyBindingTarget) {
+    let size = egui::vec2(22.0, 20.0);
+    let (rect, _response) = ui.allocate_exact_size(size, egui::Sense::hover());
+    let painter = ui.painter();
+    let center = rect.center();
+    let stroke_width = 2.0;
+
+    match target {
+        KeyBindingTarget::Triangle => {
+            let color = egui::Color32::from_rgb(0, 230, 118); // PS Green
+            let r = 7.0;
+            let p1 = egui::pos2(center.x, center.y - r);
+            let p2 = egui::pos2(center.x + r * 0.866, center.y + r * 0.5);
+            let p3 = egui::pos2(center.x - r * 0.866, center.y + r * 0.5);
+            painter.line_segment([p1, p2], egui::Stroke::new(stroke_width, color));
+            painter.line_segment([p2, p3], egui::Stroke::new(stroke_width, color));
+            painter.line_segment([p3, p1], egui::Stroke::new(stroke_width, color));
+        }
+        KeyBindingTarget::Circle => {
+            let color = egui::Color32::from_rgb(255, 61, 0); // PS Red
+            painter.circle_stroke(center, 6.0, egui::Stroke::new(stroke_width, color));
+        }
+        KeyBindingTarget::Cross => {
+            let color = egui::Color32::from_rgb(41, 121, 255); // PS Blue
+            let r = 5.0;
+            painter.line_segment([center + egui::vec2(-r, -r), center + egui::vec2(r, r)], egui::Stroke::new(stroke_width, color));
+            painter.line_segment([center + egui::vec2(-r, r), center + egui::vec2(r, -r)], egui::Stroke::new(stroke_width, color));
+        }
+        KeyBindingTarget::Square => {
+            let color = egui::Color32::from_rgb(255, 64, 129); // PS Pink
+            let r = 5.5;
+            let sq_rect = egui::Rect::from_center_size(center, egui::vec2(r * 2.0, r * 2.0));
+            painter.rect_stroke(sq_rect, 1.0, egui::Stroke::new(stroke_width, color), egui::StrokeKind::Inside);
+        }
+        KeyBindingTarget::L1 | KeyBindingTarget::L2 | KeyBindingTarget::L3 => {
+            let badge_rect = egui::Rect::from_center_size(center, egui::vec2(20.0, 15.0));
+            painter.rect_filled(badge_rect, 3.0, egui::Color32::from_rgb(55, 45, 20));
+            painter.rect_stroke(badge_rect, 3.0, egui::Stroke::new(1.0, egui::Color32::from_rgb(255, 215, 0)), egui::StrokeKind::Inside);
+            let text = match target {
+                KeyBindingTarget::L1 => "L1",
+                KeyBindingTarget::L2 => "L2",
+                _ => "L3",
+            };
+            painter.text(center, egui::Align2::CENTER_CENTER, text, egui::FontId::proportional(9.0), egui::Color32::from_rgb(255, 220, 80));
+        }
+        KeyBindingTarget::R1 | KeyBindingTarget::R2 | KeyBindingTarget::R3 => {
+            let badge_rect = egui::Rect::from_center_size(center, egui::vec2(20.0, 15.0));
+            painter.rect_filled(badge_rect, 3.0, egui::Color32::from_rgb(55, 30, 20));
+            painter.rect_stroke(badge_rect, 3.0, egui::Stroke::new(1.0, egui::Color32::from_rgb(255, 140, 0)), egui::StrokeKind::Inside);
+            let text = match target {
+                KeyBindingTarget::R1 => "R1",
+                KeyBindingTarget::R2 => "R2",
+                _ => "R3",
+            };
+            painter.text(center, egui::Align2::CENTER_CENTER, text, egui::FontId::proportional(9.0), egui::Color32::from_rgb(255, 180, 80));
+        }
+        KeyBindingTarget::PadUp | KeyBindingTarget::PadDown | KeyBindingTarget::PadLeft | KeyBindingTarget::PadRight => {
+            let color = egui::Color32::from_rgb(180, 210, 255);
+            let badge_rect = egui::Rect::from_center_size(center, egui::vec2(20.0, 15.0));
+            painter.rect_filled(badge_rect, 3.0, egui::Color32::from_rgb(25, 35, 55));
+            painter.rect_stroke(badge_rect, 3.0, egui::Stroke::new(1.0, color), egui::StrokeKind::Inside);
+            let label = match target {
+                KeyBindingTarget::PadUp => "D-U",
+                KeyBindingTarget::PadDown => "D-D",
+                KeyBindingTarget::PadLeft => "D-L",
+                _ => "D-R",
+            };
+            painter.text(center, egui::Align2::CENTER_CENTER, label, egui::FontId::proportional(8.0), color);
+        }
+        KeyBindingTarget::Options | KeyBindingTarget::TouchpadCenter => {
+            let badge_rect = egui::Rect::from_center_size(center, egui::vec2(20.0, 14.0));
+            painter.rect_filled(badge_rect, 2.0, egui::Color32::from_rgb(35, 38, 48));
+            painter.rect_stroke(badge_rect, 2.0, egui::Stroke::new(1.0, egui::Color32::from_rgb(160, 170, 190)), egui::StrokeKind::Inside);
+            let label = if target == KeyBindingTarget::Options { "OPT" } else { "PAD" };
+            painter.text(center, egui::Align2::CENTER_CENTER, label, egui::FontId::proportional(8.0), egui::Color32::WHITE);
+        }
+        KeyBindingTarget::AxisLeftYMinus | KeyBindingTarget::AxisLeftYPlus | KeyBindingTarget::AxisLeftXMinus | KeyBindingTarget::AxisLeftXPlus => {
+            let badge_rect = egui::Rect::from_center_size(center, egui::vec2(20.0, 14.0));
+            painter.rect_filled(badge_rect, 3.0, egui::Color32::from_rgb(20, 40, 55));
+            painter.rect_stroke(badge_rect, 3.0, egui::Stroke::new(1.0, egui::Color32::from_rgb(80, 180, 240)), egui::StrokeKind::Inside);
+            let dir = match target {
+                KeyBindingTarget::AxisLeftYMinus => "L-U",
+                KeyBindingTarget::AxisLeftYPlus => "L-D",
+                KeyBindingTarget::AxisLeftXMinus => "L-L",
+                _ => "L-R",
+            };
+            painter.text(center, egui::Align2::CENTER_CENTER, dir, egui::FontId::proportional(8.0), egui::Color32::from_rgb(140, 220, 255));
+        }
+        KeyBindingTarget::AxisRightYMinus | KeyBindingTarget::AxisRightYPlus | KeyBindingTarget::AxisRightXMinus | KeyBindingTarget::AxisRightXPlus => {
+            let badge_rect = egui::Rect::from_center_size(center, egui::vec2(20.0, 14.0));
+            painter.rect_filled(badge_rect, 3.0, egui::Color32::from_rgb(45, 25, 60));
+            painter.rect_stroke(badge_rect, 3.0, egui::Stroke::new(1.0, egui::Color32::from_rgb(200, 100, 255)), egui::StrokeKind::Inside);
+            let dir = match target {
+                KeyBindingTarget::AxisRightYMinus => "R-U",
+                KeyBindingTarget::AxisRightYPlus => "R-D",
+                KeyBindingTarget::AxisRightXMinus => "R-L",
+                _ => "R-R",
+            };
+            painter.text(center, egui::Align2::CENTER_CENTER, dir, egui::FontId::proportional(8.0), egui::Color32::from_rgb(230, 160, 255));
+        }
+    }
+}
+
 fn render_binding_row(
     ui: &mut egui::Ui,
     label: &str,
@@ -190,27 +301,14 @@ fn render_binding_row(
     next_listening: &mut Option<KeyBindingTarget>,
 ) {
     ui.horizontal(|ui| {
-        let ps_icon = match target {
-            KeyBindingTarget::Triangle => Some(("▲", egui::Color32::from_rgb(0, 230, 118))),
-            KeyBindingTarget::Circle => Some(("●", egui::Color32::from_rgb(255, 61, 0))),
-            KeyBindingTarget::Cross => Some(("✖", egui::Color32::from_rgb(41, 121, 255))),
-            KeyBindingTarget::Square => Some(("■", egui::Color32::from_rgb(255, 64, 129))),
-            KeyBindingTarget::L1 | KeyBindingTarget::L2 | KeyBindingTarget::L3 => Some(("L", egui::Color32::from_rgb(255, 215, 0))),
-            KeyBindingTarget::R1 | KeyBindingTarget::R2 | KeyBindingTarget::R3 => Some(("R", egui::Color32::from_rgb(255, 140, 0))),
-            KeyBindingTarget::PadUp | KeyBindingTarget::PadDown | KeyBindingTarget::PadLeft | KeyBindingTarget::PadRight => Some(("✦", egui::Color32::from_rgb(180, 205, 255))),
-            _ => None,
-        };
-
-        if let Some((sym, col)) = ps_icon {
-            ui.label(egui::RichText::new(sym).color(col).strong().size(13.0));
-        }
-
+        paint_ps_badge(ui, target);
+        ui.add_space(2.0);
         ui.label(egui::RichText::new(label).size(12.5).color(egui::Color32::from_rgb(230, 230, 235)));
 
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             let is_listening = listening_for == Some(target);
             let btn_text = if is_listening {
-                "▶ Tuşa basınız... (Esc)".to_string()
+                "[ Tuşa basın... / ESC ]".to_string()
             } else {
                 format_key_display(current_key)
             };
@@ -504,15 +602,15 @@ impl LauncherApp {
             Ok(_) => {
                 let _ = self.config.save(&self.base_dir);
                 let msg = match self.current_lang {
-                    Language::Turkish => "✅ Tüm ayarlar ve yapılandırma başarıyla kaydedildi & uygulandı!",
-                    Language::English => "✅ All settings and configuration saved & applied successfully!",
-                    Language::German => "✅ Alle Einstellungen und Konfigurationen erfolgreich gespeichert & angewendet!",
-                    Language::Spanish => "✅ ¡Todos los ajustes y configuración guardados y aplicados con éxito!",
+                    Language::Turkish => "Tüm ayarlar ve yapılandırma başarıyla kaydedildi & uygulandı!",
+                    Language::English => "All settings and configuration saved & applied successfully!",
+                    Language::German => "Alle Einstellungen und Konfigurationen erfolgreich gespeichert & angewendet!",
+                    Language::Spanish => "¡Todos los ajustes y configuración guardados y aplicados con éxito!",
                 };
                 self.status_message = Some((msg.to_string(), false));
             }
             Err(e) => {
-                self.status_message = Some((format!("❌ Error: {}", e), true));
+                self.status_message = Some((format!("Error: {}", e), true));
             }
         }
     }
@@ -712,7 +810,7 @@ impl eframe::App for LauncherApp {
                         self.update_modal = Some(info);
                     }
                     Err(e) => {
-                        self.status_message = Some((format!("❌ Güncelleme hatası: {}", e), true));
+                        self.status_message = Some((format!("Güncelleme hatası: {}", e), true));
                     }
                 }
             }
@@ -747,7 +845,7 @@ impl eframe::App for LauncherApp {
                         self.status_message = Some((self.t("engine_download_success").to_string(), false));
                     }
                     Err(e) => {
-                        self.status_message = Some((format!("❌ {}", e), true));
+                        self.status_message = Some((format!("Hata: {}", e), true));
                     }
                 }
             }
@@ -939,19 +1037,19 @@ impl eframe::App for LauncherApp {
 
                     ui.columns(4, |cols| {
                         cols[0].vertical(|ui| {
-                            render_stat_tile(ui, "🎮", self.t("gpu"), &hw.gpu_name, None);
+                            render_stat_tile(ui, "GPU", egui::Color32::from_rgb(0, 230, 118), self.t("gpu"), &hw.gpu_name, None);
                         });
                         cols[1].vertical(|ui| {
                             let vram_val = format!("{} MB (~{} GB)", hw.vram_mb, hw.vram_mb / 1024);
-                            render_stat_tile(ui, "⚡", self.t("vram"), &vram_val, Some((&vram_badge, vram_color)));
+                            render_stat_tile(ui, "VRAM", egui::Color32::from_rgb(255, 215, 0), self.t("vram"), &vram_val, Some((&vram_badge, vram_color)));
                         });
                         cols[2].vertical(|ui| {
                             let ram_val = format!("{} MB (~{} GB)", hw.ram_mb, (hw.ram_mb as f32 / 1024.0).round());
-                            render_stat_tile(ui, "🧠", self.t("ram"), &ram_val, Some((&ram_badge, ram_color)));
+                            render_stat_tile(ui, "RAM", egui::Color32::from_rgb(100, 200, 255), self.t("ram"), &ram_val, Some((&ram_badge, ram_color)));
                         });
                         cols[3].vertical(|ui| {
                             let hz_val = format!("{} Hz", hw.refresh_rate_hz);
-                            render_stat_tile(ui, "🖥️", self.t("refresh_rate"), &hz_val, Some(("• Akıcı Ekran", egui::Color32::from_rgb(130, 215, 140))));
+                            render_stat_tile(ui, "HZ", egui::Color32::from_rgb(200, 140, 255), self.t("refresh_rate"), &hz_val, Some(("• Akıcı Ekran", egui::Color32::from_rgb(130, 215, 140))));
                         });
                     });
 
@@ -1101,7 +1199,7 @@ impl eframe::App for LauncherApp {
                             .corner_radius(egui::CornerRadius::same(6))
                             .show(ui, |ui| {
                                 ui.horizontal(|ui| {
-                                    ui.label(egui::RichText::new("⚠️").size(18.0));
+                                    ui.label(egui::RichText::new("[ ! ]").size(18.0));
                                     ui.label(
                                         egui::RichText::new(self.t("scan_not_found_inline"))
                                             .color(egui::Color32::from_rgb(255, 140, 140))
@@ -1611,7 +1709,7 @@ impl eframe::App for LauncherApp {
                                                 self.set_game_directory(&c.path, &ctx);
                                                 self.found_candidates_modal = None;
                                                 let selected_name = c.title.clone();
-                                                self.status_message = Some((format!("✅ {} seçildi ve kaydedildi!", selected_name), false));
+                                                self.status_message = Some((format!("{} seçildi ve kaydedildi!", selected_name), false));
                                             }
                                         });
                                     });
@@ -1640,7 +1738,7 @@ impl eframe::App for LauncherApp {
                     ui.vertical_centered(|ui| {
                         ui.add_space(6.0);
                         ui.label(
-                            egui::RichText::new("⚠️")
+                            egui::RichText::new("[ ! ]")
                                 .size(36.0)
                                 .color(egui::Color32::from_rgb(255, 175, 50)),
                         );
@@ -1764,7 +1862,7 @@ impl eframe::App for LauncherApp {
 
         // --- MODAL 4: LOG MODAL ---
         if self.show_log_modal {
-            egui::Window::new("📜 gow3_log.txt")
+            egui::Window::new("gow3_log.txt")
                 .collapsible(false)
                 .resizable(true)
                 .default_size(egui::vec2(600.0, 400.0))
@@ -1863,7 +1961,7 @@ impl eframe::App for LauncherApp {
                                     self.update_modal = None;
                                 }
                                 Err(e) => {
-                                    self.status_message = Some((format!("❌ Güncelleme hatası: {}", e), true));
+                                    self.status_message = Some((format!("Güncelleme hatası: {}", e), true));
                                 }
                             }
                         }

@@ -55,8 +55,8 @@ Launcher for God Of War 3 PC on Linux and Windows
    
    **Option A: Clone with Git**
    ```bash
-   git clone https://github.com/ScreamAngel/gow3_pclauncher.git
-   cd gow3_pclauncher
+   git clone https://github.com/ScreamAngel/gow3_launcher.git
+   cd gow3_launcher
    ```
    - 🐧 **On Linux**: `./gow3-launcher`
    - 🪟 **On Windows**: `gow3-launcher-win.exe`

@@ -5,8 +5,8 @@ use std::process::Command;
 use crate::config::LauncherConfig;
 use crate::tuner::apply_settings;
 
-pub const GITHUB_REPO: &str = "ScreamAngel/gow3_pclauncher";
-pub const GITHUB_REPO_URL: &str = "https://github.com/ScreamAngel/gow3_pclauncher.git";
+pub const GITHUB_REPO: &str = "ScreamAngel/gow3_launcher";
+pub const GITHUB_REPO_URL: &str = "https://github.com/ScreamAngel/gow3_launcher.git";
 
 #[derive(Debug, Clone)]
 pub struct UpdateInfo {
@@ -16,50 +16,124 @@ pub struct UpdateInfo {
     pub is_new: bool,
 }
 
-pub fn check_github_update(current_commit: &str) -> Result<UpdateInfo, String> {
-    // 1. Fetch remote commit SHA using git ls-remote (fast, no GitHub API rate limit)
-    let output = Command::new("git")
-        .args(["ls-remote", GITHUB_REPO_URL, "HEAD"])
-        .output()
-        .map_err(|e| format!("git ls-remote failed: {}", e))?;
+fn is_git_available() -> bool {
+    Command::new("git").arg("--version").output().map(|o| o.status.success()).unwrap_or(false)
+}
 
-    if !output.status.success() {
-        return Err("GitHub deposuna ulaşılamadı veya internet bağlantısı yok.".to_string());
-    }
-
-    let text = String::from_utf8_lossy(&output.stdout);
-    let remote_sha = text
-        .lines()
-        .next()
-        .and_then(|ln| ln.split_whitespace().next())
-        .ok_or_else(|| "Uzak commit SHA değeri okunamadı.".to_string())?
-        .to_string();
-
-    // 2. Fetch commit details (message and date) via curl from GitHub API if available
-    let mut commit_message = "En son optimizasyonlar ve güncellemeler".to_string();
-    let mut commit_date = String::new();
-
-    let api_url = format!("https://api.github.com/repos/{}/commits/HEAD", GITHUB_REPO);
-    if let Ok(api_out) = Command::new("curl")
-        .args([
-            "-s",
-            "-H",
-            "User-Agent: gow3-launcher",
-            &api_url,
-        ])
+fn http_get_string(url: &str) -> Option<String> {
+    // 1. Try curl (installed on Linux, macOS, and modern Windows 10+)
+    if let Ok(out) = Command::new("curl")
+        .args(["-fsSL", "-H", "User-Agent: gow3-launcher", url])
         .output()
     {
-        if api_out.status.success() {
-            let json_str = String::from_utf8_lossy(&api_out.stdout);
-            if let Ok(val) = serde_json::from_str::<serde_json::Value>(&json_str) {
-                if let Some(msg) = val["commit"]["message"].as_str() {
-                    commit_message = msg.lines().next().unwrap_or(msg).to_string();
-                }
-                if let Some(d) = val["commit"]["committer"]["date"].as_str() {
-                    commit_date = d.split('T').next().unwrap_or(d).to_string();
+        if out.status.success() {
+            let body = String::from_utf8_lossy(&out.stdout).to_string();
+            if !body.trim().is_empty() {
+                return Some(body);
+            }
+        }
+    }
+
+    // 2. Fallback to PowerShell (native on all Windows installations)
+    #[cfg(target_os = "windows")]
+    {
+        let ps_code = format!(
+            "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; \
+             $wc = New-Object System.Net.WebClient; \
+             $wc.Headers.Add('User-Agent', 'gow3-launcher'); \
+             $wc.DownloadString('{}')",
+            url.replace('\'', "''")
+        );
+        if let Ok(out) = Command::new("powershell")
+            .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", &ps_code])
+            .output()
+        {
+            if out.status.success() {
+                let body = String::from_utf8_lossy(&out.stdout).to_string();
+                if !body.trim().is_empty() {
+                    return Some(body);
                 }
             }
         }
+    }
+
+    None
+}
+
+fn http_download_file(url: &str, dest: &Path) -> Result<(), String> {
+    // 1. Try curl
+    if let Ok(out) = Command::new("curl")
+        .args(["-fsSL", "-H", "User-Agent: gow3-launcher", url, "-o", dest.to_str().unwrap_or("")])
+        .output()
+    {
+        if out.status.success() && dest.is_file() {
+            return Ok(());
+        }
+    }
+
+    // 2. Fallback to PowerShell on Windows
+    #[cfg(target_os = "windows")]
+    {
+        let ps_code = format!(
+            "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; \
+             $wc = New-Object System.Net.WebClient; \
+             $wc.Headers.Add('User-Agent', 'gow3-launcher'); \
+             $wc.DownloadFile('{}', '{}')",
+            url.replace('\'', "''"),
+            dest.to_string_lossy().replace('\'', "''")
+        );
+        if let Ok(out) = Command::new("powershell")
+            .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", &ps_code])
+            .output()
+        {
+            if out.status.success() && dest.is_file() {
+                return Ok(());
+            }
+        }
+    }
+
+    Err("Dosya indirilemedi.".to_string())
+}
+
+pub fn check_github_update(current_commit: &str) -> Result<UpdateInfo, String> {
+    let api_url = format!("https://api.github.com/repos/{}/commits/HEAD", GITHUB_REPO);
+
+    let mut remote_sha = String::new();
+    let mut commit_message = "En son optimizasyonlar ve güncellemeler".to_string();
+    let mut commit_date = String::new();
+
+    // Fetch commit info via GitHub API
+    if let Some(json_str) = http_get_string(&api_url) {
+        if let Ok(val) = serde_json::from_str::<serde_json::Value>(&json_str) {
+            if let Some(sha) = val["sha"].as_str() {
+                remote_sha = sha.to_string();
+            }
+            if let Some(msg) = val["commit"]["message"].as_str() {
+                commit_message = msg.lines().next().unwrap_or(msg).to_string();
+            }
+            if let Some(d) = val["commit"]["committer"]["date"].as_str() {
+                commit_date = d.split('T').next().unwrap_or(d).to_string();
+            }
+        }
+    }
+
+    // Fallback: only if GitHub API failed AND git is installed on system
+    if remote_sha.is_empty() && is_git_available() {
+        if let Ok(output) = Command::new("git")
+            .args(["ls-remote", GITHUB_REPO_URL, "HEAD"])
+            .output()
+        {
+            if output.status.success() {
+                let text = String::from_utf8_lossy(&output.stdout);
+                if let Some(sha) = text.lines().next().and_then(|ln| ln.split_whitespace().next()) {
+                    remote_sha = sha.to_string();
+                }
+            }
+        }
+    }
+
+    if remote_sha.is_empty() {
+        return Err("GitHub deposuna ulaşılamadı. İnternet bağlantınızı kontrol edin veya daha sonra tekrar deneyin.".to_string());
     }
 
     let is_new = current_commit.trim().is_empty() || current_commit.trim() != remote_sha.trim();
@@ -83,10 +157,10 @@ pub fn apply_github_update(
         "gow3-launcher"
     };
 
-    let is_git_repo = base_dir.join(".git").is_dir();
+    let is_git_repo = base_dir.join(".git").is_dir() && is_git_available();
 
     if is_git_repo {
-        // Path A: User cloned via git, perform git pull
+        // Path A: User cloned via git and git is available on system
         let pull_output = Command::new("git")
             .args(["pull", "origin", "main"])
             .current_dir(base_dir)
@@ -98,7 +172,6 @@ pub fn apply_github_update(
             return Err(format!("Git güncellemesi başarısız oldu: {}", err));
         }
 
-        // Ensure launcher binary is executable
         let launcher_bin = base_dir.join(binary_name);
         if launcher_bin.is_file() {
             #[cfg(unix)]
@@ -108,7 +181,7 @@ pub fn apply_github_update(
             }
         }
     } else {
-        // Path B: Standalone folder without .git; download latest launcher binary and patch files
+        // Path B: Standalone folder or git not installed; download latest launcher binary and patch files
         let raw_launcher_url = format!(
             "https://raw.githubusercontent.com/{}/main/{}",
             GITHUB_REPO, binary_name
@@ -116,15 +189,8 @@ pub fn apply_github_update(
         let launcher_bin = base_dir.join(binary_name);
         let launcher_tmp = base_dir.join(format!("{}.new", binary_name));
 
-        let download = Command::new("curl")
-            .args(["-fsSL", &raw_launcher_url, "-o", launcher_tmp.to_str().unwrap()])
-            .output()
-            .map_err(|e| format!("Yeni launcher indirilemedi: {}", e))?;
-
-        if !download.status.success() {
-            let _ = fs::remove_file(&launcher_tmp);
-            return Err("GitHub üzerinden yeni launcher ikili dosyası indirilemedi.".to_string());
-        }
+        http_download_file(&raw_launcher_url, &launcher_tmp)
+            .map_err(|e| format!("Yeni launcher indirilemedi ({}): {}", raw_launcher_url, e))?;
 
         #[cfg(unix)]
         {
@@ -139,7 +205,6 @@ pub fn apply_github_update(
             let _ = fs::rename(&launcher_bin, &launcher_old);
         }
 
-        // Atomically replace running binary
         fs::rename(&launcher_tmp, &launcher_bin)
             .map_err(|e| format!("Launcher güncellenemedi: {}", e))?;
 
@@ -151,15 +216,11 @@ pub fn apply_github_update(
             GITHUB_REPO
         );
         let patch_dest = patches_dir.join("God_of_War_III_Remastered.xml");
-        let _ = Command::new("curl")
-            .args(["-fsSL", &raw_patch_url, "-o", patch_dest.to_str().unwrap()])
-            .output();
+        let _ = http_download_file(&raw_patch_url, &patch_dest);
     }
 
-    // Re-apply optimizations and settings
     let _ = apply_settings(base_dir, config);
 
-    // Update last_git_commit in config
     config.last_git_commit = update.commit_sha.clone();
     let _ = config.save(base_dir);
 

@@ -10,10 +10,10 @@
   "vram_gc_budget_mb": 6144,
   "dmem_mb": 9216,
   "cached_hardware": {
-    "gpu_name": "Windows DirectX/Vulkan GPU",
-    "vram_mb": 4096,
-    "ram_mb": 16384,
-    "refresh_rate_hz": 60
+    "gpu_name": "NVIDIA GeForce RTX 4070 Laptop GPU",
+    "vram_mb": 8188,
+    "ram_mb": 15603,
+    "refresh_rate_hz": 144
   },
   "last_git_commit": "0b4abe07acb711848d1b5d72402a9de8c0ad9844",
   "display_mode": "Borderless",

@@ -326,3 +326,111 @@ impl LauncherConfig {
         "cross=a,circle=b,square=x,triangle=y,l1=leftshoulder,r1=rightshoulder,l3=leftstick,r3=rightstick,options=start,touchpad=back,up=dpup,down=dpdown,left=dpleft,right=dpright"
     }
 }
+
+pub fn key_to_sdl_scancode(key: &str) -> Option<u8> {
+    let lower = key.trim().to_lowercase();
+    match lower.as_str() {
+        // Letters (SDL_SCANCODE_A = 4 .. SDL_SCANCODE_Z = 29)
+        "a" => Some(4),
+        "b" => Some(5),
+        "c" => Some(6),
+        "d" => Some(7),
+        "e" => Some(8),
+        "f" => Some(9),
+        "g" => Some(10),
+        "h" => Some(11),
+        "i" => Some(12),
+        "j" => Some(13),
+        "k" => Some(14),
+        "l" => Some(15),
+        "m" => Some(16),
+        "n" => Some(17),
+        "o" => Some(18),
+        "p" => Some(19),
+        "q" => Some(20),
+        "r" => Some(21),
+        "s" => Some(22),
+        "t" => Some(23),
+        "u" => Some(24),
+        "v" => Some(25),
+        "w" => Some(26),
+        "x" => Some(27),
+        "y" => Some(28),
+        "z" => Some(29),
+
+        // Number row (SDL_SCANCODE_1 = 30 .. SDL_SCANCODE_0 = 39)
+        "1" => Some(30),
+        "2" => Some(31),
+        "3" => Some(32),
+        "4" => Some(33),
+        "5" => Some(34),
+        "6" => Some(35),
+        "7" => Some(36),
+        "8" => Some(37),
+        "9" => Some(38),
+        "0" => Some(39),
+
+        // Controls
+        "enter" | "return" => Some(40),
+        "escape" | "esc" => Some(41),
+        "backspace" => Some(42),
+        "tab" => Some(43),
+        "space" => Some(44),
+
+        // Function keys (SDL_SCANCODE_F1 = 58 ... F12 = 69)
+        "f1" => Some(58),
+        "f2" => Some(59),
+        "f3" => Some(60),
+        "f4" => Some(61),
+        "f5" => Some(62),
+        "f6" => Some(63),
+        "f7" => Some(64),
+        "f8" => Some(65),
+        "f9" => Some(66),
+        "f10" => Some(67),
+        "f11" => Some(68),
+        "f12" => Some(69),
+
+        // Navigation
+        "insert" => Some(73),
+        "home" => Some(74),
+        "pageup" | "prior" => Some(75),
+        "delete" => Some(76),
+        "end" => Some(77),
+        "pagedown" | "next" => Some(78),
+
+        // Arrow keys
+        "right" => Some(79),
+        "left" => Some(80),
+        "down" => Some(81),
+        "up" => Some(82),
+
+        // Numpad (SDL_SCANCODE_KP_1 = 89 .. SDL_SCANCODE_KP_0 = 98)
+        "kp_divide" | "kpdivide" | "numdivide" => Some(84),
+        "kp_multiply" | "kpmultiply" | "nummultiply" => Some(85),
+        "kp_minus" | "kpminus" | "numminus" => Some(86),
+        "kp_plus" | "kpplus" | "numplus" => Some(87),
+        "kp_enter" | "kpenter" | "numenter" => Some(88),
+        "kp1" | "num1" | "numpad1" | "numpad 1" => Some(89),
+        "kp2" | "num2" | "numpad2" | "numpad 2" => Some(90),
+        "kp3" | "num3" | "numpad3" | "numpad 3" => Some(91),
+        "kp4" | "num4" | "numpad4" | "numpad 4" => Some(92),
+        "kp5" | "num5" | "numpad5" | "numpad 5" => Some(93),
+        "kp6" | "num6" | "numpad6" | "numpad 6" => Some(94),
+        "kp7" | "num7" | "numpad7" | "numpad 7" => Some(95),
+        "kp8" | "num8" | "numpad8" | "numpad 8" => Some(96),
+        "kp9" | "num9" | "numpad9" | "numpad 9" => Some(97),
+        "kp0" | "num0" | "numpad0" | "numpad 0" => Some(98),
+        "kp_period" | "kpperiod" | "kp_decimal" | "kpdecimal" => Some(99),
+
+        // Modifiers
+        "ctrl" | "lctrl" => Some(224),
+        "shift" | "lshift" => Some(225),
+        "alt" | "lalt" => Some(226),
+        "rctrl" => Some(228),
+        "rshift" => Some(229),
+        "ralt" => Some(230),
+
+        _ => None,
+    }
+}

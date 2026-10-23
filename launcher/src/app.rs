@@ -1967,7 +1967,7 @@ impl eframe::App for LauncherApp {
                         }
 
                         if ui.button(self.t("view_on_github")).clicked() {
-                            ui.ctx().open_url(egui::OpenUrl::new_tab("https://github.com/ScreamAngel/gow3_pclauncher"));
+                            ui.ctx().open_url(egui::OpenUrl::new_tab("https://github.com/ScreamAngel/gow3_launcher"));
                         }
 
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {

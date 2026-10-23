@@ -1,7 +1,7 @@
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
-use crate::config::{DisplayMode, LauncherConfig};
+use crate::config::{key_to_sdl_scancode, DisplayMode, LauncherConfig};
 
 pub fn apply_settings(base_dir: &Path, config: &LauncherConfig) -> Result<(), String> {
     if config.patch_delta_time {
@@ -11,6 +11,7 @@ pub fn apply_settings(base_dir: &Path, config: &LauncherConfig) -> Result<(), St
     update_gow3_ini(base_dir, config)?;
     update_user_config_toml(base_dir, config)?;
     update_user_input_config(base_dir, config)?;
+    let _ = patch_engine_analog_scancodes(base_dir, config);
 
     Ok(())
 }
@@ -379,4 +380,266 @@ fn update_user_input_config(base_dir: &Path, config: &LauncherConfig) -> Result<
 
     fs::write(&ini_path, content).map_err(|e| e.to_string())?;
     Ok(())
+}
+
+/// Patches the 8 hardcoded analog-stick scancodes in gow3-probe (Linux) and gow3-probe.exe (Windows).
+///
+/// The engine binary uses SDL_GetKeyboardState and checks 8 hardcoded 1-byte scancodes:
+///   Left Stick:  +X (right), -X (left), +Y (down), -Y (up)
+///   Right Stick: +X (right), -X (left), +Y (down), -Y (up)
+///
+/// These scancodes are found immediately after a known unique anchor byte sequence
+/// that appears exactly once in each binary.
+fn patch_engine_analog_scancodes(base_dir: &Path, config: &LauncherConfig) -> Result<(), String> {
+    let b = &config.keyboard_bindings;
+
+    // Convert user key strings to SDL scancodes
+    let sc_lx_plus  = key_to_sdl_scancode(&b.axis_left_x_plus);   // Left  +X (move right → D default)
+    let sc_lx_minus = key_to_sdl_scancode(&b.axis_left_x_minus);  // Left  -X (move left  → A default)
+    let sc_ly_plus  = key_to_sdl_scancode(&b.axis_left_y_plus);   // Left  +Y (move down  → S default)
+    let sc_ly_minus = key_to_sdl_scancode(&b.axis_left_y_minus);  // Left  -Y (move up    → W default)
+    let sc_rx_plus  = key_to_sdl_scancode(&b.axis_right_x_plus);  // Right +X (cam right  → Right Arrow default)
+    let sc_rx_minus = key_to_sdl_scancode(&b.axis_right_x_minus); // Right -X (cam left   → Left Arrow default)
+    let sc_ry_plus  = key_to_sdl_scancode(&b.axis_right_y_plus);  // Right +Y (cam down   → Down Arrow default)
+    let sc_ry_minus = key_to_sdl_scancode(&b.axis_right_y_minus); // Right -Y (cam up     → Up Arrow default)
+
+    // ─── Linux binary ──────────────────────────────────────────────────────────
+    // Anchor (unique prefix just before the stick scancode block):
+    //   f6 c4 01 74 06 41 c6 44 24 08 ff  f6 c4 02 74 06 41 c6 44 24 09 ff
+    // Layout after anchor (offsets relative to first byte after anchor):
+    //   +0 : 0f b6 55 [LX+]   +4 : 0f b6 45 [LX-]
+    //   +24: 0f b6 55 [LY+]   +28: 0f b6 45 [LY-]
+    //   +48: 0f b6 55 [RX+]   +52: 0f b6 45 [RX-]
+    //   +72: 0f b6 55 [RY+]   +76: 0f b6 45 [RY-]
+    let mut probe_candidates: Vec<PathBuf> = vec![
+        base_dir.join("bin/gow3-probe"),
+        base_dir.join("out/gow3-probe"),
+        base_dir.join("gow3-probe"),
+    ];
+    if !config.game_dir.is_empty() {
+        let gd = Path::new(&config.game_dir);
+        probe_candidates.push(gd.join("bin/gow3-probe"));
+        probe_candidates.push(gd.join("out/gow3-probe"));
+        probe_candidates.push(gd.join("gow3-probe"));
+    }
+    for probe_path in &probe_candidates {
+        if probe_path.is_file() {
+            patch_binary_linux(
+                probe_path,
+                sc_lx_plus, sc_lx_minus, sc_ly_plus, sc_ly_minus,
+                sc_rx_plus, sc_rx_minus, sc_ry_plus, sc_ry_minus,
+            );
+            break;
+        }
+    }
+
+    // ─── Windows binary ────────────────────────────────────────────────────────
+    // Anchor:
+    //   a9 00 01 00 00 74 04 c6 46 08 ff  a9 00 02 00 00 74 04 c6 46 09 ff
+    // Layout after anchor:
+    //   +0 : 0f b6 47 [LX-]   +4 : 0f b6 4f [LX+]
+    //   +36: 0f b6 4f [LY+]   +40: 0f b6 47 [LY-]
+    //   +72: 0f b6 4f [RX+]   +76: 0f b6 47 [RX-]
+    //   +108:0f b6 4f [RY+]  +112: 0f b6 47 [RY-]
+    let mut probe_exe_candidates: Vec<PathBuf> = vec![
+        base_dir.join("bin/gow3-probe.exe"),
+        base_dir.join("out/gow3-probe.exe"),
+        base_dir.join("gow3-probe.exe"),
+        base_dir.join("bin/gow3.exe"),
+        base_dir.join("gow3.exe"),
+        base_dir.join("God of War III.exe"),
+    ];
+    if !config.game_dir.is_empty() {
+        let gd = Path::new(&config.game_dir);
+        probe_exe_candidates.push(gd.join("bin/gow3-probe.exe"));
+        probe_exe_candidates.push(gd.join("out/gow3-probe.exe"));
+        probe_exe_candidates.push(gd.join("gow3-probe.exe"));
+        probe_exe_candidates.push(gd.join("bin/gow3.exe"));
+        probe_exe_candidates.push(gd.join("gow3.exe"));
+        probe_exe_candidates.push(gd.join("God of War III.exe"));
+    }
+    for probe_path in &probe_exe_candidates {
+        if probe_path.is_file() {
+            patch_binary_windows(
+                probe_path,
+                sc_lx_plus, sc_lx_minus, sc_ly_plus, sc_ly_minus,
+                sc_rx_plus, sc_rx_minus, sc_ry_plus, sc_ry_minus,
+            );
+            break;
+        }
+    }
+
+    Ok(())
+}
+
+fn patch_binary_linux(
+    path: &Path,
+    sc_lx_plus: Option<u8>, sc_lx_minus: Option<u8>,
+    sc_ly_plus: Option<u8>, sc_ly_minus: Option<u8>,
+    sc_rx_plus: Option<u8>, sc_rx_minus: Option<u8>,
+    sc_ry_plus: Option<u8>, sc_ry_minus: Option<u8>,
+) {
+    let anchor: &[u8] = &[
+        0xf6, 0xc4, 0x01, 0x74, 0x06, 0x41, 0xc6, 0x44, 0x24, 0x08, 0xff,
+        0xf6, 0xc4, 0x02, 0x74, 0x06, 0x41, 0xc6, 0x44, 0x24, 0x09, 0xff,
+    ];
+    let Ok(mut data) = fs::read(path) else { return };
+    let Some(pos) = find_bytes(&data, anchor) else { return };
+    let base = pos + anchor.len();
+
+    // Verify expected opcodes at each offset before patching
+    if !check_opcode(&data, base, 0, &[0x0f, 0xb6, 0x55]) { return }
+    if !check_opcode(&data, base, 4, &[0x0f, 0xb6, 0x45]) { return }
+    if !check_opcode(&data, base, 24, &[0x0f, 0xb6, 0x55]) { return }
+    if !check_opcode(&data, base, 28, &[0x0f, 0xb6, 0x45]) { return }
+    if !check_opcode(&data, base, 48, &[0x0f, 0xb6, 0x55]) { return }
+    if !check_opcode(&data, base, 52, &[0x0f, 0xb6, 0x45]) { return }
+    if !check_opcode(&data, base, 72, &[0x0f, 0xb6, 0x55]) { return }
+    if !check_opcode(&data, base, 76, &[0x0f, 0xb6, 0x45]) { return }
+
+    if let Some(v) = sc_lx_plus  { data[base + 3]  = v; }
+    if let Some(v) = sc_lx_minus { data[base + 7]  = v; }
+    if let Some(v) = sc_ly_plus  { data[base + 27] = v; }
+    if let Some(v) = sc_ly_minus { data[base + 31] = v; }
+    if let Some(v) = sc_rx_plus  { data[base + 51] = v; }
+    if let Some(v) = sc_rx_minus { data[base + 55] = v; }
+    if let Some(v) = sc_ry_plus  { data[base + 75] = v; }
+    if let Some(v) = sc_ry_minus { data[base + 79] = v; }
+
+    if let Err(_) = fs::write(path, &data) {
+        let tmp = path.with_extension("tmp_probe_patch");
+        if fs::write(&tmp, &data).is_ok() {
+            let _ = fs::rename(&tmp, path);
+        }
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = fs::set_permissions(path, fs::Permissions::from_mode(0o755));
+    }
+    println!("[Input Patch] Analog stick keys patched in {:?}", path);
+}
+
+fn patch_binary_windows(
+    path: &Path,
+    sc_lx_plus: Option<u8>, sc_lx_minus: Option<u8>,
+    sc_ly_plus: Option<u8>, sc_ly_minus: Option<u8>,
+    sc_rx_plus: Option<u8>, sc_rx_minus: Option<u8>,
+    sc_ry_plus: Option<u8>, sc_ry_minus: Option<u8>,
+) {
+    let anchor: &[u8] = &[
+        0xa9, 0x00, 0x01, 0x00, 0x00, 0x74, 0x04, 0xc6, 0x46, 0x08, 0xff,
+        0xa9, 0x00, 0x02, 0x00, 0x00, 0x74, 0x04, 0xc6, 0x46, 0x09, 0xff,
+    ];
+    let Ok(mut data) = fs::read(path) else { return };
+    let Some(pos) = find_bytes(&data, anchor) else { return };
+    let base = pos + anchor.len();
+
+    // Verify expected opcodes at each offset before patching
+    if !check_opcode(&data, base, 0,   &[0x0f, 0xb6, 0x47]) { return }
+    if !check_opcode(&data, base, 4,   &[0x0f, 0xb6, 0x4f]) { return }
+    if !check_opcode(&data, base, 36,  &[0x0f, 0xb6, 0x4f]) { return }
+    if !check_opcode(&data, base, 40,  &[0x0f, 0xb6, 0x47]) { return }
+    if !check_opcode(&data, base, 72,  &[0x0f, 0xb6, 0x4f]) { return }
+    if !check_opcode(&data, base, 76,  &[0x0f, 0xb6, 0x47]) { return }
+    if !check_opcode(&data, base, 108, &[0x0f, 0xb6, 0x4f]) { return }
+    if !check_opcode(&data, base, 112, &[0x0f, 0xb6, 0x47]) { return }
+
+    if let Some(v) = sc_lx_minus { data[base + 3]   = v; }
+    if let Some(v) = sc_lx_plus  { data[base + 7]   = v; }
+    if let Some(v) = sc_ly_plus  { data[base + 39]  = v; }
+    if let Some(v) = sc_ly_minus { data[base + 43]  = v; }
+    if let Some(v) = sc_rx_plus  { data[base + 75]  = v; }
+    if let Some(v) = sc_rx_minus { data[base + 79]  = v; }
+    if let Some(v) = sc_ry_plus  { data[base + 111] = v; }
+    if let Some(v) = sc_ry_minus { data[base + 115] = v; }
+
+    if let Err(_) = fs::write(path, &data) {
+        let tmp = path.with_extension("tmp_probe_patch");
+        if fs::write(&tmp, &data).is_ok() {
+            let _ = fs::rename(&tmp, path);
+        }
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = fs::set_permissions(path, fs::Permissions::from_mode(0o755));
+    }
+    println!("[Input Patch] Analog stick keys patched in {:?}", path);
+}
+
+fn find_bytes(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+    haystack.windows(needle.len()).position(|w| w == needle)
+}
+
+fn check_opcode(data: &[u8], base: usize, offset: usize, expected: &[u8]) -> bool {
+    let start = base + offset;
+    if start + expected.len() > data.len() {
+        return false;
+    }
+    &data[start..start + expected.len()] == expected
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_patch_analog_scancodes_synthetic() {
+        // Construct a synthetic buffer with the Linux anchor and opcodes
+        let anchor = [
+            0xf6, 0xc4, 0x01, 0x74, 0x06, 0x41, 0xc6, 0x44, 0x24, 0x08, 0xff,
+            0xf6, 0xc4, 0x02, 0x74, 0x06, 0x41, 0xc6, 0x44, 0x24, 0x09, 0xff,
+        ];
+        let mut buf = Vec::new();
+        buf.extend_from_slice(&[0x90; 16]); // nop padding
+        buf.extend_from_slice(&anchor);
+        let base = buf.len();
+
+        // 8 instructions:
+        // +0:  0f b6 55 07 (D)
+        // +4:  0f b6 45 04 (A)
+        // +8..+23: 16 dummy bytes
+        // +24: 0f b6 55 16 (S)
+        // +28: 0f b6 45 1a (W)
+        // +32..+47: 16 dummy bytes
+        // +48: 0f b6 55 4f (Right)
+        // +52: 0f b6 45 50 (Left)
+        // +56..+71: 16 dummy bytes
+        // +72: 0f b6 55 51 (Down)
+        // +76: 0f b6 45 52 (Up)
+        buf.extend_from_slice(&[0x0f, 0xb6, 0x55, 0x07]);
+        buf.extend_from_slice(&[0x0f, 0xb6, 0x45, 0x04]);
+        buf.extend_from_slice(&[0x00; 16]);
+        buf.extend_from_slice(&[0x0f, 0xb6, 0x55, 0x16]);
+        buf.extend_from_slice(&[0x0f, 0xb6, 0x45, 0x1a]);
+        buf.extend_from_slice(&[0x00; 16]);
+        buf.extend_from_slice(&[0x0f, 0xb6, 0x55, 0x4f]);
+        buf.extend_from_slice(&[0x0f, 0xb6, 0x45, 0x50]);
+        buf.extend_from_slice(&[0x00; 16]);
+        buf.extend_from_slice(&[0x0f, 0xb6, 0x55, 0x51]);
+        buf.extend_from_slice(&[0x0f, 0xb6, 0x45, 0x52]);
+        buf.extend_from_slice(&[0x90; 32]);
+
+        let tmp_file = std::env::temp_dir().join("test_gow3_probe_synthetic");
+        fs::write(&tmp_file, &buf).unwrap();
+
+        // Test patching: Left stick unchanged, Right stick -> I(12), K(14), J(13), L(15)
+        patch_binary_linux(
+            &tmp_file,
+            Some(7), Some(4), Some(22), Some(26),
+            Some(15), // RX+ = L
+            Some(13), // RX- = J
+            Some(14), // RY+ = K
+            Some(12), // RY- = I
+        );
+
+        let patched = fs::read(&tmp_file).unwrap();
+        let _ = fs::remove_file(&tmp_file);
+
+        assert_eq!(patched[base + 51], 15); // RX+ = L
+        assert_eq!(patched[base + 55], 13); // RX- = J
+        assert_eq!(patched[base + 75], 14); // RY+ = K
+        assert_eq!(patched[base + 79], 12); // RY- = I
+    }
 }

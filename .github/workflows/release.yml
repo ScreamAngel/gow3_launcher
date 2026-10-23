@@ -1,9 +1,10 @@
 name: Build & Release Single Executables (AppImage & Portable Exe)
 
 on:
-  push:
-    tags:
-      - 'v*'
+  # Otomatik release/tag build tetikleyicisi geçici olarak devre dışı bırakıldı
+  # push:
+  #   tags:
+  #     - 'v*'
   workflow_dispatch:
 
 permissions:

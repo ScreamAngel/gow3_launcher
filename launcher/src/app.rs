@@ -147,7 +147,13 @@ pub fn format_key_display(key_str: &str) -> String {
     }
 }
 
-fn render_hero_pill_badge(ui: &mut egui::Ui, text: &str, is_crimson: bool, is_pulsing_glow: bool) {
+fn render_hero_pill_badge(
+    ui: &mut egui::Ui,
+    icon: Option<&egui::TextureHandle>,
+    text: &str,
+    is_crimson: bool,
+    is_pulsing_glow: bool,
+) {
     let (bg, border, text_col) = if is_crimson {
         (
             egui::Color32::from_rgba_unmultiplied(220, 38, 38, 40),
@@ -164,8 +170,11 @@ fn render_hero_pill_badge(ui: &mut egui::Ui, text: &str, is_crimson: bool, is_pu
 
     let font_id = egui::FontId::proportional(11.0);
     let galley = ui.painter().layout_no_wrap(text.to_string(), font_id, text_col);
+    let icon_size = if icon.is_some() { 13.0 } else { 0.0 };
+    let icon_gap = if icon.is_some() { 6.0 } else { 0.0 };
     let padding = egui::vec2(22.0, 10.0);
-    let desired_size = egui::vec2(galley.rect.width() + padding.x, galley.rect.height() + padding.y);
+    let content_width = icon_size + icon_gap + galley.rect.width();
+    let desired_size = egui::vec2(content_width + padding.x, galley.rect.height().max(icon_size) + padding.y);
 
     let (rect, response) = ui.allocate_exact_size(desired_size, egui::Sense::hover());
     let painter = ui.painter();
@@ -217,8 +226,21 @@ fn render_hero_pill_badge(ui: &mut egui::Ui, text: &str, is_crimson: bool, is_pu
     painter.rect_filled(draw_rect, 12.0, current_bg);
     painter.rect_stroke(draw_rect, 12.0, stroke, egui::StrokeKind::Inside);
 
+    let start_x = draw_rect.left() + (draw_rect.width() - content_width) / 2.0;
+    let mut current_x = start_x;
+
+    if let Some(tex) = icon {
+        let icon_rect = egui::Rect::from_min_size(
+            egui::pos2(current_x, draw_rect.center().y - icon_size / 2.0),
+            egui::vec2(icon_size, icon_size),
+        );
+        let uv = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
+        painter.image(tex.id(), icon_rect, uv, egui::Color32::WHITE);
+        current_x += icon_size + icon_gap;
+    }
+
     let text_pos = egui::pos2(
-        draw_rect.left() + (draw_rect.width() - galley.rect.width()) / 2.0,
+        current_x,
         draw_rect.top() + (draw_rect.height() - galley.rect.height()) / 2.0,
     );
     painter.galley(text_pos, galley, text_col);
@@ -627,6 +649,8 @@ pub struct LauncherApp {
     bg_texture: Option<egui::TextureHandle>,
     logo_texture: Option<egui::TextureHandle>,
     icon_texture: Option<egui::TextureHandle>,
+    win_texture: Option<egui::TextureHandle>,
+    tux_texture: Option<egui::TextureHandle>,
 }
 
 impl LauncherApp {
@@ -684,6 +708,8 @@ impl LauncherApp {
             bg_texture: None,
             logo_texture: None,
             icon_texture: None,
+            win_texture: None,
+            tux_texture: None,
         };
 
         app.load_textures(&cc.egui_ctx);
@@ -756,6 +782,34 @@ impl LauncherApp {
             let pixels = img_buffer.as_flat_samples();
             let color_img = egui::ColorImage::from_rgba_unmultiplied(size, pixels.as_slice());
             self.icon_texture = Some(ctx.load_texture("gow3_icon_omega", color_img, Default::default()));
+        }
+
+        let win_path = self.base_dir.join("win.png");
+        let win_img = if win_path.is_file() {
+            image::open(&win_path).ok()
+        } else {
+            image::load_from_memory(include_bytes!("../win.png")).ok()
+        };
+        if let Some(img) = win_img {
+            let size = [img.width() as _, img.height() as _];
+            let img_buffer = img.to_rgba8();
+            let pixels = img_buffer.as_flat_samples();
+            let color_img = egui::ColorImage::from_rgba_unmultiplied(size, pixels.as_slice());
+            self.win_texture = Some(ctx.load_texture("gow3_win_icon", color_img, Default::default()));
+        }
+
+        let tux_path = self.base_dir.join("tux.png");
+        let tux_img = if tux_path.is_file() {
+            image::open(&tux_path).ok()
+        } else {
+            image::load_from_memory(include_bytes!("../tux.png")).ok()
+        };
+        if let Some(img) = tux_img {
+            let size = [img.width() as _, img.height() as _];
+            let img_buffer = img.to_rgba8();
+            let pixels = img_buffer.as_flat_samples();
+            let color_img = egui::ColorImage::from_rgba_unmultiplied(size, pixels.as_slice());
+            self.tux_texture = Some(ctx.load_texture("gow3_tux_icon", color_img, Default::default()));
         }
     }
 
@@ -1223,7 +1277,7 @@ impl eframe::App for LauncherApp {
             // --- HERO SECTION (MATCHING WEBSITE HERO) ---
             ui.vertical_centered(|ui| {
                 ui.add_space(2.0);
-                render_hero_pill_badge(ui, self.t("hero_badge"), true, false);
+                render_hero_pill_badge(ui, None, self.t("hero_badge"), true, false);
                 ui.add_space(6.0);
 
                 if let Some(ref logo) = self.logo_texture {
@@ -1247,32 +1301,33 @@ impl eframe::App for LauncherApp {
                 ui.add_space(6.0);
 
                 // Feature Pill Badges Row (Centered symmetrically)
-                let pill_items = [
-                    (format!("🏷️ {}", self.t("badge_v13")), true, self.has_new_update),
-                    (format!("❖ {}", self.t("badge_windows")), false, false),
-                    (format!("🐧 {}", self.t("badge_linux")), false, false),
-                    (format!("🎮 {}", self.t("badge_steam_deck")), false, false),
-                    (format!("⚡ {}", self.t("badge_free_oss")), false, false),
+                let pill_items: [(Option<&egui::TextureHandle>, String, bool, bool); 5] = [
+                    (None, format!("🏷️ {}", self.t("badge_v13")), true, self.has_new_update),
+                    (self.win_texture.as_ref(), self.t("badge_windows").to_string(), false, false),
+                    (self.tux_texture.as_ref(), self.t("badge_linux").to_string(), false, false),
+                    (None, format!("🎮 {}", self.t("badge_steam_deck")), false, false),
+                    (None, format!("⚡ {}", self.t("badge_free_oss")), false, false),
                 ];
 
                 let font_id = egui::FontId::proportional(11.0);
                 let item_spacing = 6.0;
                 let mut total_row_w = 0.0;
-                for (t, _, _) in &pill_items {
+                for (ico, t, _, _) in &pill_items {
                     let galley = ui.painter().layout_no_wrap(t.clone(), font_id.clone(), egui::Color32::WHITE);
-                    total_row_w += galley.rect.width() + 22.0 + item_spacing;
+                    let icon_w = if ico.is_some() { 13.0 + 6.0 } else { 0.0 };
+                    total_row_w += icon_w + galley.rect.width() + 22.0 + item_spacing;
                 }
                 total_row_w -= item_spacing;
 
                 let avail = ui.available_width();
-                let left_margin = ((avail - total_row_w) / 2.0).max(0.0);
+                let left_margin = (((avail - total_row_w) / 2.0) - 22.0).max(0.0);
 
                 ui.horizontal(|ui| {
                     if left_margin > 0.0 {
                         ui.add_space(left_margin);
                     }
-                    for (text, is_crimson, is_pulse) in &pill_items {
-                        render_hero_pill_badge(ui, text, *is_crimson, *is_pulse);
+                    for (ico, text, is_crimson, is_pulse) in &pill_items {
+                        render_hero_pill_badge(ui, *ico, text, *is_crimson, *is_pulse);
                         ui.add_space(item_spacing);
                     }
                 });

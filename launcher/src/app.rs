@@ -147,6 +147,42 @@ pub fn format_key_display(key_str: &str) -> String {
     }
 }
 
+fn render_hero_pill_badge(ui: &mut egui::Ui, text: &str, is_crimson: bool) {
+    let (bg, border, text_col) = if is_crimson {
+        (
+            egui::Color32::from_rgba_unmultiplied(220, 38, 38, 35),
+            egui::Color32::from_rgba_unmultiplied(239, 68, 68, 160),
+            egui::Color32::from_rgb(255, 110, 110),
+        )
+    } else {
+        (
+            egui::Color32::from_rgba_unmultiplied(26, 28, 38, 210),
+            egui::Color32::from_rgba_unmultiplied(255, 255, 255, 30),
+            egui::Color32::from_rgb(205, 210, 225),
+        )
+    };
+
+    egui::Frame::new()
+        .fill(bg)
+        .stroke(egui::Stroke::new(1.0, border))
+        .corner_radius(egui::CornerRadius::same(12))
+        .inner_margin(egui::Margin::symmetric(10, 4))
+        .show(ui, |ui| {
+            ui.label(egui::RichText::new(text).color(text_col).size(11.0).strong());
+        });
+}
+
+fn render_section_tag(ui: &mut egui::Ui, tag: &str) {
+    ui.add_space(4.0);
+    ui.label(
+        egui::RichText::new(tag)
+            .size(11.0)
+            .color(egui::Color32::from_rgb(239, 68, 68))
+            .strong(),
+    );
+    ui.add_space(1.0);
+}
+
 fn render_stat_tile(
     ui: &mut egui::Ui,
     tag: &str,
@@ -156,8 +192,8 @@ fn render_stat_tile(
     badge: Option<(&str, egui::Color32)>,
 ) {
     egui::Frame::group(ui.style())
-        .fill(egui::Color32::from_rgba_unmultiplied(24, 26, 36, 210))
-        .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(255, 255, 255, 22)))
+        .fill(egui::Color32::from_rgba_unmultiplied(16, 17, 25, 235))
+        .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(220, 38, 38, 60)))
         .inner_margin(egui::Margin::symmetric(10, 8))
         .corner_radius(egui::CornerRadius::same(8))
         .show(ui, |ui| {
@@ -455,6 +491,7 @@ pub struct LauncherApp {
     // Textures
     bg_texture: Option<egui::TextureHandle>,
     logo_texture: Option<egui::TextureHandle>,
+    icon_texture: Option<egui::TextureHandle>,
 }
 
 impl LauncherApp {
@@ -509,6 +546,7 @@ impl LauncherApp {
             log_content: String::new(),
             bg_texture: None,
             logo_texture: None,
+            icon_texture: None,
         };
 
         app.load_textures(&cc.egui_ctx);
@@ -566,6 +604,20 @@ impl LauncherApp {
             let pixels = img_buffer.as_flat_samples();
             let color_img = egui::ColorImage::from_rgba_unmultiplied(size, pixels.as_slice());
             self.logo_texture = Some(ctx.load_texture("gow3_remastered_logo", color_img, Default::default()));
+        }
+
+        let icon_path = self.base_dir.join("gow3.png");
+        let icon_img = if icon_path.is_file() {
+            image::open(&icon_path).ok()
+        } else {
+            image::load_from_memory(include_bytes!("../../gow3.png")).ok()
+        };
+        if let Some(img) = icon_img {
+            let size = [img.width() as _, img.height() as _];
+            let img_buffer = img.to_rgba8();
+            let pixels = img_buffer.as_flat_samples();
+            let color_img = egui::ColorImage::from_rgba_unmultiplied(size, pixels.as_slice());
+            self.icon_texture = Some(ctx.load_texture("gow3_icon_omega", color_img, Default::default()));
         }
     }
 
@@ -860,99 +912,183 @@ impl eframe::App for LauncherApp {
                 tex.id(),
                 rect,
                 uv,
-                egui::Color32::from_white_alpha(170),
+                egui::Color32::from_white_alpha(150),
             );
             painter.rect_filled(
                 rect,
                 0.0,
-                egui::Color32::from_rgba_unmultiplied(10, 10, 14, 150),
+                egui::Color32::from_rgba_unmultiplied(7, 8, 12, 175),
             );
         }
 
         let mut visuals = egui::Visuals::dark();
-        visuals.window_corner_radius = egui::CornerRadius::same(10);
-        visuals.override_text_color = Some(egui::Color32::from_rgb(240, 240, 240));
+        visuals.panel_fill = egui::Color32::from_rgb(7, 8, 12);
+        visuals.window_fill = egui::Color32::from_rgb(11, 12, 17);
+        visuals.window_stroke = egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(220, 38, 38, 80));
+        visuals.window_corner_radius = egui::CornerRadius::same(12);
+        visuals.override_text_color = Some(egui::Color32::from_rgb(240, 240, 245));
+        visuals.widgets.noninteractive.bg_fill = egui::Color32::from_rgb(13, 14, 21);
+        visuals.widgets.inactive.bg_fill = egui::Color32::from_rgb(22, 24, 34);
+        visuals.widgets.hovered.bg_fill = egui::Color32::from_rgb(34, 36, 50);
+        visuals.widgets.active.bg_fill = egui::Color32::from_rgb(220, 38, 38);
+        visuals.selection.bg_fill = egui::Color32::from_rgb(220, 38, 38);
+        visuals.selection.stroke = egui::Stroke::new(1.0, egui::Color32::from_rgb(239, 68, 68));
         ctx.set_visuals(visuals);
 
         egui::ScrollArea::vertical().show(ui, |ui| {
             ui.spacing_mut().item_spacing = egui::vec2(12.0, 12.0);
 
-            // --- TOP UTILITY BAR (UPDATE CHECKER & LANGUAGE SELECTOR) ---
-            ui.horizontal(|ui| {
-                if self.is_checking_update {
-                    ui.add_enabled(
-                        false,
-                        egui::Button::new(
-                            egui::RichText::new(self.t("checking_updates"))
-                                .color(egui::Color32::from_rgb(180, 180, 190))
-                                .size(13.0),
-                        )
-                        .corner_radius(egui::CornerRadius::same(6)),
-                    );
-                } else {
-                    let update_btn = egui::Button::new(
-                        egui::RichText::new(self.t("check_updates"))
-                            .color(egui::Color32::from_rgb(220, 220, 230))
-                            .size(13.0),
-                    )
-                    .fill(egui::Color32::from_rgb(42, 44, 56))
-                    .corner_radius(egui::CornerRadius::same(6));
+            // --- TOP NAVBAR ---
+            egui::Frame::new()
+                .fill(egui::Color32::from_rgba_unmultiplied(10, 11, 16, 220))
+                .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(220, 38, 38, 45)))
+                .corner_radius(egui::CornerRadius::same(10))
+                .inner_margin(egui::Margin::symmetric(14, 8))
+                .show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        // Left: Omega icon + Brand name
+                        if let Some(ref icon) = self.icon_texture {
+                            ui.add(egui::Image::new(icon).max_height(24.0));
+                            ui.add_space(6.0);
+                        }
+                        ui.label(
+                            egui::RichText::new("GOW III")
+                                .size(14.0)
+                                .color(egui::Color32::WHITE)
+                                .strong(),
+                        );
+                        ui.label(
+                            egui::RichText::new("LAUNCHER")
+                                .size(14.0)
+                                .color(egui::Color32::from_rgb(239, 68, 68))
+                                .strong(),
+                        );
 
-                    if ui.add(update_btn).clicked() {
-                        self.start_update_check();
-                    }
-                }
+                        // Right: Language & Update actions
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            let mut selected_lang = self.current_lang;
+                            egui::ComboBox::from_id_salt("lang_selector")
+                                .selected_text(format!("🌐 {}", selected_lang.display_name()))
+                                .show_ui(ui, |ui| {
+                                    for lang in Language::all() {
+                                        if ui.selectable_value(&mut selected_lang, *lang, lang.display_name()).clicked() {
+                                            self.current_lang = *lang;
+                                            self.config.language = lang.code().to_string();
+                                            let _ = self.config.save(&self.base_dir);
+                                        }
+                                    }
+                                });
 
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    let mut selected_lang = self.current_lang;
-                    egui::ComboBox::from_id_salt("lang_selector")
-                        .selected_text(selected_lang.display_name())
-                        .show_ui(ui, |ui| {
-                            for lang in Language::all() {
-                                if ui.selectable_value(&mut selected_lang, *lang, lang.display_name()).clicked() {
-                                    self.current_lang = *lang;
-                                    self.config.language = lang.code().to_string();
-                                    let _ = self.config.save(&self.base_dir);
+                            ui.add_space(8.0);
+
+                            if self.is_checking_update {
+                                ui.add_enabled(
+                                    false,
+                                    egui::Button::new(
+                                        egui::RichText::new(self.t("checking_updates"))
+                                            .color(egui::Color32::from_rgb(180, 180, 190))
+                                            .size(12.0),
+                                    )
+                                    .fill(egui::Color32::from_rgb(24, 26, 36))
+                                    .corner_radius(egui::CornerRadius::same(6)),
+                                );
+                            } else {
+                                let update_btn = egui::Button::new(
+                                    egui::RichText::new(format!("🔄 {}", self.t("check_updates")))
+                                        .color(egui::Color32::from_rgb(220, 220, 230))
+                                        .size(12.0),
+                                )
+                                .fill(egui::Color32::from_rgb(28, 30, 42))
+                                .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(255, 255, 255, 25)))
+                                .corner_radius(egui::CornerRadius::same(6));
+
+                                if ui.add(update_btn).clicked() {
+                                    self.start_update_check();
                                 }
                             }
                         });
+                    });
                 });
-            });
 
-            // --- CENTERED HEADER LOGO & SUBTITLE ---
+            // --- HERO SECTION (MATCHING WEBSITE HERO) ---
             ui.vertical_centered(|ui| {
+                ui.add_space(2.0);
+                render_hero_pill_badge(ui, self.t("hero_badge"), true);
+                ui.add_space(6.0);
+
                 if let Some(ref logo) = self.logo_texture {
-                    ui.add(egui::Image::new(logo).max_height(90.0));
-                } else {
-                    ui.heading(
-                        egui::RichText::new(self.t("app_title"))
-                            .size(26.0)
-                            .color(egui::Color32::from_rgb(235, 60, 50))
-                            .strong(),
-                    );
+                    ui.add(egui::Image::new(logo).max_height(82.0));
                 }
+
+                ui.heading(
+                    egui::RichText::new("GOD OF WAR III PC LAUNCHER")
+                        .size(23.0)
+                        .color(egui::Color32::WHITE)
+                        .strong(),
+                );
+
                 ui.add_space(2.0);
                 ui.label(
-                    egui::RichText::new(self.t("app_subtitle"))
-                        .size(12.0)
-                        .color(egui::Color32::from_rgb(205, 205, 215)),
+                    egui::RichText::new(self.t("hero_desc"))
+                        .size(11.5)
+                        .color(egui::Color32::from_rgb(148, 163, 184)),
                 );
+
+                ui.add_space(6.0);
+
+                // Feature Pill Badges Row
+                ui.horizontal_wrapped(|ui| {
+                    let total_est = 520.0;
+                    let avail = ui.available_width();
+                    if avail > total_est {
+                        ui.add_space((avail - total_est) / 2.0);
+                    }
+                    render_hero_pill_badge(ui, &format!("🏷️ {}", self.t("badge_v13")), true);
+                    ui.add_space(4.0);
+                    render_hero_pill_badge(ui, "🪟 Windows 01.02", false);
+                    ui.add_space(4.0);
+                    render_hero_pill_badge(ui, "🐧 Linux 01.00 & 01.02", false);
+                    ui.add_space(4.0);
+                    render_hero_pill_badge(ui, &format!("🎮 {}", self.t("badge_steam_deck")), false);
+                    ui.add_space(4.0);
+                    render_hero_pill_badge(ui, &format!("⚡ {}", self.t("badge_free_oss")), false);
+                });
             });
 
             // Status message
             if let Some((ref msg, is_err)) = self.status_message {
-                let color = if is_err {
-                    egui::Color32::from_rgb(245, 90, 85)
+                let (bg, border, text_col) = if is_err {
+                    (
+                        egui::Color32::from_rgba_unmultiplied(65, 20, 20, 220),
+                        egui::Color32::from_rgb(239, 68, 68),
+                        egui::Color32::from_rgb(255, 140, 140),
+                    )
                 } else {
-                    egui::Color32::from_rgb(105, 225, 110)
+                    (
+                        egui::Color32::from_rgba_unmultiplied(20, 50, 28, 220),
+                        egui::Color32::from_rgb(34, 197, 94),
+                        egui::Color32::from_rgb(134, 239, 172),
+                    )
                 };
-                ui.label(egui::RichText::new(msg).color(color).strong());
+
+                egui::Frame::new()
+                    .fill(bg)
+                    .stroke(egui::Stroke::new(1.0, border))
+                    .corner_radius(egui::CornerRadius::same(8))
+                    .inner_margin(egui::Margin::symmetric(12, 6))
+                    .show(ui, |ui| {
+                        ui.horizontal(|ui| {
+                            let icon = if is_err { "⚠️" } else { "✅" };
+                            ui.label(egui::RichText::new(icon).size(13.0));
+                            ui.label(egui::RichText::new(msg).color(text_col).strong().size(12.0));
+                        });
+                    });
             }
 
             // --- NAVIGATION TABS (SEGMENTED MODERN BAR) ---
             egui::Frame::new()
-                .fill(egui::Color32::from_rgba_unmultiplied(16, 17, 24, 230))
-                .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(255, 255, 255, 22)))
+                .fill(egui::Color32::from_rgba_unmultiplied(12, 13, 19, 240))
+                .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(220, 38, 38, 55)))
                 .corner_radius(egui::CornerRadius::same(10))
                 .inner_margin(egui::Margin::same(4))
                 .show(ui, |ui| {
@@ -963,14 +1099,14 @@ impl eframe::App for LauncherApp {
                         let render_tab = |ui: &mut egui::Ui, text: &str, active: bool| -> bool {
                             let (bg_color, text_color, stroke) = if active {
                                 (
-                                    egui::Color32::from_rgb(215, 45, 45),
+                                    egui::Color32::from_rgb(220, 38, 38),
                                     egui::Color32::WHITE,
-                                    egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(255, 120, 120, 160)),
+                                    egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(255, 120, 120, 180)),
                                 )
                             } else {
                                 (
                                     egui::Color32::TRANSPARENT,
-                                    egui::Color32::from_rgb(175, 180, 195),
+                                    egui::Color32::from_rgb(148, 163, 184),
                                     egui::Stroke::NONE,
                                 )
                             };
@@ -981,7 +1117,7 @@ impl eframe::App for LauncherApp {
                             .fill(bg_color)
                             .stroke(stroke)
                             .corner_radius(egui::CornerRadius::same(8))
-                            .min_size(egui::vec2(210.0, 36.0));
+                            .min_size(egui::vec2(220.0, 36.0));
 
                             ui.add(btn).clicked()
                         };
@@ -996,9 +1132,9 @@ impl eframe::App for LauncherApp {
                 });
 
             let card_frame = egui::Frame::group(ui.style())
-                .fill(egui::Color32::from_rgba_unmultiplied(16, 17, 24, 225))
-                .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(225, 55, 50, 75)))
-                .inner_margin(14.0)
+                .fill(egui::Color32::from_rgba_unmultiplied(13, 14, 21, 235))
+                .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(220, 38, 38, 65)))
+                .inner_margin(egui::Margin::symmetric(14, 12))
                 .corner_radius(egui::CornerRadius::same(12));
 
             // ==========================================
@@ -1006,6 +1142,7 @@ impl eframe::App for LauncherApp {
             // ==========================================
             if self.active_tab == ActiveTab::Game {
                 // 1. SYSTEM HARDWARE INFO CARD
+                render_section_tag(ui, self.t("tag_hardware"));
                 card_frame.show(ui, |ui| {
                     ui.horizontal(|ui| {
                         ui.heading(
@@ -1142,6 +1279,7 @@ impl eframe::App for LauncherApp {
                 });
 
                 // 2. GAME DIRECTORY CARD
+                render_section_tag(ui, self.t("tag_game_location"));
                 card_frame.show(ui, |ui| {
                     ui.heading(
                         egui::RichText::new(self.t("game_location"))
@@ -1211,6 +1349,7 @@ impl eframe::App for LauncherApp {
                 });
 
                 // 3. PATCHES & OPTIMIZATIONS CARD
+                render_section_tag(ui, self.t("tag_patches"));
                 card_frame.show(ui, |ui| {
                     ui.heading(
                         egui::RichText::new(self.t("patches_header"))
@@ -1288,20 +1427,46 @@ impl eframe::App for LauncherApp {
 
                     ui.add_space(8.0);
                     ui.horizontal(|ui| {
-                        if ui.button(egui::RichText::new(self.t("save_apply")).strong()).clicked() {
+                        let save_btn = egui::Button::new(
+                            egui::RichText::new(format!("💾 {}", self.t("save_apply")))
+                                .strong()
+                                .color(egui::Color32::WHITE),
+                        )
+                        .fill(egui::Color32::from_rgb(220, 38, 38))
+                        .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(255, 120, 120, 140)))
+                        .corner_radius(egui::CornerRadius::same(6))
+                        .min_size(egui::vec2(160.0, 32.0));
+
+                        if ui.add(save_btn).clicked() {
                             self.apply_all_optimizations();
                         }
-                        if ui.button(egui::RichText::new(self.t("view_log"))).clicked() {
+
+                        let log_btn = egui::Button::new(
+                            egui::RichText::new(format!("📋 {}", self.t("view_log")))
+                                .color(egui::Color32::from_rgb(200, 205, 220)),
+                        )
+                        .fill(egui::Color32::from_rgb(28, 30, 42))
+                        .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(255, 255, 255, 25)))
+                        .corner_radius(egui::CornerRadius::same(6))
+                        .min_size(egui::vec2(130.0, 32.0));
+
+                        if ui.add(log_btn).clicked() {
                             let log_path = self.base_dir.join("gow3_log.txt");
                             self.log_content = std::fs::read_to_string(&log_path)
                                 .unwrap_or_else(|_| "Log file is empty or not created yet.".to_string());
                             self.show_log_modal = true;
                         }
+
                         let kill_btn = egui::Button::new(
-                            egui::RichText::new(self.t("kill_leftover_btn"))
+                            egui::RichText::new(format!("🛑 {}", self.t("kill_leftover_btn")))
                                 .color(egui::Color32::from_rgb(255, 140, 140))
                                 .size(12.0),
-                        );
+                        )
+                        .fill(egui::Color32::from_rgb(45, 20, 22))
+                        .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(239, 68, 68, 80)))
+                        .corner_radius(egui::CornerRadius::same(6))
+                        .min_size(egui::vec2(130.0, 32.0));
+
                         if ui.add(kill_btn).on_hover_text(self.t("kill_leftover_tooltip")).clicked() {
                             self.kill_leftover_processes();
                         }
@@ -1361,45 +1526,44 @@ impl eframe::App for LauncherApp {
                         ctx.request_repaint();
 
                         let r = (215.0 + 35.0 * pulse) as u8;
-                        let g = (40.0 + 30.0 * pulse) as u8;
-                        let b = 40u8;
+                        let g = (35.0 + 25.0 * pulse) as u8;
+                        let b = 35u8;
                         let btn_color = egui::Color32::from_rgb(r, g, b);
                         let border_color = egui::Color32::from_rgba_unmultiplied(
                             255,
-                            (120.0 + 80.0 * pulse) as u8,
-                            80,
-                            (140.0 + 100.0 * pulse) as u8,
+                            (110.0 + 90.0 * pulse) as u8,
+                            (70.0 + 50.0 * pulse) as u8,
+                            (150.0 + 105.0 * pulse) as u8,
                         );
 
                         let play_btn = egui::Button::new(
-                            egui::RichText::new(self.t("play_ready"))
-                                .size(22.0)
+                            egui::RichText::new(format!("▶   {}", self.t("play_ready")))
+                                .size(21.0)
                                 .color(egui::Color32::WHITE)
                                 .strong(),
                         )
                         .fill(btn_color)
                         .stroke(egui::Stroke::new(1.8 + pulse * 1.2, border_color))
                         .corner_radius(egui::CornerRadius::same(12))
-                        .min_size(egui::vec2(360.0, 58.0));
+                        .min_size(egui::vec2(380.0, 58.0));
 
                         if ui.add(play_btn).clicked() {
                             self.launch_game();
                         }
-                        ui.add_space(2.0);
+                        ui.add_space(3.0);
                         ui.label(
                             egui::RichText::new(self.t("play_subtitle"))
-                                .color(egui::Color32::from_rgb(115, 235, 120))
-                                .size(12.0)
-                                .strong(),
+                                .color(egui::Color32::from_rgb(148, 163, 184))
+                                .size(11.5),
                         );
                     } else {
                         let play_btn = egui::Button::new(
-                            egui::RichText::new(self.t("play_ready"))
-                                .size(22.0)
+                            egui::RichText::new(format!("▶   {}", self.t("play_ready")))
+                                .size(21.0)
                                 .color(egui::Color32::from_rgb(140, 140, 140))
                                 .strong(),
                         )
-                        .fill(egui::Color32::from_rgb(55, 55, 62))
+                        .fill(egui::Color32::from_rgb(45, 46, 56))
                         .corner_radius(egui::CornerRadius::same(10))
                         .min_size(egui::vec2(340.0, 56.0));
 
@@ -1425,6 +1589,7 @@ impl eframe::App for LauncherApp {
                 // ==========================================
 
                 // --- 1. DISPLAY MODE & SCREEN SETTINGS ---
+                render_section_tag(ui, self.t("tag_display"));
                 card_frame.show(ui, |ui| {
                     ui.heading(
                         egui::RichText::new(self.t("display_header"))
@@ -1489,6 +1654,7 @@ impl eframe::App for LauncherApp {
                 });
 
                 // --- 2. GAMEPAD / CONTROLLER SETTINGS ---
+                render_section_tag(ui, self.t("tag_controller"));
                 card_frame.show(ui, |ui| {
                     ui.heading(
                         egui::RichText::new(self.t("controller_header"))
@@ -1546,6 +1712,7 @@ impl eframe::App for LauncherApp {
                 });
 
                 // --- 3. KEYBOARD BINDINGS (INTERACTIVE & CUSTOMIZABLE) ---
+                render_section_tag(ui, self.t("tag_keyboard"));
                 card_frame.show(ui, |ui| {
                     ui.horizontal(|ui| {
                         ui.heading(
@@ -1629,15 +1796,16 @@ impl eframe::App for LauncherApp {
                 });
 
                 // --- 4. CONFIG ACTION AREA ---
-                ui.add_space(4.0);
+                ui.add_space(6.0);
                 ui.horizontal(|ui| {
                     let save_btn = egui::Button::new(
-                        egui::RichText::new(self.t("save_apply"))
+                        egui::RichText::new(format!("💾 {}", self.t("save_apply")))
                             .size(15.0)
                             .color(egui::Color32::WHITE)
                             .strong(),
                     )
-                    .fill(egui::Color32::from_rgb(45, 135, 75))
+                    .fill(egui::Color32::from_rgb(220, 38, 38))
+                    .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(255, 120, 120, 140)))
                     .corner_radius(egui::CornerRadius::same(8))
                     .min_size(egui::vec2(220.0, 42.0));
 
@@ -1645,7 +1813,17 @@ impl eframe::App for LauncherApp {
                         self.apply_all_optimizations();
                     }
 
-                    if ui.button(egui::RichText::new(self.t("view_log")).size(14.0)).clicked() {
+                    let log_btn = egui::Button::new(
+                        egui::RichText::new(format!("📋 {}", self.t("view_log")))
+                            .size(14.0)
+                            .color(egui::Color32::from_rgb(200, 205, 220)),
+                    )
+                    .fill(egui::Color32::from_rgb(28, 30, 42))
+                    .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(255, 255, 255, 25)))
+                    .corner_radius(egui::CornerRadius::same(8))
+                    .min_size(egui::vec2(140.0, 42.0));
+
+                    if ui.add(log_btn).clicked() {
                         let log_path = self.base_dir.join("gow3_log.txt");
                         self.log_content = std::fs::read_to_string(&log_path)
                             .unwrap_or_else(|_| "Log file is empty or not created yet.".to_string());

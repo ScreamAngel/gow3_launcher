@@ -9,7 +9,7 @@ Launcher for God Of War 3 PC on Linux and Windows
    [![Launcher](https://img.shields.io/badge/Launcher-Rust%20%2F%20egui-blue.svg)](https://www.rust-lang.org)                                                                            
    [![Vulkan](https://img.shields.io/badge/Graphics-Vulkan%201.3-red.svg)](https://www.vulkan.org)                                                                                       
    [![License](https://img.shields.io/badge/License-GPLv2-green.svg)](LICENSE)        
-   [Website](https://screamangel.github.io/gow3-site/)
+   Website: [https://screamangel.github.io/gow3-site/](https://screamangel.github.io/gow3-site/)
                                                                                                                                                                                           
                                                                                                                                                                                       
                                                                                                                                                                                           

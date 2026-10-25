@@ -147,29 +147,155 @@ pub fn format_key_display(key_str: &str) -> String {
     }
 }
 
-fn render_hero_pill_badge(ui: &mut egui::Ui, text: &str, is_crimson: bool) {
+fn render_hero_pill_badge(ui: &mut egui::Ui, text: &str, is_crimson: bool, is_pulsing_glow: bool) {
     let (bg, border, text_col) = if is_crimson {
         (
-            egui::Color32::from_rgba_unmultiplied(220, 38, 38, 35),
-            egui::Color32::from_rgba_unmultiplied(239, 68, 68, 160),
+            egui::Color32::from_rgba_unmultiplied(220, 38, 38, 40),
+            egui::Color32::from_rgba_unmultiplied(239, 68, 68, 180),
             egui::Color32::from_rgb(255, 110, 110),
         )
     } else {
         (
-            egui::Color32::from_rgba_unmultiplied(26, 28, 38, 210),
+            egui::Color32::from_rgba_unmultiplied(24, 26, 36, 220),
             egui::Color32::from_rgba_unmultiplied(255, 255, 255, 30),
             egui::Color32::from_rgb(205, 210, 225),
         )
     };
 
-    egui::Frame::new()
-        .fill(bg)
-        .stroke(egui::Stroke::new(1.0, border))
-        .corner_radius(egui::CornerRadius::same(12))
-        .inner_margin(egui::Margin::symmetric(10, 4))
-        .show(ui, |ui| {
-            ui.label(egui::RichText::new(text).color(text_col).size(11.0).strong());
-        });
+    let font_id = egui::FontId::proportional(11.0);
+    let galley = ui.painter().layout_no_wrap(text.to_string(), font_id, text_col);
+    let padding = egui::vec2(22.0, 10.0);
+    let desired_size = egui::vec2(galley.rect.width() + padding.x, galley.rect.height() + padding.y);
+
+    let (rect, response) = ui.allocate_exact_size(desired_size, egui::Sense::hover());
+    let painter = ui.painter();
+
+    // Glowing aura if release is newer or update available
+    if is_pulsing_glow {
+        let time = ui.ctx().input(|i| i.time);
+        let pulse = ((time * 3.6).sin() * 0.5 + 0.5) as f32;
+        ui.ctx().request_repaint();
+
+        painter.rect_filled(
+            rect.expand(2.0 + 3.0 * pulse),
+            14.0,
+            egui::Color32::from_rgba_unmultiplied(239, 68, 68, (50.0 + 75.0 * pulse) as u8),
+        );
+    }
+
+    let is_hovered = response.hovered();
+    let hover_anim = ui.ctx().animate_bool(response.id, is_hovered);
+    if is_hovered {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+    }
+
+    let current_bg = if hover_anim > 0.01 {
+        egui::Color32::from_rgb(
+            egui::lerp((bg.r() as f32)..=50.0, hover_anim) as u8,
+            egui::lerp((bg.g() as f32)..=32.0, hover_anim) as u8,
+            egui::lerp((bg.b() as f32)..=38.0, hover_anim) as u8,
+        )
+    } else {
+        bg
+    };
+
+    let stroke = egui::Stroke::new(
+        1.0 + 0.5 * hover_anim,
+        if hover_anim > 0.01 {
+            egui::Color32::from_rgb(255, 110, 110)
+        } else {
+            border
+        },
+    );
+
+    let draw_rect = if hover_anim > 0.01 {
+        rect.expand(0.8 * hover_anim)
+    } else {
+        rect
+    };
+
+    painter.rect_filled(draw_rect, 12.0, current_bg);
+    painter.rect_stroke(draw_rect, 12.0, stroke, egui::StrokeKind::Inside);
+
+    let text_pos = egui::pos2(
+        draw_rect.left() + (draw_rect.width() - galley.rect.width()) / 2.0,
+        draw_rect.top() + (draw_rect.height() - galley.rect.height()) / 2.0,
+    );
+    painter.galley(text_pos, galley, text_col);
+}
+
+fn render_nav_tab(ui: &mut egui::Ui, text: &str, is_active: bool) -> bool {
+    let id = ui.make_persistent_id(text);
+    let font_id = egui::FontId::proportional(12.5);
+    let (base_bg, text_col, base_stroke) = if is_active {
+        (
+            egui::Color32::from_rgb(220, 38, 38),
+            egui::Color32::WHITE,
+            egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(255, 150, 150, 200)),
+        )
+    } else {
+        (
+            egui::Color32::from_rgba_unmultiplied(22, 24, 34, 180),
+            egui::Color32::from_rgb(156, 163, 175),
+            egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(255, 255, 255, 20)),
+        )
+    };
+
+    let galley = ui.painter().layout_no_wrap(text.to_string(), font_id, text_col);
+    let padding = egui::vec2(24.0, 10.0);
+    let desired_size = egui::vec2(galley.rect.width() + padding.x, galley.rect.height() + padding.y);
+
+    let (rect, response) = ui.allocate_exact_size(desired_size, egui::Sense::click());
+    let is_hovered = response.hovered();
+    let hover_anim = ui.ctx().animate_bool(id, is_hovered);
+
+    if is_hovered {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+    }
+
+    let painter = ui.painter();
+    let current_bg = if is_active {
+        if hover_anim > 0.01 {
+            egui::Color32::from_rgb(235, 45, 45)
+        } else {
+            base_bg
+        }
+    } else if hover_anim > 0.01 {
+        egui::Color32::from_rgba_unmultiplied(42, 45, 62, 220)
+    } else {
+        base_bg
+    };
+
+    let current_stroke = if is_active {
+        base_stroke
+    } else if hover_anim > 0.01 {
+        egui::Stroke::new(1.2, egui::Color32::from_rgb(239, 68, 68))
+    } else {
+        base_stroke
+    };
+
+    let current_text_col = if is_active || hover_anim > 0.05 {
+        egui::Color32::WHITE
+    } else {
+        text_col
+    };
+
+    let draw_rect = if hover_anim > 0.01 {
+        rect.expand(1.0 * hover_anim)
+    } else {
+        rect
+    };
+
+    painter.rect_filled(draw_rect, 6.0, current_bg);
+    painter.rect_stroke(draw_rect, 6.0, current_stroke, egui::StrokeKind::Inside);
+
+    let text_pos = egui::pos2(
+        draw_rect.left() + (draw_rect.width() - galley.rect.width()) / 2.0,
+        draw_rect.top() + (draw_rect.height() - galley.rect.height()) / 2.0,
+    );
+    painter.galley(text_pos, galley, current_text_col);
+
+    response.clicked()
 }
 
 fn render_section_tag(ui: &mut egui::Ui, tag: &str) {
@@ -374,7 +500,11 @@ fn render_binding_row(
             .stroke(stroke)
             .corner_radius(egui::CornerRadius::same(6));
 
-            if ui.add(btn).clicked() {
+            let res = ui.add(btn);
+            if res.hovered() {
+                ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+            }
+            if res.clicked() {
                 if is_listening {
                     *next_listening = None;
                 } else {
@@ -389,6 +519,9 @@ fn render_binding_row(
 pub fn toggle_switch(ui: &mut egui::Ui, on: &mut bool) -> egui::Response {
     let desired_size = egui::vec2(44.0, 24.0);
     let (rect, mut response) = ui.allocate_exact_size(desired_size, egui::Sense::click());
+    if response.hovered() {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+    }
     if response.clicked() {
         *on = !*on;
         response.mark_changed();
@@ -464,6 +597,8 @@ pub struct LauncherApp {
 
     // Updater state
     is_checking_update: bool,
+    silent_update_check: bool,
+    has_new_update: bool,
     update_rx: Option<Receiver<Result<UpdateInfo, String>>>,
     update_modal: Option<UpdateInfo>,
 
@@ -529,6 +664,8 @@ impl LauncherApp {
             show_game_not_found_modal: false,
             scan_failed_empty: false,
             is_checking_update: false,
+            silent_update_check: true,
+            has_new_update: false,
             update_rx: None,
             update_modal: None,
             is_game_running: false,
@@ -550,6 +687,7 @@ impl LauncherApp {
         };
 
         app.load_textures(&cc.egui_ctx);
+        app.start_silent_update_check();
         app
     }
 
@@ -679,11 +817,28 @@ impl LauncherApp {
         });
     }
 
+    fn start_silent_update_check(&mut self) {
+        if self.is_checking_update {
+            return;
+        }
+        self.is_checking_update = true;
+        self.silent_update_check = true;
+        let (tx, rx) = channel();
+        self.update_rx = Some(rx);
+
+        let current_commit = self.config.last_git_commit.clone();
+        thread::spawn(move || {
+            let res = check_github_update(&current_commit);
+            let _ = tx.send(res);
+        });
+    }
+
     fn start_update_check(&mut self) {
         if self.is_checking_update {
             return;
         }
         self.is_checking_update = true;
+        self.silent_update_check = false;
         let (tx, rx) = channel();
         self.update_rx = Some(rx);
 
@@ -859,10 +1014,17 @@ impl eframe::App for LauncherApp {
                 self.update_rx = None;
                 match res {
                     Ok(info) => {
-                        self.update_modal = Some(info);
+                        if info.is_new {
+                            self.has_new_update = true;
+                        }
+                        if !self.silent_update_check {
+                            self.update_modal = Some(info);
+                        }
                     }
                     Err(e) => {
-                        self.status_message = Some((format!("Güncelleme hatası: {}", e), true));
+                        if !self.silent_update_check {
+                            self.status_message = Some((format!("Güncelleme hatası: {}", e), true));
+                        }
                     }
                 }
             }
@@ -929,8 +1091,12 @@ impl eframe::App for LauncherApp {
         visuals.override_text_color = Some(egui::Color32::from_rgb(240, 240, 245));
         visuals.widgets.noninteractive.bg_fill = egui::Color32::from_rgb(13, 14, 21);
         visuals.widgets.inactive.bg_fill = egui::Color32::from_rgb(22, 24, 34);
-        visuals.widgets.hovered.bg_fill = egui::Color32::from_rgb(34, 36, 50);
+        visuals.widgets.hovered.bg_fill = egui::Color32::from_rgb(45, 48, 66);
+        visuals.widgets.hovered.weak_bg_fill = egui::Color32::from_rgba_unmultiplied(220, 38, 38, 50);
+        visuals.widgets.hovered.bg_stroke = egui::Stroke::new(1.5, egui::Color32::from_rgb(239, 68, 68));
+        visuals.widgets.hovered.expansion = 1.5;
         visuals.widgets.active.bg_fill = egui::Color32::from_rgb(220, 38, 38);
+        visuals.widgets.active.expansion = 0.5;
         visuals.selection.bg_fill = egui::Color32::from_rgb(220, 38, 38);
         visuals.selection.stroke = egui::Stroke::new(1.0, egui::Color32::from_rgb(239, 68, 68));
         ctx.set_visuals(visuals);
@@ -940,8 +1106,8 @@ impl eframe::App for LauncherApp {
 
             // --- TOP NAVBAR ---
             egui::Frame::new()
-                .fill(egui::Color32::from_rgba_unmultiplied(10, 11, 16, 220))
-                .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(220, 38, 38, 45)))
+                .fill(egui::Color32::from_rgba_unmultiplied(10, 11, 16, 230))
+                .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(220, 38, 38, 50)))
                 .corner_radius(egui::CornerRadius::same(10))
                 .inner_margin(egui::Margin::symmetric(14, 8))
                 .show(ui, |ui| {
@@ -964,10 +1130,27 @@ impl eframe::App for LauncherApp {
                                 .strong(),
                         );
 
+                        ui.add_space(18.0);
+
+                        // Center: Navigation Tabs (Embedded right in the top navbar!)
+                        let game_active = self.active_tab == ActiveTab::Game;
+                        let config_active = self.active_tab == ActiveTab::Config;
+
+                        let game_tab_text = format!("⚔ {}", self.t("tab_game_perf"));
+                        let config_tab_text = format!("⚙ {}", self.t("tab_config_controls"));
+
+                        if render_nav_tab(ui, &game_tab_text, game_active) {
+                            self.active_tab = ActiveTab::Game;
+                        }
+                        ui.add_space(6.0);
+                        if render_nav_tab(ui, &config_tab_text, config_active) {
+                            self.active_tab = ActiveTab::Config;
+                        }
+
                         // Right: Language & Update actions
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             let mut selected_lang = self.current_lang;
-                            egui::ComboBox::from_id_salt("lang_selector")
+                            let lang_combo = egui::ComboBox::from_id_salt("lang_selector")
                                 .selected_text(format!("🌐 {}", selected_lang.display_name()))
                                 .show_ui(ui, |ui| {
                                     for lang in Language::all() {
@@ -978,6 +1161,9 @@ impl eframe::App for LauncherApp {
                                         }
                                     }
                                 });
+                            if lang_combo.response.hovered() {
+                                ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+                            }
 
                             ui.add_space(8.0);
 
@@ -993,16 +1179,40 @@ impl eframe::App for LauncherApp {
                                     .corner_radius(egui::CornerRadius::same(6)),
                                 );
                             } else {
+                                let (update_text, is_pulse) = if self.has_new_update {
+                                    (format!("✨ {} (Yeni!)", self.t("check_updates")), true)
+                                } else {
+                                    (format!("🔄 {}", self.t("check_updates")), false)
+                                };
+
                                 let update_btn = egui::Button::new(
-                                    egui::RichText::new(format!("🔄 {}", self.t("check_updates")))
-                                        .color(egui::Color32::from_rgb(220, 220, 230))
-                                        .size(12.0),
+                                    egui::RichText::new(update_text)
+                                        .color(if self.has_new_update { egui::Color32::from_rgb(255, 235, 120) } else { egui::Color32::from_rgb(220, 220, 230) })
+                                        .size(12.0)
+                                        .strong(),
                                 )
-                                .fill(egui::Color32::from_rgb(28, 30, 42))
-                                .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(255, 255, 255, 25)))
+                                .fill(if self.has_new_update { egui::Color32::from_rgb(52, 24, 28) } else { egui::Color32::from_rgb(28, 30, 42) })
+                                .stroke(egui::Stroke::new(
+                                    1.0,
+                                    if self.has_new_update { egui::Color32::from_rgb(239, 68, 68) } else { egui::Color32::from_rgba_unmultiplied(255, 255, 255, 25) }
+                                ))
                                 .corner_radius(egui::CornerRadius::same(6));
 
-                                if ui.add(update_btn).clicked() {
+                                let res = ui.add(update_btn);
+                                if is_pulse {
+                                    let time = ui.ctx().input(|i| i.time);
+                                    let pulse = ((time * 3.6).sin() * 0.5 + 0.5) as f32;
+                                    ui.ctx().request_repaint();
+                                    ui.painter().rect_filled(
+                                        res.rect.expand(2.0 + 2.5 * pulse),
+                                        8.0,
+                                        egui::Color32::from_rgba_unmultiplied(239, 68, 68, (60.0 + 75.0 * pulse) as u8),
+                                    );
+                                }
+                                if res.hovered() {
+                                    ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+                                }
+                                if res.clicked() {
                                     self.start_update_check();
                                 }
                             }
@@ -1013,7 +1223,7 @@ impl eframe::App for LauncherApp {
             // --- HERO SECTION (MATCHING WEBSITE HERO) ---
             ui.vertical_centered(|ui| {
                 ui.add_space(2.0);
-                render_hero_pill_badge(ui, self.t("hero_badge"), true);
+                render_hero_pill_badge(ui, self.t("hero_badge"), true, false);
                 ui.add_space(6.0);
 
                 if let Some(ref logo) = self.logo_texture {
@@ -1036,22 +1246,35 @@ impl eframe::App for LauncherApp {
 
                 ui.add_space(6.0);
 
-                // Feature Pill Badges Row
-                ui.horizontal_wrapped(|ui| {
-                    let total_est = 520.0;
-                    let avail = ui.available_width();
-                    if avail > total_est {
-                        ui.add_space((avail - total_est) / 2.0);
+                // Feature Pill Badges Row (Centered symmetrically)
+                let pill_items = [
+                    (format!("🏷️ {}", self.t("badge_v13")), true, self.has_new_update),
+                    (format!("❖ {}", self.t("badge_windows")), false, false),
+                    (format!("🐧 {}", self.t("badge_linux")), false, false),
+                    (format!("🎮 {}", self.t("badge_steam_deck")), false, false),
+                    (format!("⚡ {}", self.t("badge_free_oss")), false, false),
+                ];
+
+                let font_id = egui::FontId::proportional(11.0);
+                let item_spacing = 6.0;
+                let mut total_row_w = 0.0;
+                for (t, _, _) in &pill_items {
+                    let galley = ui.painter().layout_no_wrap(t.clone(), font_id.clone(), egui::Color32::WHITE);
+                    total_row_w += galley.rect.width() + 22.0 + item_spacing;
+                }
+                total_row_w -= item_spacing;
+
+                let avail = ui.available_width();
+                let left_margin = ((avail - total_row_w) / 2.0).max(0.0);
+
+                ui.horizontal(|ui| {
+                    if left_margin > 0.0 {
+                        ui.add_space(left_margin);
                     }
-                    render_hero_pill_badge(ui, &format!("🏷️ {}", self.t("badge_v13")), true);
-                    ui.add_space(4.0);
-                    render_hero_pill_badge(ui, "🪟 Windows 01.02", false);
-                    ui.add_space(4.0);
-                    render_hero_pill_badge(ui, "🐧 Linux 01.00 & 01.02", false);
-                    ui.add_space(4.0);
-                    render_hero_pill_badge(ui, &format!("🎮 {}", self.t("badge_steam_deck")), false);
-                    ui.add_space(4.0);
-                    render_hero_pill_badge(ui, &format!("⚡ {}", self.t("badge_free_oss")), false);
+                    for (text, is_crimson, is_pulse) in &pill_items {
+                        render_hero_pill_badge(ui, text, *is_crimson, *is_pulse);
+                        ui.add_space(item_spacing);
+                    }
                 });
             });
 
@@ -1084,52 +1307,6 @@ impl eframe::App for LauncherApp {
                         });
                     });
             }
-
-            // --- NAVIGATION TABS (SEGMENTED MODERN BAR) ---
-            egui::Frame::new()
-                .fill(egui::Color32::from_rgba_unmultiplied(12, 13, 19, 240))
-                .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(220, 38, 38, 55)))
-                .corner_radius(egui::CornerRadius::same(10))
-                .inner_margin(egui::Margin::same(4))
-                .show(ui, |ui| {
-                    ui.horizontal(|ui| {
-                        let game_active = self.active_tab == ActiveTab::Game;
-                        let config_active = self.active_tab == ActiveTab::Config;
-
-                        let render_tab = |ui: &mut egui::Ui, text: &str, active: bool| -> bool {
-                            let (bg_color, text_color, stroke) = if active {
-                                (
-                                    egui::Color32::from_rgb(220, 38, 38),
-                                    egui::Color32::WHITE,
-                                    egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(255, 120, 120, 180)),
-                                )
-                            } else {
-                                (
-                                    egui::Color32::TRANSPARENT,
-                                    egui::Color32::from_rgb(148, 163, 184),
-                                    egui::Stroke::NONE,
-                                )
-                            };
-
-                            let btn = egui::Button::new(
-                                egui::RichText::new(text).size(14.0).strong().color(text_color),
-                            )
-                            .fill(bg_color)
-                            .stroke(stroke)
-                            .corner_radius(egui::CornerRadius::same(8))
-                            .min_size(egui::vec2(220.0, 36.0));
-
-                            ui.add(btn).clicked()
-                        };
-
-                        if render_tab(ui, self.t("tab_game_perf"), game_active) {
-                            self.active_tab = ActiveTab::Game;
-                        }
-                        if render_tab(ui, self.t("tab_config_controls"), config_active) {
-                            self.active_tab = ActiveTab::Config;
-                        }
-                    });
-                });
 
             let card_frame = egui::Frame::group(ui.style())
                 .fill(egui::Color32::from_rgba_unmultiplied(13, 14, 21, 235))
@@ -1437,7 +1614,11 @@ impl eframe::App for LauncherApp {
                         .corner_radius(egui::CornerRadius::same(6))
                         .min_size(egui::vec2(160.0, 32.0));
 
-                        if ui.add(save_btn).clicked() {
+                        let res = ui.add(save_btn);
+                        if res.hovered() {
+                            ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+                        }
+                        if res.clicked() {
                             self.apply_all_optimizations();
                         }
 
@@ -1450,7 +1631,11 @@ impl eframe::App for LauncherApp {
                         .corner_radius(egui::CornerRadius::same(6))
                         .min_size(egui::vec2(130.0, 32.0));
 
-                        if ui.add(log_btn).clicked() {
+                        let res = ui.add(log_btn);
+                        if res.hovered() {
+                            ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+                        }
+                        if res.clicked() {
                             let log_path = self.base_dir.join("gow3_log.txt");
                             self.log_content = std::fs::read_to_string(&log_path)
                                 .unwrap_or_else(|_| "Log file is empty or not created yet.".to_string());
@@ -1467,7 +1652,11 @@ impl eframe::App for LauncherApp {
                         .corner_radius(egui::CornerRadius::same(6))
                         .min_size(egui::vec2(130.0, 32.0));
 
-                        if ui.add(kill_btn).on_hover_text(self.t("kill_leftover_tooltip")).clicked() {
+                        let res = ui.add(kill_btn).on_hover_text(self.t("kill_leftover_tooltip"));
+                        if res.hovered() {
+                            ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+                        }
+                        if res.clicked() {
                             self.kill_leftover_processes();
                         }
                     });
@@ -1516,7 +1705,11 @@ impl eframe::App for LauncherApp {
                             .corner_radius(egui::CornerRadius::same(10))
                             .min_size(egui::vec2(190.0, 56.0));
 
-                            if ui.add(force_quit_btn).on_hover_text(self.t("force_quit_tooltip")).clicked() {
+                            let res = ui.add(force_quit_btn).on_hover_text(self.t("force_quit_tooltip"));
+                            if res.hovered() {
+                                ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+                            }
+                            if res.clicked() {
                                 self.force_quit_game();
                             }
                         });
@@ -1547,7 +1740,11 @@ impl eframe::App for LauncherApp {
                         .corner_radius(egui::CornerRadius::same(12))
                         .min_size(egui::vec2(380.0, 58.0));
 
-                        if ui.add(play_btn).clicked() {
+                        let res = ui.add(play_btn);
+                        if res.hovered() {
+                            ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+                        }
+                        if res.clicked() {
                             self.launch_game();
                         }
                         ui.add_space(3.0);
@@ -1809,7 +2006,11 @@ impl eframe::App for LauncherApp {
                     .corner_radius(egui::CornerRadius::same(8))
                     .min_size(egui::vec2(220.0, 42.0));
 
-                    if ui.add(save_btn).clicked() {
+                    let res = ui.add(save_btn);
+                    if res.hovered() {
+                        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+                    }
+                    if res.clicked() {
                         self.apply_all_optimizations();
                     }
 
@@ -1823,7 +2024,11 @@ impl eframe::App for LauncherApp {
                     .corner_radius(egui::CornerRadius::same(8))
                     .min_size(egui::vec2(140.0, 42.0));
 
-                    if ui.add(log_btn).clicked() {
+                    let res = ui.add(log_btn);
+                    if res.hovered() {
+                        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+                    }
+                    if res.clicked() {
                         let log_path = self.base_dir.join("gow3_log.txt");
                         self.log_content = std::fs::read_to_string(&log_path)
                             .unwrap_or_else(|_| "Log file is empty or not created yet.".to_string());
@@ -2136,6 +2341,7 @@ impl eframe::App for LauncherApp {
                             match apply_github_update(&self.base_dir, &info, &mut self.config) {
                                 Ok(success_msg) => {
                                     self.status_message = Some((success_msg, false));
+                                    self.has_new_update = false;
                                     self.update_modal = None;
                                 }
                                 Err(e) => {

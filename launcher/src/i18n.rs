@@ -47,7 +47,7 @@ pub fn text(lang: Language, key: &str) -> &'static str {
         // Turkish
         (Language::Turkish, "hero_badge") => "🔥 Açık Kaynaklı PC Başlatıcı",
         (Language::Turkish, "hero_desc") => "Windows, Linux ve Steam Deck üzerinde God of War III Remastered deneyimini kusursuzlaştırmak için tasarlandı.",
-        (Language::Turkish, "badge_v13") => "v1.3",
+        (Language::Turkish, "badge_v13") => "v1.4",
         (Language::Turkish, "badge_windows") => "Windows",
         (Language::Turkish, "badge_linux") => "Linux",
         (Language::Turkish, "badge_steam_deck") => "Steam Deck",
@@ -198,7 +198,7 @@ pub fn text(lang: Language, key: &str) -> &'static str {
         // English
         (Language::English, "hero_badge") => "🔥 Open Source PC Launcher",
         (Language::English, "hero_desc") => "Designed to perfect the God of War III Remastered experience across Windows, Linux, and Steam Deck.",
-        (Language::English, "badge_v13") => "v1.3",
+        (Language::English, "badge_v13") => "v1.4",
         (Language::English, "badge_windows") => "Windows",
         (Language::English, "badge_linux") => "Linux",
         (Language::English, "badge_steam_deck") => "Steam Deck",
@@ -349,7 +349,7 @@ pub fn text(lang: Language, key: &str) -> &'static str {
         // German
         (Language::German, "hero_badge") => "🔥 Open-Source-PC-Launcher",
         (Language::German, "hero_desc") => "Entwickelt zur Perfektionierung von God of War III Remastered auf Windows, Linux und Steam Deck.",
-        (Language::German, "badge_v13") => "v1.3",
+        (Language::German, "badge_v13") => "v1.4",
         (Language::German, "badge_windows") => "Windows",
         (Language::German, "badge_linux") => "Linux",
         (Language::German, "badge_steam_deck") => "Steam Deck",
@@ -500,7 +500,7 @@ pub fn text(lang: Language, key: &str) -> &'static str {
         // Spanish
         (Language::Spanish, "hero_badge") => "🔥 Lanzador de PC de Código Abierto",
         (Language::Spanish, "hero_desc") => "Diseñado para perfeccionar la experiencia de God of War III Remastered en Windows, Linux y Steam Deck.",
-        (Language::Spanish, "badge_v13") => "v1.3",
+        (Language::Spanish, "badge_v13") => "v1.4",
         (Language::Spanish, "badge_windows") => "Windows",
         (Language::Spanish, "badge_linux") => "Linux",
         (Language::Spanish, "badge_steam_deck") => "Steam Deck",

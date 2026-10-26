@@ -651,11 +651,15 @@ pub struct LauncherApp {
     icon_texture: Option<egui::TextureHandle>,
     win_texture: Option<egui::TextureHandle>,
     tux_texture: Option<egui::TextureHandle>,
+
+    // Dynamic Launcher Version
+    launcher_version: String,
 }
 
 impl LauncherApp {
     pub fn new(cc: &eframe::CreationContext<'_>, base_dir: PathBuf) -> Self {
         let mut config = LauncherConfig::load(&base_dir);
+        let launcher_version = crate::updater::detect_launcher_version(&base_dir, &config);
 
         // Ensure runtime assets are unpacked (.runtime/scripts and .runtime/patches)
         let _ = crate::runner::ensure_runtime_assets(&base_dir);
@@ -710,6 +714,7 @@ impl LauncherApp {
             icon_texture: None,
             win_texture: None,
             tux_texture: None,
+            launcher_version,
         };
 
         app.load_textures(&cc.egui_ctx);
@@ -881,8 +886,9 @@ impl LauncherApp {
         self.update_rx = Some(rx);
 
         let current_commit = self.config.last_git_commit.clone();
+        let current_ver = self.launcher_version.clone();
         thread::spawn(move || {
-            let res = check_github_update(&current_commit);
+            let res = check_github_update(&current_commit, &current_ver);
             let _ = tx.send(res);
         });
     }
@@ -897,8 +903,9 @@ impl LauncherApp {
         self.update_rx = Some(rx);
 
         let current_commit = self.config.last_git_commit.clone();
+        let current_ver = self.launcher_version.clone();
         thread::spawn(move || {
-            let res = check_github_update(&current_commit);
+            let res = check_github_update(&current_commit, &current_ver);
             let _ = tx.send(res);
         });
     }
@@ -1302,7 +1309,7 @@ impl eframe::App for LauncherApp {
 
                 // Feature Pill Badges Row (Centered symmetrically)
                 let pill_items: [(Option<&egui::TextureHandle>, String, bool, bool); 5] = [
-                    (None, format!("🏷️ {}", self.t("badge_v13")), true, self.has_new_update),
+                    (None, format!("🏷️ {}", self.launcher_version), true, self.has_new_update),
                     (self.win_texture.as_ref(), self.t("badge_windows").to_string(), false, false),
                     (self.tux_texture.as_ref(), self.t("badge_linux").to_string(), false, false),
                     (None, format!("🎮 {}", self.t("badge_steam_deck")), false, false),
@@ -2350,17 +2357,34 @@ impl eframe::App for LauncherApp {
                         .corner_radius(egui::CornerRadius::same(8))
                         .inner_margin(12.0)
                         .show(ui, |ui| {
+                            if let Some(ref tag) = info.version_tag {
+                                ui.horizontal(|ui| {
+                                    ui.label(
+                                        egui::RichText::new("🏷️ Sürüm:")
+                                            .color(egui::Color32::from_rgb(180, 180, 190))
+                                            .strong(),
+                                    );
+                                    ui.label(
+                                        egui::RichText::new(tag)
+                                            .color(egui::Color32::from_rgb(105, 225, 110))
+                                            .strong(),
+                                    );
+                                });
+                            }
+
                             let short_sha = if info.commit_sha.len() > 7 {
                                 &info.commit_sha[..7]
                             } else {
                                 &info.commit_sha
                             };
 
-                            ui.label(
-                                egui::RichText::new(format!("{} {}", self.t("latest_commit"), short_sha))
-                                    .color(egui::Color32::from_rgb(255, 215, 100))
-                                    .strong(),
-                            );
+                            if !short_sha.is_empty() {
+                                ui.label(
+                                    egui::RichText::new(format!("{} {}", self.t("latest_commit"), short_sha))
+                                        .color(egui::Color32::from_rgb(255, 215, 100))
+                                        .strong(),
+                                );
+                            }
                             ui.label(egui::RichText::new(&info.commit_message).italics());
 
                             if !info.commit_date.is_empty() {
@@ -2397,6 +2421,11 @@ impl eframe::App for LauncherApp {
                                 Ok(success_msg) => {
                                     self.status_message = Some((success_msg, false));
                                     self.has_new_update = false;
+                                    if let Some(ref tag) = info.version_tag {
+                                        self.launcher_version = tag.clone();
+                                    } else {
+                                        self.launcher_version = crate::updater::detect_launcher_version(&self.base_dir, &self.config);
+                                    }
                                     self.update_modal = None;
                                 }
                                 Err(e) => {

@@ -178,6 +178,8 @@ pub struct LauncherConfig {
     pub cached_hardware: CachedHardware,
     #[serde(default = "default_last_commit")]
     pub last_git_commit: String,
+    #[serde(default = "default_launcher_version")]
+    pub launcher_version: String,
 
     // Display settings
     #[serde(default)]
@@ -221,12 +223,16 @@ fn default_dmem() -> u64 {
 fn default_last_commit() -> String {
     "c5638d9956002b8a9f09a240028f6793ddf7b2f8".to_string()
 }
+fn default_launcher_version() -> String {
+    "v1.4".to_string()
+}
 
 impl Default for LauncherConfig {
     fn default() -> Self {
         Self {
             first_launch_done: false,
             language: default_language(),
+            launcher_version: default_launcher_version(),
             game_dir: String::new(),
             target_fps: default_target_fps(),
             patch_delta_time: true,

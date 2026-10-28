@@ -15,8 +15,7 @@ Launcher for God Of War 3 PC on Linux and Windows
                                                                                                                                                                                           
    ## 🌟 Key Features                                                                                                                                                                    
                                                                                                                                                                                           
-   - 🦀 **Native Rust GUI Launcher (`gow3-launcher`):** Built with `eframe`/`egui`. Ultra-fast, lightweight (~17 MB standalone), with a sleek game-art interface and no heavy            
-  dependencies.                                                                                                                                                                           
+   - 🦀 **Native Rust GUI Launcher (`gow3-launcher`):** Built with `eframe`/`egui`. Ultra-fast, lightweight, with a sleek game-art interface and no heavy dependencies.                                                                                                                                                                           
     - 🖥️ **Hardware Auto-Detection:** Automatically inspects GPU model, dedicated VRAM, system RAM, and display refresh rate (Hz) on launch.                                              
     - ⏱️ **144Hz / High-Hz Delta-Time Sync:** Eliminates the infamous 2x speed bug on 144Hz+ gaming displays by syncing engine delta-time with target framerates.                         
     - 🎨 **Texture Glitch Fix (Instant Readbacks):** Prevents snowy, bright, or reflection textures from corrupting into golden-yellow artifacts.                                         

@@ -32,7 +32,7 @@ Launcher for God Of War 3 PC on Linux and Windows
                                                                                                                                                                                           
    | Component | Minimum | Recommended |                                                                                                                                                 
    |---|---|---|                                                                                                                                                                         
-   | **OS** | Linux (Arch, Ubuntu, Fedora, SteamOS, Debian) and Windows 10-11 | Any modern 64-bit Linux distro |                                                                                         
+   | **OS** | Linux (Arch, Ubuntu, Fedora, SteamOS, Debian) and Windows 10-11 | Any modern 64-bit OS |                                                                                         
    | **CPU** | 6-core x86_64 processor | 8-core / 16-thread modern CPU |                                                                                                                 
    | **GPU** | Vulkan 1.3 compatible (4 GB VRAM) | Vulkan 1.3+ (6 GB+ VRAM, Nvidia / AMD) |                                                                                              
    | **RAM** | 8 GB | 16 GB+ |                                                                                                                                                           

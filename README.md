@@ -61,10 +61,9 @@ Launcher for God Of War 3 PC on Linux and Windows
    - 🐧 **On Linux**: `./gow3-launcher`
    - 🪟 **On Windows**: `gow3-launcher-win.exe`
 
-   **Option B: Download Pre-compiled Binaries (GitHub Releases)**
-   Download the executables directly from the GitHub Releases tab:
-   - **Linux**: `gow3-launcher`
-   - **Windows**: `gow3-launcher-win.exe`
+   **Option B: Download from release tab or website**
+   - Extract the downloaded file from the archive. Then, depending on your operating system, select and run the appropriate file ( “gow3-launcher1” for Linux or “gow3-launcher-win.exe” for Windows).
+   
 
    The launcher is completely standalone: it automatically detects your hardware, verifies the game dump, configures settings files, and applies all required patches without requiring external bash scripts.
 

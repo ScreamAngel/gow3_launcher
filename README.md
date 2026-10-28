@@ -66,10 +66,21 @@ Launcher for God Of War 3 PC on Linux and Windows
    
 
    The launcher is completely standalone: it automatically detects your hardware, verifies the game dump, configures settings files, and applies all required patches without requiring external bash scripts.
+   
 
-
+  ### Sections of the launcher
+  
+  **Home Screen**
    <img width="1906" height="1032" alt="image" src="https://github.com/user-attachments/assets/4904fce1-5608-4ac2-8349-601e4f22ecde" />
    <img width="1907" height="1027" alt="image" src="https://github.com/user-attachments/assets/f1c451db-a1f1-45ac-92a4-84a0a251eb47" />
+
+
+
+   **Keyboard Configuration**
+   <img width="1900" height="1026" alt="image" src="https://github.com/user-attachments/assets/e3ea4d25-b748-45b7-8775-83dbd5890b6a" />
+   <img width="1901" height="1028" alt="image" src="https://github.com/user-attachments/assets/c4d7e89f-da39-47bb-9c85-526d4f2a4e9b" />
+
+
 
                                                                                                                                                                                       
                                                                                                                                                                                           

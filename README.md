@@ -71,14 +71,14 @@ Launcher for God Of War 3 PC on Linux and Windows
   ### Sections of the launcher
   
   **Home Screen**
-   <img width="1906" height="1032" alt="image" src="https://github.com/user-attachments/assets/4904fce1-5608-4ac2-8349-601e4f22ecde" />
-   <img width="1907" height="1027" alt="image" src="https://github.com/user-attachments/assets/f1c451db-a1f1-45ac-92a4-84a0a251eb47" />
+   <img width="2384" height="1301" alt="image" src="https://github.com/user-attachments/assets/1e285415-92ce-48c4-a1b1-b8bcebde2cc5" />
+
 
 
 
    **Keyboard Configuration**
-   <img width="1900" height="1026" alt="image" src="https://github.com/user-attachments/assets/e3ea4d25-b748-45b7-8775-83dbd5890b6a" />
-   <img width="1901" height="1028" alt="image" src="https://github.com/user-attachments/assets/c4d7e89f-da39-47bb-9c85-526d4f2a4e9b" />
+   <img width="3183" height="1742" alt="image" src="https://github.com/user-attachments/assets/6785f030-0bbb-4d56-a541-e8d2bdbe4684" />
+
 
 
 

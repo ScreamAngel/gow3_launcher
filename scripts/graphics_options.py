@@ -11,9 +11,9 @@ import json
 from pathlib import Path
 
 RESOLUTIONS = ('native', '480p', '720p', '800p', '1440p', '1800p', '4K')
-ENGINE_FPS = (60, 120, 144, 240)
-DEFAULTS = {'render_resolution': 'native', 'engine_fps': '60', 'deferred_readback': '1',
-            'stale_readback': '1', 'async_shaders': '1'}
+ENGINE_FPS = (30, 40, 60, 90, 120, 144, 165, 240)
+DEFAULTS = {'render_resolution': 'native', 'engine_fps': '60', 'deferred_readback': '0',
+            'stale_readback': '0', 'async_shaders': '1'}
 RESOLUTION_PREFIX = 'Resolution Patch'
 FPS_PREFIX = 'Frame Rate Patch'
 TEXTURE_FIX = 'Bug Fix - Texture Corruption Fix'
@@ -96,12 +96,16 @@ def patch_names(names, options, texture_fix_available=True):
         names = [n for n in names if n != TEXTURE_FIX] + [f'{RESOLUTION_PREFIX} - {resolution}']
     elif texture_fix_available and TEXTURE_FIX not in names:
         names.insert(0, TEXTURE_FIX)
-    if options['engine_fps'] != '60':
-        names.append(f'{FPS_PREFIX} - {options["engine_fps"]} FPS')
+    fps = options.get('engine_fps', '60')
+    names.append(f'{FPS_PREFIX} - {fps} FPS')
     return names
 
 
 def environment(options):
-    return {'GOW3_DEFERRED_READBACK': options['deferred_readback'],
-            'GOW3_STALE_READBACK': options['stale_readback'],
-            'GOW3_ASYNC_SHADERS': options['async_shaders']}
+    return {'GOW3_DEFERRED_READBACK': options.get('deferred_readback', '0'),
+            'GOW3_STALE_READBACK': options.get('stale_readback', '0'),
+            'GOW3_ASYNC_SHADERS': options.get('async_shaders', '1'),
+            'GOW3_READBACKS': '1',
+            'GOW3_READBACK_LINEAR': '1',
+            'GOW3_FORCE_READBACK': '1',
+            'GOW3_FPS_LIMIT': options.get('engine_fps', '60')}

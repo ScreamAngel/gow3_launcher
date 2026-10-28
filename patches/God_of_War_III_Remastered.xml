@@ -17,6 +17,11 @@
             <Line Type="bytes" Address="0x007cd918" Value="00000090"/>
         </PatchList>
     </Metadata>
+    <Metadata Title="God of War III Remastered" Name="Bug Fix - Startup Black Screen" Note="Fixes the black screen at startup with the FPS counter running: the frame pacing index starts at 2 instead of 0, so the second frame no longer waits for a flip that only it can trigger." Author="SpartanPort" PatchVer="1.0" AppVer="01.02" AppElf="eboot.bin" isEnabled="true">
+        <PatchList>
+            <Line Type="bytes" Address="0x018ba600" Value="02000000"/>
+        </PatchList>
+    </Metadata>
     <Metadata Title="God of War III Remastered" Name="Resolution Patch - 480p" Note="Decreases game output resolution to 854x480 and increases Video Arena to 2.25 GiB. Requires setting DMEM to 2048 MB or more. Only leave one resolution patch enabled; do not enable it with Bug Fix - Texture Corruption Fix." Author="kvicken + cuesta4" PatchVer="1.1" AppVer="01.02" AppElf="eboot.bin" isEnabled="false">
         <PatchList>
             <Line Type="bytes" Address="0x005f0b3b" Value="56030000"/>
@@ -113,22 +118,60 @@
             <Line Type="bytes" Address="0x007cd918" Value="000000f0"/>
         </PatchList>
     </Metadata>
-    <Metadata Title="God of War III Remastered" Name="Frame Rate Patch - 120 FPS" Note="Raises the engine maximum framerate from 59.94 to 120 FPS so the frametime clamp produces a 1/120 second gameplay delta. Corrects swing energy calculations to match the original 60 Hz simulation. Requires setting VBlank to 120 FPS." Author="kvicken" PatchVer="1.1" AppVer="01.02" AppElf="eboot.bin" isEnabled="false">
+    <Metadata Title="God of War III Remastered" Name="Frame Rate Patch - 30 FPS" Note="Sets the engine maximum framerate to 30 FPS with correct 60 Hz swing energy simulation. Requires setting VBlank to 30 FPS." Author="gow3-launcher" PatchVer="1.2" AppVer="01.02" AppElf="eboot.bin" isEnabled="false">
         <PatchList>
-            <Line Type="bytes" Address="0x0048ff0a" Value="488d05a7c12600"/>
-            <Line Type="bytes" Address="0x0075dbc4" Value="0000f042"/>
+            <Line Type="bytes" Address="0x0048ff0a" Value="488d05e7c22600"/>
+            <Line Type="bytes" Address="0x0075dd00" Value="0000f041"/>
+            <Line Type="bytes" Address="0x0075dd04" Value="0000f041"/>
         </PatchList>
     </Metadata>
-    <Metadata Title="God of War III Remastered" Name="Frame Rate Patch - 144 FPS" Note="Raises the engine maximum framerate from 59.94 to 144 FPS so the frametime clamp produces a 1/144 second gameplay delta. Corrects swing energy calculations to match the original 60 Hz simulation. Requires setting VBlank to 144 FPS." Author="kvicken" PatchVer="1.1" AppVer="01.02" AppElf="eboot.bin" isEnabled="false">
+    <Metadata Title="God of War III Remastered" Name="Frame Rate Patch - 40 FPS" Note="Sets the engine maximum framerate to 40 FPS (ideal for Steam Deck 40 Hz) with correct 60 Hz swing energy simulation. Requires setting VBlank to 40 FPS." Author="gow3-launcher" PatchVer="1.2" AppVer="01.02" AppElf="eboot.bin" isEnabled="false">
         <PatchList>
-            <Line Type="bytes" Address="0x0048ff0a" Value="488d05a7c12600"/>
-            <Line Type="bytes" Address="0x0075dbc4" Value="00001043"/>
+            <Line Type="bytes" Address="0x0048ff0a" Value="488d05e7c22600"/>
+            <Line Type="bytes" Address="0x0075dd00" Value="00002042"/>
+            <Line Type="bytes" Address="0x0075dd04" Value="00002042"/>
         </PatchList>
     </Metadata>
-    <Metadata Title="God of War III Remastered" Name="Frame Rate Patch - 240 FPS" Note="The 120 FPS patch with the engine maximum framerate at 240 FPS (frametime clamp of 1/240 second), adapted by Felipe Prado. Same swing energy correction. Requires setting VBlank to 240 FPS." Author="kvicken, gow3_pc" PatchVer="1.0" AppVer="01.02" AppElf="eboot.bin" isEnabled="false">
+    <Metadata Title="God of War III Remastered" Name="Frame Rate Patch - 60 FPS" Note="Sets the engine maximum framerate to 60 FPS with correct 60 Hz swing energy simulation. Requires setting VBlank to 60 FPS." Author="gow3-launcher" PatchVer="1.2" AppVer="01.02" AppElf="eboot.bin" isEnabled="false">
         <PatchList>
-            <Line Type="bytes" Address="0x0048ff0a" Value="488d05a7c12600"/>
-            <Line Type="bytes" Address="0x0075dbc4" Value="00007043"/>
+            <Line Type="bytes" Address="0x0048ff0a" Value="488d05e7c22600"/>
+            <Line Type="bytes" Address="0x0075dd00" Value="00007042"/>
+            <Line Type="bytes" Address="0x0075dd04" Value="00007042"/>
+        </PatchList>
+    </Metadata>
+    <Metadata Title="God of War III Remastered" Name="Frame Rate Patch - 90 FPS" Note="Sets the engine maximum framerate to 90 FPS (ideal for Steam Deck OLED 90 Hz) with correct 60 Hz swing energy simulation. Requires setting VBlank to 90 FPS." Author="gow3-launcher" PatchVer="1.2" AppVer="01.02" AppElf="eboot.bin" isEnabled="false">
+        <PatchList>
+            <Line Type="bytes" Address="0x0048ff0a" Value="488d05e7c22600"/>
+            <Line Type="bytes" Address="0x0075dd00" Value="0000b442"/>
+            <Line Type="bytes" Address="0x0075dd04" Value="0000b442"/>
+        </PatchList>
+    </Metadata>
+    <Metadata Title="God of War III Remastered" Name="Frame Rate Patch - 120 FPS" Note="Raises the engine maximum framerate from 59.94 to 120 FPS. Corrects swing energy calculations to match original 60 Hz simulation so game speed and physics stay normal. Requires setting VBlank to 120 FPS." Author="kvicken, gow3-launcher" PatchVer="1.2" AppVer="01.02" AppElf="eboot.bin" isEnabled="false">
+        <PatchList>
+            <Line Type="bytes" Address="0x0048ff0a" Value="488d05e7c22600"/>
+            <Line Type="bytes" Address="0x0075dd00" Value="0000f042"/>
+            <Line Type="bytes" Address="0x0075dd04" Value="0000f042"/>
+        </PatchList>
+    </Metadata>
+    <Metadata Title="God of War III Remastered" Name="Frame Rate Patch - 144 FPS" Note="Raises the engine maximum framerate from 59.94 to 144 FPS. Corrects swing energy calculations to match original 60 Hz simulation. Requires setting VBlank to 144 FPS." Author="kvicken, gow3-launcher" PatchVer="1.2" AppVer="01.02" AppElf="eboot.bin" isEnabled="false">
+        <PatchList>
+            <Line Type="bytes" Address="0x0048ff0a" Value="488d05e7c22600"/>
+            <Line Type="bytes" Address="0x0075dd00" Value="00001043"/>
+            <Line Type="bytes" Address="0x0075dd04" Value="00001043"/>
+        </PatchList>
+    </Metadata>
+    <Metadata Title="God of War III Remastered" Name="Frame Rate Patch - 165 FPS" Note="Raises the engine maximum framerate from 59.94 to 165 FPS. Corrects swing energy calculations to match original 60 Hz simulation. Requires setting VBlank to 165 FPS." Author="gow3-launcher" PatchVer="1.2" AppVer="01.02" AppElf="eboot.bin" isEnabled="false">
+        <PatchList>
+            <Line Type="bytes" Address="0x0048ff0a" Value="488d05e7c22600"/>
+            <Line Type="bytes" Address="0x0075dd00" Value="00002543"/>
+            <Line Type="bytes" Address="0x0075dd04" Value="00002543"/>
+        </PatchList>
+    </Metadata>
+    <Metadata Title="God of War III Remastered" Name="Frame Rate Patch - 240 FPS" Note="The 120 FPS patch with the engine maximum framerate at 240 FPS, with swing energy correction. Requires setting VBlank to 240 FPS." Author="kvicken, Felipe Prado, gow3-launcher" PatchVer="1.2" AppVer="01.02" AppElf="eboot.bin" isEnabled="false">
+        <PatchList>
+            <Line Type="bytes" Address="0x0048ff0a" Value="488d05e7c22600"/>
+            <Line Type="bytes" Address="0x0075dd00" Value="00007043"/>
+            <Line Type="bytes" Address="0x0075dd04" Value="00007043"/>
         </PatchList>
     </Metadata>
     <Metadata Title="God of War III Remastered" Name="Skip Any Video With X Button" Note="Allows manual skipping of cinematics any cinematic with the X button. Thanks to illusion0001 aka illusionyy for the PS3 patch which made this very easy." Author="cuesta4" PatchVer="1.0" AppVer="01.02" AppElf="eboot.bin" isEnabled="true">

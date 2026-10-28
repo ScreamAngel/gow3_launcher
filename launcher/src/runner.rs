@@ -694,10 +694,11 @@ pub fn launch_gow3(
     if config.patch_readbacks {
         patch_list.push("Bug Fix - Texture Corruption Fix".to_string());
     }
+    patch_list.push("Bug Fix - Startup Black Screen".to_string());
     if config.skip_cinematics {
         patch_list.push("Skip Any Video With X Button".to_string());
     }
-    if config.target_fps != 60 && config.patch_delta_time {
+    if config.patch_delta_time {
         patch_list.push(format!("Frame Rate Patch - {} FPS", config.target_fps));
     }
     let patches_str = patch_list.join(";");
@@ -760,6 +761,18 @@ pub fn launch_gow3(
     cmd.env("GOW3_READBACKS", if config.patch_readbacks { "1" } else { "0" });
     cmd.env("GOW3_READBACK_LINEAR", if config.patch_readbacks { "1" } else { "0" });
     cmd.env("GOW3_FORCE_READBACK", if config.patch_readbacks { "1" } else { "0" });
+    cmd.env("GOW3_DEFERRED_READBACK", "0");
+    cmd.env("GOW3_STALE_READBACK", "0");
+    cmd.env("GOW3_INTERP_INT_FIX", "1");
+    cmd.env("GOW3_DIRECT_MEMORY_ACCESS", "1");
+    cmd.env("GOW3_PIPELINE_CACHE", "1");
+    cmd.env("GOW3_PARALLEL_WARMUP", "1");
+    cmd.env("GOW3_BACKGROUND_WARMUP", "1");
+    cmd.env("GOW3_VK_RECORD_THREAD", "1");
+    cmd.env("GOW3_PRESENT_THREAD", "1");
+    cmd.env("GOW3_ASYNC_FENCES", "1");
+    cmd.env("GOW3_ASYNC_SHADERS", "1");
+    cmd.env("GOW3_FPS_LIMIT", config.target_fps.to_string());
     cmd.env("GOW3_GC_BUDGET_MB", config.vram_gc_budget_mb.to_string());
     cmd.env("GOW3_DMEM_POOL_MB", config.dmem_mb.to_string());
     cmd.env("GOW3_DMEM_MB", config.dmem_mb.to_string());

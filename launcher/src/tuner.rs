@@ -67,14 +67,15 @@ fn update_run_sh(base_dir: &Path, config: &LauncherConfig) -> Result<(), String>
 
     let mut content = fs::read_to_string(&run_sh).map_err(|e| e.to_string())?;
 
-    let patches_str = if config.target_fps != 60 {
-        format!(
-            "Bug Fix - Texture Corruption Fix;Skip Any Video With X Button;Frame Rate Patch - {} FPS",
-            config.target_fps
-        )
-    } else {
-        "Bug Fix - Texture Corruption Fix;Skip Any Video With X Button".to_string()
-    };
+    let mut patches = vec![
+        "Bug Fix - Texture Corruption Fix".to_string(),
+        "Bug Fix - Startup Black Screen".to_string(),
+        "Skip Any Video With X Button".to_string(),
+    ];
+    if config.patch_delta_time {
+        patches.push(format!("Frame Rate Patch - {} FPS", config.target_fps));
+    }
+    let patches_str = patches.join(";");
 
     replace_or_insert_env(&mut content, "GOW3_GC_BUDGET_MB", &config.vram_gc_budget_mb.to_string());
     replace_or_insert_env(&mut content, "GOW3_DMEM_POOL_MB", &config.dmem_mb.to_string());
@@ -82,6 +83,18 @@ fn update_run_sh(base_dir: &Path, config: &LauncherConfig) -> Result<(), String>
     replace_or_insert_env(&mut content, "GOW3_FORCE_READBACK", if config.patch_readbacks { "1" } else { "0" });
     replace_or_insert_env(&mut content, "GOW3_READBACKS", if config.patch_readbacks { "1" } else { "0" });
     replace_or_insert_env(&mut content, "GOW3_READBACK_LINEAR", if config.patch_readbacks { "1" } else { "0" });
+    replace_or_insert_env(&mut content, "GOW3_DEFERRED_READBACK", "0");
+    replace_or_insert_env(&mut content, "GOW3_STALE_READBACK", "0");
+    replace_or_insert_env(&mut content, "GOW3_INTERP_INT_FIX", "1");
+    replace_or_insert_env(&mut content, "GOW3_DIRECT_MEMORY_ACCESS", "1");
+    replace_or_insert_env(&mut content, "GOW3_PIPELINE_CACHE", "1");
+    replace_or_insert_env(&mut content, "GOW3_PARALLEL_WARMUP", "1");
+    replace_or_insert_env(&mut content, "GOW3_BACKGROUND_WARMUP", "1");
+    replace_or_insert_env(&mut content, "GOW3_VK_RECORD_THREAD", "1");
+    replace_or_insert_env(&mut content, "GOW3_PRESENT_THREAD", "1");
+    replace_or_insert_env(&mut content, "GOW3_ASYNC_FENCES", "1");
+    replace_or_insert_env(&mut content, "GOW3_ASYNC_SHADERS", "1");
+    replace_or_insert_env(&mut content, "GOW3_FPS_LIMIT", &config.target_fps.to_string());
     replace_or_insert_env(&mut content, "GOW3_FULL_BARRIERS", "1");
     replace_or_insert_env(&mut content, "GOW3_FORCE_PATCHES", "1");
     replace_or_insert_env(&mut content, "GOW3_PREBUILT", "1");
@@ -158,7 +171,9 @@ fn update_gow3_ini(base_dir: &Path, config: &LauncherConfig) -> Result<(), Strin
     let readbacks_val = if config.patch_readbacks { "true" } else { "false" };
     replace_ini_key(&mut content, "readbacks", readbacks_val);
     replace_ini_key(&mut content, "readbackLinearImages", readbacks_val);
+    replace_ini_key(&mut content, "deferred_readback", "0");
     replace_ini_key(&mut content, "stale_readback", "0");
+    replace_ini_key(&mut content, "async_shaders", "1");
     replace_ini_key(&mut content, "budget", &config.vram_gc_budget_mb.to_string());
     replace_ini_key(&mut content, "engine_fps", &config.target_fps.to_string());
     replace_ini_key(&mut content, "fps_limit", &config.target_fps.to_string());
@@ -271,6 +286,44 @@ fn update_user_config_toml(base_dir: &Path, config: &LauncherConfig) -> Result<(
         "GPU",
         "FullscreenMode",
         &format!("\"{}\"", fullscreen_mode_str),
+    );
+    update_toml_key_in_section(
+        &mut content,
+        "GPU",
+        "vblankFrequency",
+        &config.target_fps.to_string(),
+    );
+    update_toml_key_in_section(
+        &mut content,
+        "GPU",
+        "directMemoryAccess",
+        "true",
+    );
+    update_toml_key_in_section(
+        &mut content,
+        "GPU",
+        "readbacks",
+        if config.patch_readbacks { "true" } else { "false" },
+    );
+    update_toml_key_in_section(
+        &mut content,
+        "GPU",
+        "readbackLinearImages",
+        if config.patch_readbacks { "true" } else { "false" },
+    );
+
+    // Update Vulkan settings
+    update_toml_key_in_section(
+        &mut content,
+        "Vulkan",
+        "pipelineCacheEnable",
+        "true",
+    );
+    update_toml_key_in_section(
+        &mut content,
+        "Vulkan",
+        "pipelineCacheArchive",
+        "true",
     );
 
     // Update Input settings

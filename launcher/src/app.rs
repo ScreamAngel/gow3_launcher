@@ -1615,19 +1615,28 @@ impl eframe::App for LauncherApp {
                         }
                         ui.add_space(8.0);
                         ui.label(target_fps_label);
-                        let current_text = if self.config.target_fps == 60 {
-                            "60 FPS (Orijinal Hız - Önerilen)".to_string()
-                        } else {
-                            format!("{} FPS (Deneysel)", self.config.target_fps)
+                        let current_text = match self.config.target_fps {
+                            30 => "30 FPS (Pil Tasarrufu & Düşük Güç)".to_string(),
+                            40 => "40 FPS (Steam Deck 40Hz İdeal)".to_string(),
+                            60 => "60 FPS (Varsayılan - Akıcı & Kararlı)".to_string(),
+                            90 => "90 FPS (Steam Deck OLED 90Hz)".to_string(),
+                            120 => "120 FPS (120Hz Ultra Akıcı - 60Hz Fizik)".to_string(),
+                            144 => "144 FPS (144Hz Ultra Akıcı - 60Hz Fizik)".to_string(),
+                            165 => "165 FPS (165Hz Ultra Akıcı - 60Hz Fizik)".to_string(),
+                            240 => "240 FPS (240Hz Maksimum - 60Hz Fizik)".to_string(),
+                            other => format!("{} FPS", other),
                         };
                         egui::ComboBox::from_id_salt("hz_combo")
                             .selected_text(current_text)
                             .show_ui(ui, |ui| {
-                                ui.selectable_value(&mut self.config.target_fps, 60, "60 FPS (Orijinal Hız - Kararlı & Önerilen)");
-                                ui.selectable_value(&mut self.config.target_fps, 120, "120 FPS (Deneysel Yüksek Hız)");
-                                ui.selectable_value(&mut self.config.target_fps, 144, "144 FPS (Deneysel Yüksek Hız)");
-                                ui.selectable_value(&mut self.config.target_fps, 165, "165 FPS (Deneysel Yüksek Hız)");
-                                ui.selectable_value(&mut self.config.target_fps, 240, "240 FPS (Deneysel Yüksek Hız)");
+                                ui.selectable_value(&mut self.config.target_fps, 30, "30 FPS (Pil Tasarrufu & Düşük Güç)");
+                                ui.selectable_value(&mut self.config.target_fps, 40, "40 FPS (Steam Deck 40Hz İdeal)");
+                                ui.selectable_value(&mut self.config.target_fps, 60, "60 FPS (Varsayılan - Akıcı & Kararlı)");
+                                ui.selectable_value(&mut self.config.target_fps, 90, "90 FPS (Steam Deck OLED 90Hz)");
+                                ui.selectable_value(&mut self.config.target_fps, 120, "120 FPS (120Hz Ultra Akıcı - 60Hz Fizik Korumalı)");
+                                ui.selectable_value(&mut self.config.target_fps, 144, "144 FPS (144Hz Ultra Akıcı - 60Hz Fizik Korumalı)");
+                                ui.selectable_value(&mut self.config.target_fps, 165, "165 FPS (165Hz Ultra Akıcı - 60Hz Fizik Korumalı)");
+                                ui.selectable_value(&mut self.config.target_fps, 240, "240 FPS (240Hz Maksimum - 60Hz Fizik Korumalı)");
                             });
                     });
                     ui.label(egui::RichText::new(hz_desc).color(egui::Color32::LIGHT_GRAY).size(11.0));

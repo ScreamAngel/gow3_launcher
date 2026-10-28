@@ -198,10 +198,7 @@ def update_run_sh(settings):
     dmem = settings["dmem_mb"]
 
     # Target patches string
-    if target_hz != 60:
-        patches_str = f"Bug Fix - Texture Corruption Fix;Skip Any Video With X Button;Frame Rate Patch - {target_hz} FPS"
-    else:
-        patches_str = "Bug Fix - Texture Corruption Fix;Skip Any Video With X Button"
+    patches_str = f"Bug Fix - Texture Corruption Fix;Bug Fix - Startup Black Screen;Skip Any Video With X Button;Frame Rate Patch - {target_hz} FPS"
 
     # Update or add GOW3_GC_BUDGET_MB near the top
     if re.search(r"^export GOW3_GC_BUDGET_MB=.*$", content, re.M):
@@ -291,6 +288,9 @@ def update_user_config_toml(settings):
     content = re.sub(r"^readbacks\s*=\s*\w+", "readbacks = true", content, flags=re.M)
     content = re.sub(r"^readbackLinearImages\s*=\s*\w+", "readbackLinearImages = true", content, flags=re.M)
     content = re.sub(r"^copyGPUBuffers\s*=\s*\w+", "copyGPUBuffers = true", content, flags=re.M)
+    content = re.sub(r"^directMemoryAccess\s*=\s*\w+", "directMemoryAccess = true", content, flags=re.M)
+    content = re.sub(r"^pipelineCacheEnable\s*=\s*\w+", "pipelineCacheEnable = true", content, flags=re.M)
+    content = re.sub(r"^pipelineCacheArchive\s*=\s*\w+", "pipelineCacheArchive = true", content, flags=re.M)
 
     toml_path.write_text(content, encoding="utf-8")
 

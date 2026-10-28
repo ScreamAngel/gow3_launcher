@@ -24,7 +24,7 @@ Launcher for God Of War 3 PC on Linux and Windows
     - 🔍 **Smart Game Scanner & Completeness Check:** Scans drives to locate `eboot.bin` dumps, validates file integrity (`param.sfo`, elf size), and prevents launching corrupted        
   directories.                                                                                                                                                                            
     - 🚨 **Crash & Error Diagnostic Assistant:** Automatically analyzes `gow3_log.txt` on exit. If an unexpected crash occurs, it displays a plain-language diagnosis and recommended fix.
-    - 🔄 **GitHub Upstream Sync & Auto-Updater:** Checks upstream ([R-V-L/gow3_pc](https://github.com/R-V-L/gow3_pc)) for updates and re-applies all your custom directory paths, 144Hz patches, and VRAM budgets seamlessly.                                                                                                                
+    - 🔄 **GitHub Upstream Sync & Auto-Updater:** Checks for updates in Upstream ([ScreamAngel/gow3_launcher](https://github.com/ScreamAngel/gow3_launcher)) and updates the launcher to the latest version.                                                                                                                
    - 🌐 **Multi-Language Support:** Available in **Turkish 🇹🇷**, **English 🇬🇧**, **German 🇩🇪**, and **Spanish 🇪🇸**.                                                                     
 
                                                                                                                                                                                        
@@ -112,6 +112,8 @@ Launcher for God Of War 3 PC on Linux and Windows
      Ensure **"Refresh Rate (Hz) Sync Patch"** is enabled and your target FPS matches your display.
    - **Game crashes during heavy combat or asset streaming?**  
      Check if your GPU has at least 6GB VRAM. You can adjust the VRAM Garbage Collection Budget directly in the launcher.
+   - **Does the Launcher have a keyboard configuration?**
+     On the “Configuration & Controls” tab, you can assign any button to a function of your choice. DualShock 4 support is available.
                                                                                                                                                                                           
                                                                                                                                                                                        
                                                                                                                                                                                           
@@ -127,6 +129,7 @@ Launcher for God Of War 3 PC on Linux and Windows
    5. **Feral GameMode:** Tek tıkla `gamemoderun` performans modu desteği.
    6. **Akıllı Hata Teşhisi:** Oyun kapanırsa log dosyasını analiz edip hatanın sebebini ve çözümünü arayüzde bildirir.
    7. **Steam / Steam Deck Desteği:** `--play` parametresi ile arayüze girmeden doğrudan oyunu başlatabilme.
+   8. **Klavye Konfigürasyonu:** "Yapılandırma & Kontroller" sekmesinden tüm tuşlara klavyeden bir tuş atayabilirsiniz. Ayrıca Dualshock 4 desteği mevcuttur.
   
    
   

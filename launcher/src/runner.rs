@@ -583,11 +583,17 @@ pub fn launch_gow3(
     let python = ensure_python(base_dir)?;
 
     // 1. Run mods.py
+    let mods_dir = base_dir.join("mods");
+    if !mods_dir.exists() {
+        let _ = std::fs::create_dir_all(&mods_dir);
+    }
     let _ = Command::new(&python)
         .arg(scripts_path.join("mods.py"))
         .arg(game_dir)
         .arg("--out")
         .arg(&out_dir)
+        .arg("--mods-dir")
+        .arg(&mods_dir)
         .arg("--enabled")
         .arg("1")
         .env("PYTHONPATH", &scripts_path)
@@ -761,6 +767,37 @@ pub fn launch_gow3(
     // Set base launch environment variables
     for (k, v) in launch_env_vars {
         cmd.env(k, v);
+    }
+
+    // Vulkan Layer Crash Prevention:
+    // If third-party broken layers (such as lsfg-vk when missing its shader DLL) are registered as
+    // implicit Vulkan layers on the system, vkCreateSwapchainKHR will crash with ErrorInitializationFailed.
+    // By default, prevent lsfg from hooking and crashing GOW3 unless explicitly overridden.
+    if std::env::var("VK_LOADER_LAYERS_DISABLE").is_err() {
+        cmd.env("VK_LOADER_LAYERS_DISABLE", "*lsfg*");
+    }
+
+    // Hybrid GPU (PRIME Offload) Automatic Handling on Linux:
+    // When running on dual GPU laptops (Intel iGPU + NVIDIA or AMD 2GB VRAM), Linux defaults to the
+    // integrated GPU (which on older laptops like Haswell lacks modern Vulkan features and fails).
+    // Automatically route rendering to the discrete GPU if detected and not overridden.
+    #[cfg(target_os = "linux")]
+    {
+        if crate::system::detect_has_discrete_nvidia() {
+            if std::env::var("__NV_PRIME_RENDER_OFFLOAD").is_err() {
+                cmd.env("__NV_PRIME_RENDER_OFFLOAD", "1");
+            }
+            if std::env::var("__GLX_VENDOR_LIBRARY_NAME").is_err() {
+                cmd.env("__GLX_VENDOR_LIBRARY_NAME", "nvidia");
+            }
+            if std::env::var("__VK_LAYER_NV_optimus").is_err() {
+                cmd.env("__VK_LAYER_NV_optimus", "NVIDIA_only");
+            }
+        } else if crate::system::detect_has_discrete_amd() {
+            if std::env::var("DRI_PRIME").is_err() {
+                cmd.env("DRI_PRIME", "1");
+            }
+        }
     }
 
     // Apply launcher optimization overrides

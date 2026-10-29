@@ -77,6 +77,47 @@ fn detect_gpu() -> (String, u64) {
 }
 
 #[cfg(not(target_os = "windows"))]
+pub fn detect_has_discrete_nvidia() -> bool {
+    if let Ok(output) = Command::new("lspci").output() {
+        if output.status.success() {
+            let text = String::from_utf8_lossy(&output.stdout);
+            for line in text.lines() {
+                if (line.contains("VGA compatible controller") || line.contains("3D controller"))
+                    && line.to_lowercase().contains("nvidia")
+                {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn detect_has_discrete_amd() -> bool {
+    if let Ok(output) = Command::new("lspci").output() {
+        if output.status.success() {
+            let text = String::from_utf8_lossy(&output.stdout);
+            let mut has_intel = false;
+            let mut has_amd = false;
+            for line in text.lines() {
+                if line.contains("VGA compatible controller") || line.contains("3D controller") {
+                    let lower = line.to_lowercase();
+                    if lower.contains("intel") {
+                        has_intel = true;
+                    }
+                    if lower.contains("amd") || lower.contains("advanced micro devices") || lower.contains("ati") {
+                        has_amd = true;
+                    }
+                }
+            }
+            return has_intel && has_amd;
+        }
+    }
+    false
+}
+
+#[cfg(not(target_os = "windows"))]
 fn glob_vram() -> Result<Option<(String, u64)>, std::io::Error> {
     for card_idx in 0..8 {
         let path = format!("/sys/class/drm/card{}/device/mem_info_vram_total", card_idx);
@@ -292,4 +333,16 @@ fn detect_refresh_rate() -> u32 {
         }
     }
     60
+}
+
+#[cfg(target_os = "windows")]
+#[allow(dead_code)]
+pub fn detect_has_discrete_nvidia() -> bool {
+    false
+}
+
+#[cfg(target_os = "windows")]
+#[allow(dead_code)]
+pub fn detect_has_discrete_amd() -> bool {
+    false
 }

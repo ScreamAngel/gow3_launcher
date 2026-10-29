@@ -21,7 +21,37 @@ pub fn analyze_post_game(base_dir: &Path, exit_code: Option<i32>) -> Option<Cras
     let tail_lines: Vec<&str> = log_content.lines().rev().take(100).collect();
     let tail_str = tail_lines.iter().rev().cloned().collect::<Vec<&str>>().join("\n");
 
-    // 1. Check for Out of Memory
+    // 1. Check for Broken Vulkan Layers (lsfg-vk / Lossless Scaling)
+    if tail_str.contains("lsfg-vk") && (tail_str.contains("shader DLL does not exist") || tail_str.contains("Failed to create swapchain") || tail_str.contains("ErrorInitializationFailed")) {
+        return Some(CrashDiagnosis {
+            title: "💥 Hatalı Vulkan Katmanı Algılandı (lsfg-vk / Lossless Scaling)".to_string(),
+            description: "Sisteminizde kurulu harici 'lsfg-vk' Vulkan katmanı, Lossless Scaling shader DLL dosyasını bulamadığı için ekran penceresini (swapchain) kilitledi ve oyunu çökertti.".to_string(),
+            recommendation: "Launcher bu hatalı lsfg-vk katmanını otomatik engeller. Manuel olarak 'VK_LOADER_LAYERS_DISABLE=\"*lsfg*\"' ortam değişkenini kullanabilir veya '~/.config/lsfg-vk/conf.toml' içindeki Lossless.dll dosya yolunu düzeltebilirsiniz.".to_string(),
+            log_snippet: extract_relevant_snippet(&tail_str, "lsfg-vk"),
+        });
+    }
+
+    // 2. Check for Incomplete Haswell/Intel iGPU on hybrid laptops
+    if tail_str.contains("Haswell Vulkan support is incomplete") || (tail_str.contains("MESA-INTEL") && tail_str.contains("DepthStencilAttachment")) {
+        return Some(CrashDiagnosis {
+            title: "⚠️ Uyumsuz Dahili Intel GPU (Haswell / Eski iGPU)".to_string(),
+            description: "Oyun, modern Vulkan özelliklerini desteklemeyen eski Intel Haswell dahili ekran kartında çalıştırılmış. Harici 2GB ekran kartınız (NVIDIA/AMD) devreye girmemiş.".to_string(),
+            recommendation: "Launcher harici GPU'yu otomatik seçmeye çalışır. Manuel başlatmak için NVIDIA'da 'prime-run ./gow3-launcher' veya '__NV_PRIME_RENDER_OFFLOAD=1 __GLX_VENDOR_LIBRARY_NAME=nvidia ./gow3-launcher', AMD'de 'DRI_PRIME=1 ./gow3-launcher' komutunu kullanın.".to_string(),
+            log_snippet: extract_relevant_snippet(&tail_str, "Haswell"),
+        });
+    }
+
+    // 3. Check for Swapchain Creation Failure
+    if tail_str.contains("Failed to create swapchain") || tail_str.contains("vk_swapchain.cpp") {
+        return Some(CrashDiagnosis {
+            title: "💥 Vulkan Swapchain (Görüntü Çıkışı) Başlatılamadı".to_string(),
+            description: "Grafik kartı sürücüsü veya araya giren harici bir Vulkan katmanı oyunun pencere/ekran yüzeyini oluşturmasını engelledi.".to_string(),
+            recommendation: "Harici Vulkan katmanlarını kapatın, GPU sürücülerinizi güncelleyin ve tam ekran modunu pencereli moda alarak tekrar deneyin.".to_string(),
+            log_snippet: extract_relevant_snippet(&tail_str, "swapchain"),
+        });
+    }
+
+    // 4. Check for Out of Memory
     if tail_str.contains("VK_ERROR_OUT_OF_DEVICE_MEMORY") || tail_str.contains("Out of memory") || tail_str.contains("dmem out of memory") {
         return Some(CrashDiagnosis {
             title: "💥 Bellek / VRAM Yetersizliği Algılandı".to_string(),

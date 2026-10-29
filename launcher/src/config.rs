@@ -261,7 +261,7 @@ fn default_last_commit() -> String {
     "c5638d9956002b8a9f09a240028f6793ddf7b2f8".to_string()
 }
 fn default_launcher_version() -> String {
-    concat!("v", env!("CARGO_PKG_VERSION")).to_string()
+    "v1.6.1.1".to_string()
 }
 fn default_render_resolution() -> String {
     "native".to_string()
@@ -362,6 +362,27 @@ impl LauncherConfig {
             self.graphic_preset = GraphicPreset::Ultra;
         } else {
             self.graphic_preset = GraphicPreset::Custom;
+        }
+    }
+
+    pub fn get_resolution_dimensions(&self) -> (u32, u32) {
+        match self.render_resolution.as_str() {
+            "480p" => (854, 480),
+            "720p" => (1280, 720),
+            "800p" => (1280, 800),
+            "1080p" => (1920, 1080),
+            "1440p" => (2560, 1440),
+            "4K" | "2160p" => (3840, 2160),
+            _ => (1920, 1080),
+        }
+    }
+
+    pub fn get_render_res_env_value(&self) -> String {
+        if self.render_resolution == "native" {
+            "native".to_string()
+        } else {
+            let (w, h) = self.get_resolution_dimensions();
+            format!("{}x{}", w, h)
         }
     }
     pub fn config_path(base_dir: &Path) -> PathBuf {

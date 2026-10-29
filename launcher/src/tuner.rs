@@ -68,11 +68,7 @@ fn update_run_sh(base_dir: &Path, config: &LauncherConfig) -> Result<(), String>
     let mut content = fs::read_to_string(&run_sh).map_err(|e| e.to_string())?;
 
     let mut patches = Vec::new();
-    if config.render_resolution != "native" {
-        patches.push(format!("Resolution Patch - {}", config.render_resolution));
-    } else if config.patch_readbacks {
-        patches.push("Bug Fix - Texture Corruption Fix".to_string());
-    }
+    patches.push("Bug Fix - Texture Corruption Fix".to_string());
     patches.push("Bug Fix - Startup Black Screen".to_string());
     patches.push("Skip Any Video With X Button".to_string());
     if config.patch_delta_time {
@@ -86,7 +82,11 @@ fn update_run_sh(base_dir: &Path, config: &LauncherConfig) -> Result<(), String>
     }
     let patches_str = patches.join(";");
 
-    replace_or_insert_env(&mut content, "GOW3_RENDER_RES", &config.render_resolution);
+    let res_env = config.get_render_res_env_value();
+    let (internal_w, internal_h) = config.get_resolution_dimensions();
+    replace_or_insert_env(&mut content, "GOW3_RENDER_RES", &res_env);
+    replace_or_insert_env(&mut content, "GOW3_INTERNAL_WIDTH", &internal_w.to_string());
+    replace_or_insert_env(&mut content, "GOW3_INTERNAL_HEIGHT", &internal_h.to_string());
     replace_or_insert_env(&mut content, "GOW3_FSR1", if config.fsr_enabled { "1" } else { "0" });
     replace_or_insert_env(&mut content, "GOW3_RCAS", if config.fsr_enabled { "1" } else { "0" });
     replace_or_insert_env(&mut content, "GOW3_GC_BUDGET_MB", &config.vram_gc_budget_mb.to_string());
@@ -186,7 +186,10 @@ fn update_gow3_ini(base_dir: &Path, config: &LauncherConfig) -> Result<(), Strin
     replace_ini_key(&mut content, "deferred_readback", "0");
     replace_ini_key(&mut content, "stale_readback", "0");
     replace_ini_key(&mut content, "async_shaders", "1");
+    let (internal_w, internal_h) = config.get_resolution_dimensions();
     replace_ini_key(&mut content, "render_resolution", &config.render_resolution);
+    replace_ini_key(&mut content, "internal_width", &internal_w.to_string());
+    replace_ini_key(&mut content, "internal_height", &internal_h.to_string());
     replace_ini_key(&mut content, "fsr1", if config.fsr_enabled { "1" } else { "0" });
     replace_ini_key(&mut content, "rcas", if config.fsr_enabled { "1" } else { "0" });
     replace_ini_key(&mut content, "rcas_strength", "250");

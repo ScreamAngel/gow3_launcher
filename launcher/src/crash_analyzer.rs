@@ -31,6 +31,16 @@ pub fn analyze_post_game(base_dir: &Path, exit_code: Option<i32>) -> Option<Cras
         });
     }
 
+    // 2. Check for Incompatible XML Resolution Patch Segfault (0x1f0b3a)
+    if tail_str.contains("0x1f0b3a") || tail_str.contains("0x2000003") {
+        return Some(CrashDiagnosis {
+            title: "💥 Uyumsuz EBOOT Çözünürlük Yaması Algılandı".to_string(),
+            description: "Oyunun eski XML tabanlı çözünürlük yaması eboot ikili kodunu bozduğu için motor başlatılırken çöktü.".to_string(),
+            recommendation: "Launcher'ın yeni sürümü çözünürlük ölçeklemeyi GPU kütüphanesi (FSR 1.0) üzerinden donanımsal yapar. Launcher'ı güncelleyin.".to_string(),
+            log_snippet: extract_relevant_snippet(&tail_str, "0x1f0b3a"),
+        });
+    }
+
     // 2. Check for Incomplete Haswell/Intel iGPU on hybrid laptops
     if tail_str.contains("Haswell Vulkan support is incomplete") || (tail_str.contains("MESA-INTEL") && tail_str.contains("DepthStencilAttachment")) {
         return Some(CrashDiagnosis {

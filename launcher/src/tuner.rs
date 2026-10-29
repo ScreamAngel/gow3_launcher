@@ -193,6 +193,7 @@ fn update_gow3_ini(base_dir: &Path, config: &LauncherConfig) -> Result<(), Strin
     replace_ini_key(&mut content, "fsr1", if config.fsr_enabled { "1" } else { "0" });
     replace_ini_key(&mut content, "rcas", if config.fsr_enabled { "1" } else { "0" });
     replace_ini_key(&mut content, "rcas_strength", "250");
+    replace_ini_key(&mut content, "object_motion", if config.disable_motion_blur { "0" } else { "1" });
     replace_ini_key(&mut content, "budget", &config.vram_gc_budget_mb.to_string());
     replace_ini_key(&mut content, "engine_fps", &config.target_fps.to_string());
     replace_ini_key(&mut content, "fps_limit", &config.target_fps.to_string());

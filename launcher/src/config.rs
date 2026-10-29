@@ -261,7 +261,7 @@ fn default_last_commit() -> String {
     "c5638d9956002b8a9f09a240028f6793ddf7b2f8".to_string()
 }
 fn default_launcher_version() -> String {
-    "v1.6.1.1".to_string()
+    "v1.6.1.2".to_string()
 }
 fn default_render_resolution() -> String {
     "native".to_string()

@@ -697,8 +697,23 @@ pub fn launch_gow3(
 
     // 7. Run patches.py
     let mut patch_list = Vec::new();
-    // Always include the stable texture corruption fix (which expands the Video Arena memory safely to 2.25 GiB)
-    patch_list.push("Bug Fix - Texture Corruption Fix".to_string());
+    let res_patch = match config.render_resolution.as_str() {
+        "480p" => Some("Resolution Patch - 480p"),
+        "720p" => Some("Resolution Patch - 720p"),
+        "800p" => Some("Resolution Patch - 800p"),
+        "1440p" => Some("Resolution Patch - 1440p"),
+        "1800p" => Some("Resolution Patch - 1800p"),
+        "4K" => Some("Resolution Patch - 4K"),
+        _ => None,
+    };
+
+    if let Some(p) = res_patch {
+        patch_list.push(p.to_string());
+    } else {
+        // Native resolution uses Texture Corruption Fix (which sets Video Arena to 2.25 GiB)
+        patch_list.push("Bug Fix - Texture Corruption Fix".to_string());
+    }
+
     patch_list.push("Bug Fix - Startup Black Screen".to_string());
 
     if config.skip_cinematics {
@@ -813,6 +828,9 @@ pub fn launch_gow3(
     } else {
         cmd.env("GOW3_FSR1", "0");
         cmd.env("GOW3_RCAS", "0");
+    }
+    if config.disable_motion_blur {
+        cmd.env("GOW3_OBJECT_MOTION", "0");
     }
     cmd.env("GOW3_READBACKS", if config.patch_readbacks { "1" } else { "0" });
     cmd.env("GOW3_READBACK_LINEAR", if config.patch_readbacks { "1" } else { "0" });

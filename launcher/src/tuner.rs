@@ -67,16 +67,28 @@ fn update_run_sh(base_dir: &Path, config: &LauncherConfig) -> Result<(), String>
 
     let mut content = fs::read_to_string(&run_sh).map_err(|e| e.to_string())?;
 
-    let mut patches = vec![
-        "Bug Fix - Texture Corruption Fix".to_string(),
-        "Bug Fix - Startup Black Screen".to_string(),
-        "Skip Any Video With X Button".to_string(),
-    ];
+    let mut patches = Vec::new();
+    if config.render_resolution != "native" {
+        patches.push(format!("Resolution Patch - {}", config.render_resolution));
+    } else if config.patch_readbacks {
+        patches.push("Bug Fix - Texture Corruption Fix".to_string());
+    }
+    patches.push("Bug Fix - Startup Black Screen".to_string());
+    patches.push("Skip Any Video With X Button".to_string());
     if config.patch_delta_time {
         patches.push(format!("Frame Rate Patch - {} FPS", config.target_fps));
     }
+    if config.disable_motion_blur {
+        patches.push("Graphics - Disable Motion Blur".to_string());
+    }
+    if config.disable_dof {
+        patches.push("Graphics - Disable Depth of Field".to_string());
+    }
     let patches_str = patches.join(";");
 
+    replace_or_insert_env(&mut content, "GOW3_RENDER_RES", &config.render_resolution);
+    replace_or_insert_env(&mut content, "GOW3_FSR1", if config.fsr_enabled { "1" } else { "0" });
+    replace_or_insert_env(&mut content, "GOW3_RCAS", if config.fsr_enabled { "1" } else { "0" });
     replace_or_insert_env(&mut content, "GOW3_GC_BUDGET_MB", &config.vram_gc_budget_mb.to_string());
     replace_or_insert_env(&mut content, "GOW3_DMEM_POOL_MB", &config.dmem_mb.to_string());
     replace_or_insert_env(&mut content, "GOW3_DEFAULT_ENGINE_FPS", &config.target_fps.to_string());
@@ -174,6 +186,10 @@ fn update_gow3_ini(base_dir: &Path, config: &LauncherConfig) -> Result<(), Strin
     replace_ini_key(&mut content, "deferred_readback", "0");
     replace_ini_key(&mut content, "stale_readback", "0");
     replace_ini_key(&mut content, "async_shaders", "1");
+    replace_ini_key(&mut content, "render_resolution", &config.render_resolution);
+    replace_ini_key(&mut content, "fsr1", if config.fsr_enabled { "1" } else { "0" });
+    replace_ini_key(&mut content, "rcas", if config.fsr_enabled { "1" } else { "0" });
+    replace_ini_key(&mut content, "rcas_strength", "250");
     replace_ini_key(&mut content, "budget", &config.vram_gc_budget_mb.to_string());
     replace_ini_key(&mut content, "engine_fps", &config.target_fps.to_string());
     replace_ini_key(&mut content, "fps_limit", &config.target_fps.to_string());
@@ -286,6 +302,39 @@ fn update_user_config_toml(base_dir: &Path, config: &LauncherConfig) -> Result<(
         "GPU",
         "FullscreenMode",
         &format!("\"{}\"", fullscreen_mode_str),
+    );
+    let (internal_w, internal_h) = match config.render_resolution.as_str() {
+        "480p" => (854, 480),
+        "720p" => (1280, 720),
+        "800p" => (1280, 800),
+        "1440p" => (2560, 1440),
+        "1800p" => (3200, 1800),
+        "4K" => (3840, 2160),
+        _ => (1920, 1080),
+    };
+    update_toml_key_in_section(
+        &mut content,
+        "GPU",
+        "internalScreenWidth",
+        &internal_w.to_string(),
+    );
+    update_toml_key_in_section(
+        &mut content,
+        "GPU",
+        "internalScreenHeight",
+        &internal_h.to_string(),
+    );
+    update_toml_key_in_section(
+        &mut content,
+        "GPU",
+        "fsrEnabled",
+        if config.fsr_enabled { "true" } else { "false" },
+    );
+    update_toml_key_in_section(
+        &mut content,
+        "GPU",
+        "rcasEnabled",
+        if config.fsr_enabled { "true" } else { "false" },
     );
     update_toml_key_in_section(
         &mut content,

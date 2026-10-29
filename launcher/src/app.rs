@@ -16,6 +16,7 @@ use crate::updater::{apply_github_update, check_github_update, UpdateInfo};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ActiveTab {
     Game,
+    Graphics,
     Config,
 }
 
@@ -1195,13 +1196,19 @@ impl eframe::App for LauncherApp {
 
                         // Center: Navigation Tabs (Embedded right in the top navbar!)
                         let game_active = self.active_tab == ActiveTab::Game;
+                        let graphics_active = self.active_tab == ActiveTab::Graphics;
                         let config_active = self.active_tab == ActiveTab::Config;
 
-                        let game_tab_text = format!("⚔ {}", self.t("tab_game_perf"));
+                        let game_tab_text = format!("⚔ {}", self.t("tab_game"));
+                        let graphics_tab_text = format!("🎨 {}", self.t("tab_graphics"));
                         let config_tab_text = format!("⚙ {}", self.t("tab_config_controls"));
 
                         if render_nav_tab(ui, &game_tab_text, game_active) {
                             self.active_tab = ActiveTab::Game;
+                        }
+                        ui.add_space(6.0);
+                        if render_nav_tab(ui, &graphics_tab_text, graphics_active) {
+                            self.active_tab = ActiveTab::Graphics;
                         }
                         ui.add_space(6.0);
                         if render_nav_tab(ui, &config_tab_text, config_active) {
@@ -1587,154 +1594,50 @@ impl eframe::App for LauncherApp {
                     }
                 });
 
-                // 3. PATCHES & OPTIMIZATIONS CARD
-                render_section_tag(ui, self.t("tag_patches"));
-                card_frame.show(ui, |ui| {
-                    ui.heading(
-                        egui::RichText::new(self.t("patches_header"))
-                            .size(16.0)
-                            .color(egui::Color32::from_rgb(150, 205, 255)),
-                    );
-                    ui.separator();
+                // 3. QUICK TOOLS & LOGS
+                ui.add_space(6.0);
+                ui.horizontal(|ui| {
+                    let log_btn = egui::Button::new(
+                        egui::RichText::new(format!("📋 {}", self.t("view_log")))
+                            .color(egui::Color32::from_rgb(200, 205, 220)),
+                    )
+                    .fill(egui::Color32::from_rgb(28, 30, 42))
+                    .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(255, 255, 255, 25)))
+                    .corner_radius(egui::CornerRadius::same(6))
+                    .min_size(egui::vec2(140.0, 32.0));
 
-                    let hz_label = self.t("hz_patch");
-                    let target_fps_label = self.t("target_fps");
-                    let hz_desc = self.t("hz_desc");
-                    let readback_label = self.t("readback_patch");
-                    let readback_desc = self.t("readback_desc");
-                    let skip_cinematics_label = self.t("skip_cinematics");
-                    let skip_cinematics_desc = self.t("skip_cinematics_desc");
-                    let gamemode_label = self.t("gamemode_toggle");
-                    let gamemode_desc = self.t("gamemode_desc");
-
-                    // Refresh Rate / Hz Sync Toggle
-                    ui.horizontal(|ui| {
-                        toggle_switch(ui, &mut self.config.patch_delta_time);
-                        if ui.add(egui::Label::new(egui::RichText::new(hz_label).strong()).sense(egui::Sense::click())).clicked() {
-                            self.config.patch_delta_time = !self.config.patch_delta_time;
-                        }
-                        ui.add_space(8.0);
-                        ui.label(target_fps_label);
-                        let current_text = match self.config.target_fps {
-                            30 => "30 FPS (Pil Tasarrufu & Düşük Güç)".to_string(),
-                            40 => "40 FPS (Steam Deck 40Hz İdeal)".to_string(),
-                            60 => "60 FPS (Varsayılan - Akıcı & Kararlı)".to_string(),
-                            90 => "90 FPS (Steam Deck OLED 90Hz)".to_string(),
-                            120 => "120 FPS (120Hz Ultra Akıcı - 60Hz Fizik)".to_string(),
-                            144 => "144 FPS (144Hz Ultra Akıcı - 60Hz Fizik)".to_string(),
-                            165 => "165 FPS (165Hz Ultra Akıcı - 60Hz Fizik)".to_string(),
-                            240 => "240 FPS (240Hz Maksimum - 60Hz Fizik)".to_string(),
-                            other => format!("{} FPS", other),
-                        };
-                        egui::ComboBox::from_id_salt("hz_combo")
-                            .selected_text(current_text)
-                            .show_ui(ui, |ui| {
-                                ui.selectable_value(&mut self.config.target_fps, 30, "30 FPS (Pil Tasarrufu & Düşük Güç)");
-                                ui.selectable_value(&mut self.config.target_fps, 40, "40 FPS (Steam Deck 40Hz İdeal)");
-                                ui.selectable_value(&mut self.config.target_fps, 60, "60 FPS (Varsayılan - Akıcı & Kararlı)");
-                                ui.selectable_value(&mut self.config.target_fps, 90, "90 FPS (Steam Deck OLED 90Hz)");
-                                ui.selectable_value(&mut self.config.target_fps, 120, "120 FPS (120Hz Ultra Akıcı - 60Hz Fizik Korumalı)");
-                                ui.selectable_value(&mut self.config.target_fps, 144, "144 FPS (144Hz Ultra Akıcı - 60Hz Fizik Korumalı)");
-                                ui.selectable_value(&mut self.config.target_fps, 165, "165 FPS (165Hz Ultra Akıcı - 60Hz Fizik Korumalı)");
-                                ui.selectable_value(&mut self.config.target_fps, 240, "240 FPS (240Hz Maksimum - 60Hz Fizik Korumalı)");
-                            });
-                    });
-                    ui.label(egui::RichText::new(hz_desc).color(egui::Color32::LIGHT_GRAY).size(11.0));
-
-                    ui.add_space(8.0);
-                    // Yellow Texture Readback Patch Toggle
-                    ui.horizontal(|ui| {
-                        toggle_switch(ui, &mut self.config.patch_readbacks);
-                        if ui.add(egui::Label::new(egui::RichText::new(readback_label).strong()).sense(egui::Sense::click())).clicked() {
-                            self.config.patch_readbacks = !self.config.patch_readbacks;
-                        }
-                    });
-                    ui.label(egui::RichText::new(readback_desc).color(egui::Color32::LIGHT_GRAY).size(11.0));
-
-                    ui.add_space(8.0);
-                    // Skip Cinematics with 'X' Button Toggle
-                    ui.horizontal(|ui| {
-                        toggle_switch(ui, &mut self.config.skip_cinematics);
-                        if ui.add(egui::Label::new(egui::RichText::new(skip_cinematics_label).strong()).sense(egui::Sense::click())).clicked() {
-                            self.config.skip_cinematics = !self.config.skip_cinematics;
-                        }
-                    });
-                    ui.label(egui::RichText::new(skip_cinematics_desc).color(egui::Color32::LIGHT_GRAY).size(11.0));
-
-                    // Feral GameMode Toggle
-                    if self.has_gamemode {
-                        ui.add_space(8.0);
-                        ui.horizontal(|ui| {
-                            toggle_switch(ui, &mut self.config.use_gamemode);
-                            if ui.add(egui::Label::new(egui::RichText::new(gamemode_label).strong()).sense(egui::Sense::click())).clicked() {
-                                self.config.use_gamemode = !self.config.use_gamemode;
-                            }
-                        });
-                        ui.label(egui::RichText::new(gamemode_desc).color(egui::Color32::LIGHT_GRAY).size(11.0));
+                    let res = ui.add(log_btn);
+                    if res.hovered() {
+                        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+                    }
+                    if res.clicked() {
+                        let log_path = self.base_dir.join("gow3_log.txt");
+                        self.log_content = std::fs::read_to_string(&log_path)
+                            .unwrap_or_else(|_| "Log file is empty or not created yet.".to_string());
+                        self.show_log_modal = true;
                     }
 
-                    ui.add_space(8.0);
-                    ui.horizontal(|ui| {
-                        let save_btn = egui::Button::new(
-                            egui::RichText::new(format!("💾 {}", self.t("save_apply")))
-                                .strong()
-                                .color(egui::Color32::WHITE),
-                        )
-                        .fill(egui::Color32::from_rgb(220, 38, 38))
-                        .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(255, 120, 120, 140)))
-                        .corner_radius(egui::CornerRadius::same(6))
-                        .min_size(egui::vec2(160.0, 32.0));
+                    let kill_btn = egui::Button::new(
+                        egui::RichText::new(format!("🛑 {}", self.t("kill_leftover_btn")))
+                            .color(egui::Color32::from_rgb(255, 140, 140))
+                            .size(12.0),
+                    )
+                    .fill(egui::Color32::from_rgb(45, 20, 22))
+                    .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(239, 68, 68, 80)))
+                    .corner_radius(egui::CornerRadius::same(6))
+                    .min_size(egui::vec2(140.0, 32.0));
 
-                        let res = ui.add(save_btn);
-                        if res.hovered() {
-                            ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
-                        }
-                        if res.clicked() {
-                            self.apply_all_optimizations();
-                        }
-
-                        let log_btn = egui::Button::new(
-                            egui::RichText::new(format!("📋 {}", self.t("view_log")))
-                                .color(egui::Color32::from_rgb(200, 205, 220)),
-                        )
-                        .fill(egui::Color32::from_rgb(28, 30, 42))
-                        .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(255, 255, 255, 25)))
-                        .corner_radius(egui::CornerRadius::same(6))
-                        .min_size(egui::vec2(130.0, 32.0));
-
-                        let res = ui.add(log_btn);
-                        if res.hovered() {
-                            ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
-                        }
-                        if res.clicked() {
-                            let log_path = self.base_dir.join("gow3_log.txt");
-                            self.log_content = std::fs::read_to_string(&log_path)
-                                .unwrap_or_else(|_| "Log file is empty or not created yet.".to_string());
-                            self.show_log_modal = true;
-                        }
-
-                        let kill_btn = egui::Button::new(
-                            egui::RichText::new(format!("🛑 {}", self.t("kill_leftover_btn")))
-                                .color(egui::Color32::from_rgb(255, 140, 140))
-                                .size(12.0),
-                        )
-                        .fill(egui::Color32::from_rgb(45, 20, 22))
-                        .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(239, 68, 68, 80)))
-                        .corner_radius(egui::CornerRadius::same(6))
-                        .min_size(egui::vec2(130.0, 32.0));
-
-                        let res = ui.add(kill_btn).on_hover_text(self.t("kill_leftover_tooltip"));
-                        if res.hovered() {
-                            ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
-                        }
-                        if res.clicked() {
-                            self.kill_leftover_processes();
-                        }
-                    });
+                    let res = ui.add(kill_btn).on_hover_text(self.t("kill_leftover_tooltip"));
+                    if res.hovered() {
+                        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+                    }
+                    if res.clicked() {
+                        self.kill_leftover_processes();
+                    }
                 });
 
                 // 4. PLAY GAME ACTION AREA
-                ui.add_space(8.0);
+                ui.add_space(12.0);
                 ui.vertical_centered(|ui| {
                     if self.is_game_running {
                         ui.horizontal(|ui| {
@@ -1850,6 +1753,274 @@ impl eframe::App for LauncherApp {
                                 .size(11.0),
                         );
                     }
+                });
+            } else if self.active_tab == ActiveTab::Graphics {
+                // ==========================================
+                // TAB 2: GRAPHICS SETTINGS
+                // ==========================================
+                render_section_tag(ui, self.t("graphics_header"));
+                card_frame.show(ui, |ui| {
+                    ui.heading(
+                        egui::RichText::new(self.t("graphics_header"))
+                            .size(17.0)
+                            .color(egui::Color32::from_rgb(150, 205, 255)),
+                    );
+                    ui.label(
+                        egui::RichText::new(self.t("graphics_subtitle"))
+                            .size(11.5)
+                            .color(egui::Color32::from_rgb(175, 185, 205)),
+                    );
+                    ui.separator();
+
+                    // --- 1. HAZIR GRAFİK PROFİLİ (GRAPHICS PRESET) ---
+                    ui.horizontal(|ui| {
+                        ui.label(egui::RichText::new(self.t("graphic_preset")).strong().color(egui::Color32::WHITE));
+                        let current_preset_text = match self.config.graphic_preset {
+                            crate::config::GraphicPreset::UltraLow => self.t("preset_ultra_low"),
+                            crate::config::GraphicPreset::Low => self.t("preset_low"),
+                            crate::config::GraphicPreset::SteamDeck => self.t("preset_steam_deck"),
+                            crate::config::GraphicPreset::Balanced => self.t("preset_balanced"),
+                            crate::config::GraphicPreset::Ultra => self.t("preset_ultra"),
+                            crate::config::GraphicPreset::Custom => self.t("preset_custom"),
+                        };
+
+                        egui::ComboBox::from_id_salt("graphic_preset_combo")
+                            .selected_text(current_preset_text)
+                            .show_ui(ui, |ui| {
+                                if ui.selectable_label(self.config.graphic_preset == crate::config::GraphicPreset::UltraLow, self.t("preset_ultra_low")).clicked() {
+                                    self.config.apply_preset(crate::config::GraphicPreset::UltraLow);
+                                }
+                                if ui.selectable_label(self.config.graphic_preset == crate::config::GraphicPreset::Low, self.t("preset_low")).clicked() {
+                                    self.config.apply_preset(crate::config::GraphicPreset::Low);
+                                }
+                                if ui.selectable_label(self.config.graphic_preset == crate::config::GraphicPreset::SteamDeck, self.t("preset_steam_deck")).clicked() {
+                                    self.config.apply_preset(crate::config::GraphicPreset::SteamDeck);
+                                }
+                                if ui.selectable_label(self.config.graphic_preset == crate::config::GraphicPreset::Balanced, self.t("preset_balanced")).clicked() {
+                                    self.config.apply_preset(crate::config::GraphicPreset::Balanced);
+                                }
+                                if ui.selectable_label(self.config.graphic_preset == crate::config::GraphicPreset::Ultra, self.t("preset_ultra")).clicked() {
+                                    self.config.apply_preset(crate::config::GraphicPreset::Ultra);
+                                }
+                                if ui.selectable_label(self.config.graphic_preset == crate::config::GraphicPreset::Custom, self.t("preset_custom")).clicked() {
+                                    self.config.graphic_preset = crate::config::GraphicPreset::Custom;
+                                }
+                            });
+                    });
+                    ui.label(egui::RichText::new(self.t("preset_desc")).color(egui::Color32::LIGHT_GRAY).size(11.0));
+
+                    ui.add_space(10.0);
+                    ui.separator();
+                    ui.add_space(6.0);
+
+                    // --- 2. ÇÖZÜNÜRLÜK (RENDER RESOLUTION) ---
+                    ui.horizontal(|ui| {
+                        ui.label(egui::RichText::new(self.t("render_resolution")).strong().color(egui::Color32::WHITE));
+                        let res_text = match self.config.render_resolution.as_str() {
+                            "480p" => "480p (854x480 - Ultra Düşük Donanım / Yüksek FPS)",
+                            "720p" => "720p (1280x720 - Düşük Sistem & Steam Deck)",
+                            "800p" => "800p (1280x800 - Steam Deck 16:10 Özel)",
+                            "native" => "Native 1080p (1920x1080 - Orijinal Kalite)",
+                            "1440p" => "1440p (2560x1440 - 2K QHD)",
+                            "1800p" => "1800p (3200x1800)",
+                            "4K" => "4K (3840x2160 - Ultra HD)",
+                            other => other,
+                        };
+
+                        let prev_res = self.config.render_resolution.clone();
+                        egui::ComboBox::from_id_salt("res_combo")
+                            .selected_text(res_text)
+                            .show_ui(ui, |ui| {
+                                ui.selectable_value(&mut self.config.render_resolution, "480p".to_string(), "480p (854x480 - Ultra Düşük)");
+                                ui.selectable_value(&mut self.config.render_resolution, "720p".to_string(), "720p (1280x720 - Düşük / Steam Deck)");
+                                ui.selectable_value(&mut self.config.render_resolution, "800p".to_string(), "800p (1280x800 - Steam Deck 16:10)");
+                                ui.selectable_value(&mut self.config.render_resolution, "native".to_string(), "Native 1080p (1920x1080 - Orijinal Kalite)");
+                                ui.selectable_value(&mut self.config.render_resolution, "1440p".to_string(), "1440p (2560x1440 - 2K QHD)");
+                                ui.selectable_value(&mut self.config.render_resolution, "1800p".to_string(), "1800p (3200x1800)");
+                                ui.selectable_value(&mut self.config.render_resolution, "4K".to_string(), "4K (3840x2160 - 4K Ultra HD)");
+                            });
+                        if prev_res != self.config.render_resolution {
+                            self.config.check_preset_match();
+                        }
+                    });
+                    ui.label(egui::RichText::new(self.t("res_desc")).color(egui::Color32::LIGHT_GRAY).size(11.0));
+
+                    ui.add_space(8.0);
+
+                    // --- 3. AMD FSR 1.0 & RCAS ---
+                    ui.horizontal(|ui| {
+                        let prev_fsr = self.config.fsr_enabled;
+                        toggle_switch(ui, &mut self.config.fsr_enabled);
+                        if ui.add(egui::Label::new(egui::RichText::new(self.t("fsr_toggle")).strong()).sense(egui::Sense::click())).clicked() {
+                            self.config.fsr_enabled = !self.config.fsr_enabled;
+                        }
+                        if prev_fsr != self.config.fsr_enabled {
+                            self.config.check_preset_match();
+                        }
+                    });
+                    ui.label(egui::RichText::new(self.t("fsr_desc")).color(egui::Color32::LIGHT_GRAY).size(11.0));
+
+                    ui.add_space(8.0);
+                    ui.separator();
+                    ui.add_space(6.0);
+
+                    // --- 4. RPCS3 EFEKT KISMA (MOTION BLUR & DOF) ---
+                    ui.horizontal(|ui| {
+                        let prev_blur = self.config.disable_motion_blur;
+                        toggle_switch(ui, &mut self.config.disable_motion_blur);
+                        if ui.add(egui::Label::new(egui::RichText::new(self.t("disable_motion_blur")).strong()).sense(egui::Sense::click())).clicked() {
+                            self.config.disable_motion_blur = !self.config.disable_motion_blur;
+                        }
+                        if prev_blur != self.config.disable_motion_blur {
+                            self.config.check_preset_match();
+                        }
+                    });
+                    ui.label(egui::RichText::new(self.t("disable_motion_blur_desc")).color(egui::Color32::LIGHT_GRAY).size(11.0));
+
+                    ui.add_space(8.0);
+
+                    ui.horizontal(|ui| {
+                        let prev_dof = self.config.disable_dof;
+                        toggle_switch(ui, &mut self.config.disable_dof);
+                        if ui.add(egui::Label::new(egui::RichText::new(self.t("disable_dof")).strong()).sense(egui::Sense::click())).clicked() {
+                            self.config.disable_dof = !self.config.disable_dof;
+                        }
+                        if prev_dof != self.config.disable_dof {
+                            self.config.check_preset_match();
+                        }
+                    });
+                    ui.label(egui::RichText::new(self.t("disable_dof_desc")).color(egui::Color32::LIGHT_GRAY).size(11.0));
+
+                    ui.add_space(8.0);
+                    ui.separator();
+                    ui.add_space(6.0);
+
+                    // --- 5. FPS / HZ KİLİDİ ---
+                    let hz_label = self.t("hz_patch");
+                    let target_fps_label = self.t("target_fps");
+                    let hz_desc = self.t("hz_desc");
+                    ui.horizontal(|ui| {
+                        toggle_switch(ui, &mut self.config.patch_delta_time);
+                        if ui.add(egui::Label::new(egui::RichText::new(hz_label).strong()).sense(egui::Sense::click())).clicked() {
+                            self.config.patch_delta_time = !self.config.patch_delta_time;
+                        }
+                        ui.add_space(8.0);
+                        ui.label(target_fps_label);
+                        let current_text = match self.config.target_fps {
+                            30 => "30 FPS (Pil Tasarrufu & Düşük Güç)".to_string(),
+                            40 => "40 FPS (Steam Deck 40Hz İdeal)".to_string(),
+                            60 => "60 FPS (Varsayılan - Akıcı & Kararlı)".to_string(),
+                            90 => "90 FPS (Steam Deck OLED 90Hz)".to_string(),
+                            120 => "120 FPS (120Hz Ultra Akıcı - 60Hz Fizik)".to_string(),
+                            144 => "144 FPS (144Hz Ultra Akıcı - 60Hz Fizik)".to_string(),
+                            165 => "165 FPS (165Hz Ultra Akıcı - 60Hz Fizik)".to_string(),
+                            240 => "240 FPS (240Hz Maksimum - 60Hz Fizik)".to_string(),
+                            other => format!("{} FPS", other),
+                        };
+                        egui::ComboBox::from_id_salt("hz_combo")
+                            .selected_text(current_text)
+                            .show_ui(ui, |ui| {
+                                ui.selectable_value(&mut self.config.target_fps, 30, "30 FPS (Pil Tasarrufu & Düşük Güç)");
+                                ui.selectable_value(&mut self.config.target_fps, 40, "40 FPS (Steam Deck 40Hz İdeal)");
+                                ui.selectable_value(&mut self.config.target_fps, 60, "60 FPS (Varsayılan - Akıcı & Kararlı)");
+                                ui.selectable_value(&mut self.config.target_fps, 90, "90 FPS (Steam Deck OLED 90Hz)");
+                                ui.selectable_value(&mut self.config.target_fps, 120, "120 FPS (120Hz Ultra Akıcı - 60Hz Fizik Korumalı)");
+                                ui.selectable_value(&mut self.config.target_fps, 144, "144 FPS (144Hz Ultra Akıcı - 60Hz Fizik Korumalı)");
+                                ui.selectable_value(&mut self.config.target_fps, 165, "165 FPS (165Hz Ultra Akıcı - 60Hz Fizik Korumalı)");
+                                ui.selectable_value(&mut self.config.target_fps, 240, "240 FPS (240Hz Maksimum - 60Hz Fizik Korumalı)");
+                            });
+                    });
+                    ui.label(egui::RichText::new(hz_desc).color(egui::Color32::LIGHT_GRAY).size(11.0));
+
+                    ui.add_space(8.0);
+
+                    // --- 6. READBACK PATCH (SARI RENK & DOKU BOZULMASI ÖNLEME) ---
+                    let readback_label = self.t("readback_patch");
+                    let readback_desc = self.t("readback_desc");
+                    ui.horizontal(|ui| {
+                        toggle_switch(ui, &mut self.config.patch_readbacks);
+                        if ui.add(egui::Label::new(egui::RichText::new(readback_label).strong()).sense(egui::Sense::click())).clicked() {
+                            self.config.patch_readbacks = !self.config.patch_readbacks;
+                        }
+                    });
+                    ui.label(egui::RichText::new(readback_desc).color(egui::Color32::LIGHT_GRAY).size(11.0));
+
+                    ui.add_space(8.0);
+
+                    // --- 7. VRAM GC BUDGET ---
+                    ui.horizontal(|ui| {
+                        ui.label(egui::RichText::new(self.t("vram_budget")).strong().color(egui::Color32::WHITE));
+                        let vram_text = match self.config.vram_gc_budget_mb {
+                            2048 => "2048 MB (2 GB GPU / Düşük Sistem)",
+                            3072 => "3072 MB (3 GB GPU / Steam Deck)",
+                            4096 => "4096 MB (4 GB GPU)",
+                            6144 => "6144 MB (6 GB GPU - Varsayılan)",
+                            8192 => "8192 MB (8 GB+ GPU / Yüksek)",
+                            _ => "Özel Bütçe",
+                        };
+                        egui::ComboBox::from_id_salt("vram_gc_combo")
+                            .selected_text(vram_text)
+                            .show_ui(ui, |ui| {
+                                ui.selectable_value(&mut self.config.vram_gc_budget_mb, 2048, "2048 MB (2 GB GPU / Düşük Sistem)");
+                                ui.selectable_value(&mut self.config.vram_gc_budget_mb, 3072, "3072 MB (3 GB GPU / Steam Deck)");
+                                ui.selectable_value(&mut self.config.vram_gc_budget_mb, 4096, "4096 MB (4 GB GPU)");
+                                ui.selectable_value(&mut self.config.vram_gc_budget_mb, 6144, "6144 MB (6 GB GPU - Varsayılan)");
+                                ui.selectable_value(&mut self.config.vram_gc_budget_mb, 8192, "8192 MB (8 GB+ GPU / Yüksek)");
+                            });
+                    });
+                    ui.label(egui::RichText::new(self.t("vram_budget_desc")).color(egui::Color32::LIGHT_GRAY).size(11.0));
+
+                    ui.add_space(8.0);
+
+                    // --- 8. SİNEMATİKLERİ ATLAMA ---
+                    let skip_cinematics_label = self.t("skip_cinematics");
+                    let skip_cinematics_desc = self.t("skip_cinematics_desc");
+                    ui.horizontal(|ui| {
+                        toggle_switch(ui, &mut self.config.skip_cinematics);
+                        if ui.add(egui::Label::new(egui::RichText::new(skip_cinematics_label).strong()).sense(egui::Sense::click())).clicked() {
+                            self.config.skip_cinematics = !self.config.skip_cinematics;
+                        }
+                    });
+                    ui.label(egui::RichText::new(skip_cinematics_desc).color(egui::Color32::LIGHT_GRAY).size(11.0));
+
+                    // --- 9. FERAL GAMEMODE ---
+                    if self.has_gamemode {
+                        ui.add_space(8.0);
+                        let gamemode_label = self.t("gamemode_toggle");
+                        let gamemode_desc = self.t("gamemode_desc");
+                        ui.horizontal(|ui| {
+                            toggle_switch(ui, &mut self.config.use_gamemode);
+                            if ui.add(egui::Label::new(egui::RichText::new(gamemode_label).strong()).sense(egui::Sense::click())).clicked() {
+                                self.config.use_gamemode = !self.config.use_gamemode;
+                            }
+                        });
+                        ui.label(egui::RichText::new(gamemode_desc).color(egui::Color32::LIGHT_GRAY).size(11.0));
+                    }
+
+                    ui.add_space(14.0);
+                    ui.separator();
+                    ui.add_space(8.0);
+
+                    // KAYDET VE UYGULA BUTONU
+                    ui.horizontal(|ui| {
+                        let save_btn = egui::Button::new(
+                            egui::RichText::new(format!("💾 {}", self.t("save_apply")))
+                                .strong()
+                                .color(egui::Color32::WHITE),
+                        )
+                        .fill(egui::Color32::from_rgb(220, 38, 38))
+                        .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(255, 120, 120, 140)))
+                        .corner_radius(egui::CornerRadius::same(6))
+                        .min_size(egui::vec2(180.0, 36.0));
+
+                        let res = ui.add(save_btn);
+                        if res.hovered() {
+                            ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+                        }
+                        if res.clicked() {
+                            self.apply_all_optimizations();
+                        }
+                    });
                 });
             } else {
                 // ==========================================

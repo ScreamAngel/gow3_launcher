@@ -3,6 +3,31 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum GraphicPreset {
+    #[default]
+    Balanced, // Standart / Orijinal (1080p)
+    UltraLow, // Ultra Düşük Donanım (480p)
+    Low,      // Düşük Sistem / Steam Deck (720p)
+    SteamDeck,// Steam Deck 16:10 (800p)
+    Ultra,    // Yüksek / 2K - 4K
+    Custom,   // Özel (Kullanıcı Ayarlı)
+}
+
+impl GraphicPreset {
+    #[allow(dead_code)]
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            GraphicPreset::Balanced => "balanced",
+            GraphicPreset::UltraLow => "ultra_low",
+            GraphicPreset::Low => "low",
+            GraphicPreset::SteamDeck => "steam_deck",
+            GraphicPreset::Ultra => "ultra",
+            GraphicPreset::Custom => "custom",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum DisplayMode {
     #[default]
     Borderless,
@@ -181,6 +206,18 @@ pub struct LauncherConfig {
     #[serde(default = "default_launcher_version")]
     pub launcher_version: String,
 
+    // Graphics Settings
+    #[serde(default = "default_render_resolution")]
+    pub render_resolution: String,
+    #[serde(default = "default_true")]
+    pub fsr_enabled: bool,
+    #[serde(default)]
+    pub disable_motion_blur: bool,
+    #[serde(default)]
+    pub disable_dof: bool,
+    #[serde(default)]
+    pub graphic_preset: GraphicPreset,
+
     // Display settings
     #[serde(default)]
     pub display_mode: DisplayMode,
@@ -226,6 +263,9 @@ fn default_last_commit() -> String {
 fn default_launcher_version() -> String {
     "v1.4".to_string()
 }
+fn default_render_resolution() -> String {
+    "native".to_string()
+}
 
 impl Default for LauncherConfig {
     fn default() -> Self {
@@ -243,6 +283,11 @@ impl Default for LauncherConfig {
             dmem_mb: default_dmem(),
             cached_hardware: CachedHardware::default(),
             last_git_commit: default_last_commit(),
+            render_resolution: default_render_resolution(),
+            fsr_enabled: true,
+            disable_motion_blur: false,
+            disable_dof: false,
+            graphic_preset: GraphicPreset::Balanced,
             display_mode: DisplayMode::default(),
             vsync: true,
             background_controller_input: false,
@@ -255,6 +300,70 @@ impl Default for LauncherConfig {
 }
 
 impl LauncherConfig {
+    pub fn apply_preset(&mut self, preset: GraphicPreset) {
+        self.graphic_preset = preset;
+        match preset {
+            GraphicPreset::UltraLow => {
+                self.render_resolution = "480p".to_string();
+                self.fsr_enabled = true;
+                self.disable_motion_blur = true;
+                self.disable_dof = true;
+                self.vram_gc_budget_mb = 2048;
+                self.target_fps = 60;
+            }
+            GraphicPreset::Low => {
+                self.render_resolution = "720p".to_string();
+                self.fsr_enabled = true;
+                self.disable_motion_blur = true;
+                self.disable_dof = true;
+                self.vram_gc_budget_mb = 3072;
+                self.target_fps = 60;
+            }
+            GraphicPreset::SteamDeck => {
+                self.render_resolution = "800p".to_string();
+                self.fsr_enabled = true;
+                self.disable_motion_blur = true;
+                self.disable_dof = true;
+                self.vram_gc_budget_mb = 3072;
+                self.target_fps = 40;
+            }
+            GraphicPreset::Balanced => {
+                self.render_resolution = "native".to_string();
+                self.fsr_enabled = false;
+                self.disable_motion_blur = false;
+                self.disable_dof = false;
+                self.vram_gc_budget_mb = 6144;
+                self.target_fps = 60;
+            }
+            GraphicPreset::Ultra => {
+                self.render_resolution = "1440p".to_string();
+                self.fsr_enabled = false;
+                self.disable_motion_blur = false;
+                self.disable_dof = false;
+                self.vram_gc_budget_mb = 8192;
+                self.target_fps = 120;
+            }
+            GraphicPreset::Custom => {
+                // Keep customized values
+            }
+        }
+    }
+
+    pub fn check_preset_match(&mut self) {
+        if self.render_resolution == "480p" && self.fsr_enabled && self.disable_motion_blur && self.disable_dof {
+            self.graphic_preset = GraphicPreset::UltraLow;
+        } else if self.render_resolution == "720p" && self.fsr_enabled && self.disable_motion_blur && self.disable_dof {
+            self.graphic_preset = GraphicPreset::Low;
+        } else if self.render_resolution == "800p" && self.fsr_enabled && self.disable_motion_blur && self.disable_dof {
+            self.graphic_preset = GraphicPreset::SteamDeck;
+        } else if self.render_resolution == "native" && !self.fsr_enabled && !self.disable_motion_blur && !self.disable_dof {
+            self.graphic_preset = GraphicPreset::Balanced;
+        } else if (self.render_resolution == "1440p" || self.render_resolution == "4K") && !self.fsr_enabled && !self.disable_motion_blur && !self.disable_dof {
+            self.graphic_preset = GraphicPreset::Ultra;
+        } else {
+            self.graphic_preset = GraphicPreset::Custom;
+        }
+    }
     pub fn config_path(base_dir: &Path) -> PathBuf {
         base_dir.join("launcher_config.json")
     }

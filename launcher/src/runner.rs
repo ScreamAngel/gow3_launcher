@@ -691,15 +691,25 @@ pub fn launch_gow3(
 
     // 7. Run patches.py
     let mut patch_list = Vec::new();
-    if config.patch_readbacks {
+    if config.render_resolution != "native" {
+        patch_list.push(format!("Resolution Patch - {}", config.render_resolution));
+    } else if config.patch_readbacks {
         patch_list.push("Bug Fix - Texture Corruption Fix".to_string());
     }
+
     patch_list.push("Bug Fix - Startup Black Screen".to_string());
+
     if config.skip_cinematics {
         patch_list.push("Skip Any Video With X Button".to_string());
     }
     if config.patch_delta_time {
         patch_list.push(format!("Frame Rate Patch - {} FPS", config.target_fps));
+    }
+    if config.disable_motion_blur {
+        patch_list.push("Graphics - Disable Motion Blur".to_string());
+    }
+    if config.disable_dof {
+        patch_list.push("Graphics - Disable Depth of Field".to_string());
     }
     let patches_str = patch_list.join(";");
 
@@ -758,6 +768,15 @@ pub fn launch_gow3(
     cmd.env("GOW3_FORCE_PATCHES", "1");
     cmd.env("GOW3_STREAM_MEMORY", "cached");
     cmd.env("GOW3_FULL_BARRIERS", "1");
+    cmd.env("GOW3_RENDER_RES", &config.render_resolution);
+    if config.fsr_enabled {
+        cmd.env("GOW3_FSR1", "1");
+        cmd.env("GOW3_RCAS", "1");
+        cmd.env("GOW3_FSR_SHARPNESS", "0.8");
+    } else {
+        cmd.env("GOW3_FSR1", "0");
+        cmd.env("GOW3_RCAS", "0");
+    }
     cmd.env("GOW3_READBACKS", if config.patch_readbacks { "1" } else { "0" });
     cmd.env("GOW3_READBACK_LINEAR", if config.patch_readbacks { "1" } else { "0" });
     cmd.env("GOW3_FORCE_READBACK", if config.patch_readbacks { "1" } else { "0" });

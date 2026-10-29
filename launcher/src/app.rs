@@ -660,7 +660,13 @@ pub struct LauncherApp {
 impl LauncherApp {
     pub fn new(cc: &eframe::CreationContext<'_>, base_dir: PathBuf) -> Self {
         let mut config = LauncherConfig::load(&base_dir);
-        let launcher_version = crate::updater::detect_launcher_version(&base_dir, &config);
+        let mut launcher_version = crate::updater::detect_launcher_version(&base_dir, &config);
+        if crate::updater::compare_version_strings(&launcher_version, crate::updater::BUILTIN_VERSION) < std::cmp::Ordering::Equal {
+            launcher_version = crate::updater::BUILTIN_VERSION.to_string();
+        }
+        if crate::updater::compare_version_strings(&config.launcher_version, &launcher_version) < std::cmp::Ordering::Equal {
+            config.launcher_version = launcher_version.clone();
+        }
 
         // Ensure runtime assets are unpacked (.runtime/scripts and .runtime/patches)
         let _ = crate::runner::ensure_runtime_assets(&base_dir);

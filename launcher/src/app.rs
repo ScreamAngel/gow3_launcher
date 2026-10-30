@@ -1854,17 +1854,24 @@ impl eframe::App for LauncherApp {
                     ui.add_space(8.0);
 
                     // --- 3. AMD FSR 1.0 & RCAS ---
-                    ui.horizontal(|ui| {
-                        let prev_fsr = self.config.fsr_enabled;
-                        toggle_switch(ui, &mut self.config.fsr_enabled);
-                        if ui.add(egui::Label::new(egui::RichText::new(self.t("fsr_toggle")).strong()).sense(egui::Sense::click())).clicked() {
-                            self.config.fsr_enabled = !self.config.fsr_enabled;
-                        }
-                        if prev_fsr != self.config.fsr_enabled {
-                            self.config.check_preset_match();
-                        }
+                    let is_native = self.config.render_resolution == "native";
+                    ui.add_enabled_ui(!is_native, |ui| {
+                        ui.horizontal(|ui| {
+                            let prev_fsr = self.config.fsr_enabled;
+                            toggle_switch(ui, &mut self.config.fsr_enabled);
+                            if ui.add(egui::Label::new(egui::RichText::new(self.t("fsr_toggle")).strong()).sense(egui::Sense::click())).clicked() {
+                                self.config.fsr_enabled = !self.config.fsr_enabled;
+                            }
+                            if prev_fsr != self.config.fsr_enabled {
+                                self.config.check_preset_match();
+                            }
+                        });
                     });
-                    ui.label(egui::RichText::new(self.t("fsr_desc")).color(egui::Color32::LIGHT_GRAY).size(11.0));
+                    if is_native {
+                        ui.label(egui::RichText::new("ℹ Native 1080p orijinal çözünürlükte FSR ölçekleme kapalıdır (1:1 doğal TAA render).").color(egui::Color32::from_rgb(170, 185, 215)).size(11.0));
+                    } else {
+                        ui.label(egui::RichText::new(self.t("fsr_desc")).color(egui::Color32::LIGHT_GRAY).size(11.0));
+                    }
 
                     ui.add_space(8.0);
                     ui.separator();

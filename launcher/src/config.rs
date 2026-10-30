@@ -261,7 +261,7 @@ fn default_last_commit() -> String {
     "c5638d9956002b8a9f09a240028f6793ddf7b2f8".to_string()
 }
 fn default_launcher_version() -> String {
-    "v1.6.1.5".to_string()
+    "v1.6.1.6".to_string()
 }
 fn default_render_resolution() -> String {
     "native".to_string()
@@ -284,7 +284,7 @@ impl Default for LauncherConfig {
             cached_hardware: CachedHardware::default(),
             last_git_commit: default_last_commit(),
             render_resolution: default_render_resolution(),
-            fsr_enabled: true,
+            fsr_enabled: false,
             disable_motion_blur: false,
             disable_dof: false,
             graphic_preset: GraphicPreset::Balanced,
@@ -377,12 +377,12 @@ impl LauncherConfig {
         }
     }
 
-    pub fn get_render_res_env_value(&self) -> String {
+    pub fn get_render_res_env_value(&self) -> Option<String> {
         if self.render_resolution == "native" {
-            "native".to_string()
+            None
         } else {
             let (w, h) = self.get_resolution_dimensions();
-            format!("{}x{}", w, h)
+            Some(format!("{}x{}", w, h))
         }
     }
     pub fn config_path(base_dir: &Path) -> PathBuf {

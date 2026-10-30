@@ -96,17 +96,36 @@ fn update_run_sh(base_dir: &Path, config: &LauncherConfig) -> Result<(), String>
     }
     let patches_str = patches.join(";");
 
-    let res_env = config.get_render_res_env_value();
-    let (internal_w, internal_h) = config.get_resolution_dimensions();
-    replace_or_insert_env(&mut content, "GOW3_RENDER_RES", &res_env);
-    replace_or_insert_env(&mut content, "GOW3_INTERNAL_WIDTH", &internal_w.to_string());
-    replace_or_insert_env(&mut content, "GOW3_INTERNAL_HEIGHT", &internal_h.to_string());
-    replace_or_insert_env(&mut content, "GOW3_UPSCALER", if config.fsr_enabled { "fsr" } else { "off" });
-    replace_or_insert_env(&mut content, "GOW3_FSR1", if config.fsr_enabled { "1" } else { "0" });
-    replace_or_insert_env(&mut content, "GOW3_RCAS", if config.fsr_enabled { "1" } else { "0" });
-    replace_or_insert_env(&mut content, "GOW3_FSR_SHARPNESS", if config.fsr_enabled { "0.8" } else { "0.0" });
+    if let Some(res_env) = config.get_render_res_env_value() {
+        let (internal_w, internal_h) = config.get_resolution_dimensions();
+        replace_or_insert_env(&mut content, "GOW3_RENDER_RES", &res_env);
+        replace_or_insert_env(&mut content, "GOW3_INTERNAL_WIDTH", &internal_w.to_string());
+        replace_or_insert_env(&mut content, "GOW3_INTERNAL_HEIGHT", &internal_h.to_string());
+    } else {
+        remove_env_if_present(&mut content, "GOW3_RENDER_RES");
+        remove_env_if_present(&mut content, "GOW3_INTERNAL_WIDTH");
+        remove_env_if_present(&mut content, "GOW3_INTERNAL_HEIGHT");
+    }
+
+    if config.fsr_enabled && config.render_resolution != "native" {
+        replace_or_insert_env(&mut content, "GOW3_UPSCALER", "fsr");
+        replace_or_insert_env(&mut content, "GOW3_FSR1", "1");
+        replace_or_insert_env(&mut content, "GOW3_RCAS", "1");
+        replace_or_insert_env(&mut content, "GOW3_FSR_SHARPNESS", "0.8");
+    } else {
+        replace_or_insert_env(&mut content, "GOW3_UPSCALER", "none");
+        replace_or_insert_env(&mut content, "GOW3_FSR1", "0");
+        replace_or_insert_env(&mut content, "GOW3_RCAS", "0");
+        replace_or_insert_env(&mut content, "GOW3_FSR_SHARPNESS", "0.0");
+    }
     replace_or_insert_env(&mut content, "GOW3_OBJECT_MOTION", if config.disable_motion_blur { "0" } else { "1" });
-    replace_or_insert_env(&mut content, "GOW3_GC_BUDGET_MB", &config.vram_gc_budget_mb.to_string());
+
+    let effective_budget = if config.cached_hardware.vram_mb > 0 {
+        config.vram_gc_budget_mb.min(config.cached_hardware.vram_mb).max(1536)
+    } else {
+        config.vram_gc_budget_mb
+    };
+    replace_or_insert_env(&mut content, "GOW3_GC_BUDGET_MB", &effective_budget.to_string());
     replace_or_insert_env(&mut content, "GOW3_DMEM_POOL_MB", &config.dmem_mb.to_string());
     replace_or_insert_env(&mut content, "GOW3_DEFAULT_ENGINE_FPS", &config.target_fps.to_string());
     replace_or_insert_env(&mut content, "GOW3_FORCE_READBACK", if config.patch_readbacks { "1" } else { "0" });
@@ -174,6 +193,20 @@ fn replace_or_insert_env(content: &mut String, var_name: &str, value: &str) {
     }
 }
 
+fn remove_env_if_present(content: &mut String, var_name: &str) {
+    let pattern_quote = format!("export {}=\"", var_name);
+    let pattern_noquote = format!("export {}=", var_name);
+
+    while let Some(idx) = content.find(&pattern_quote).or_else(|| content.find(&pattern_noquote)) {
+        if let Some(end) = content[idx..].find('\n') {
+            content.drain(idx..idx + end + 1);
+        } else {
+            content.truncate(idx);
+            break;
+        }
+    }
+}
+
 fn update_gow3_ini(base_dir: &Path, config: &LauncherConfig) -> Result<(), String> {
     let ini_path = base_dir.join("gow3.ini");
     let mut content = if ini_path.is_file() {
@@ -203,18 +236,35 @@ fn update_gow3_ini(base_dir: &Path, config: &LauncherConfig) -> Result<(), Strin
     replace_ini_key(&mut content, "deferred_readback", "0");
     replace_ini_key(&mut content, "stale_readback", "0");
     replace_ini_key(&mut content, "async_shaders", "1");
-    let (internal_w, internal_h) = config.get_resolution_dimensions();
-    replace_ini_key(&mut content, "render_resolution", &config.render_resolution);
-    replace_ini_key(&mut content, "internal_width", &internal_w.to_string());
-    replace_ini_key(&mut content, "internal_height", &internal_h.to_string());
-    replace_ini_key(&mut content, "upscaler", if config.fsr_enabled { "fsr" } else { "off" });
-    replace_ini_key(&mut content, "fsr1", if config.fsr_enabled { "1" } else { "0" });
-    replace_ini_key(&mut content, "rcas", if config.fsr_enabled { "1" } else { "0" });
+    if config.render_resolution == "native" {
+        replace_ini_key(&mut content, "render_resolution", "native");
+        replace_ini_key(&mut content, "internal_width", "1920");
+        replace_ini_key(&mut content, "internal_height", "1080");
+        replace_ini_key(&mut content, "upscaler", "off");
+        replace_ini_key(&mut content, "fsr1", "0");
+        replace_ini_key(&mut content, "rcas", "0");
+        replace_ini_key(&mut content, "sharpen", "0");
+        replace_ini_key(&mut content, "sharpness", "0.00");
+    } else {
+        let (internal_w, internal_h) = config.get_resolution_dimensions();
+        replace_ini_key(&mut content, "render_resolution", &config.render_resolution);
+        replace_ini_key(&mut content, "internal_width", &internal_w.to_string());
+        replace_ini_key(&mut content, "internal_height", &internal_h.to_string());
+        replace_ini_key(&mut content, "upscaler", if config.fsr_enabled { "fsr" } else { "off" });
+        replace_ini_key(&mut content, "fsr1", if config.fsr_enabled { "1" } else { "0" });
+        replace_ini_key(&mut content, "rcas", if config.fsr_enabled { "1" } else { "0" });
+        replace_ini_key(&mut content, "sharpen", if config.fsr_enabled { "1" } else { "0" });
+        replace_ini_key(&mut content, "sharpness", if config.fsr_enabled { "0.80" } else { "0.00" });
+    }
     replace_ini_key(&mut content, "rcas_strength", "250");
-    replace_ini_key(&mut content, "sharpen", if config.fsr_enabled { "1" } else { "0" });
-    replace_ini_key(&mut content, "sharpness", if config.fsr_enabled { "0.80" } else { "0.00" });
     replace_ini_key(&mut content, "object_motion", if config.disable_motion_blur { "0" } else { "1" });
-    replace_ini_key(&mut content, "budget", &config.vram_gc_budget_mb.to_string());
+
+    let effective_budget = if config.cached_hardware.vram_mb > 0 {
+        config.vram_gc_budget_mb.min(config.cached_hardware.vram_mb).max(1536)
+    } else {
+        config.vram_gc_budget_mb
+    };
+    replace_ini_key(&mut content, "budget", &effective_budget.to_string());
     replace_ini_key(&mut content, "engine_fps", &config.target_fps.to_string());
     replace_ini_key(&mut content, "fps_limit", &config.target_fps.to_string());
     replace_ini_key(&mut content, "frames_queued", "1");

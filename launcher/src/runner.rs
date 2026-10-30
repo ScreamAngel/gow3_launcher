@@ -817,24 +817,36 @@ pub fn launch_gow3(
     cmd.env("GOW3_FORCE_PATCHES", "1");
     cmd.env("GOW3_STREAM_MEMORY", "cached");
     cmd.env("GOW3_FULL_BARRIERS", "1");
-    let res_env = config.get_render_res_env_value();
-    let (internal_w, internal_h) = config.get_resolution_dimensions();
-    cmd.env("GOW3_RENDER_RES", &res_env);
-    cmd.env("GOW3_INTERNAL_WIDTH", internal_w.to_string());
-    cmd.env("GOW3_INTERNAL_HEIGHT", internal_h.to_string());
-    if config.fsr_enabled {
+    // Resolution & Upscaler configuration:
+    // When native resolution is selected, GOW3_RENDER_RES and internal dimensions MUST NOT be set
+    // in order to avoid an illegal 1:1 upscale pass and device loss ("TAA: remove GOW3_RENDER_RES to use native-resolution TAA").
+    if let Some(res_env) = config.get_render_res_env_value() {
+        let (internal_w, internal_h) = config.get_resolution_dimensions();
+        cmd.env("GOW3_RENDER_RES", &res_env);
+        cmd.env("GOW3_INTERNAL_WIDTH", internal_w.to_string());
+        cmd.env("GOW3_INTERNAL_HEIGHT", internal_h.to_string());
+    } else {
+        cmd.env_remove("GOW3_RENDER_RES");
+        cmd.env_remove("GOW3_INTERNAL_WIDTH");
+        cmd.env_remove("GOW3_INTERNAL_HEIGHT");
+    }
+
+    // Upscaler configuration:
+    // libgow3gpu explicitly tests `strcmp(getenv("GOW3_UPSCALER"), "none") == 0` to disable the upscaler.
+    // Setting "off" or leaving it unset incorrectly enables the temporal upscaler.
+    // Upscaler is only active when enabled AND resolution is scaled.
+    if config.fsr_enabled && config.render_resolution != "native" {
         cmd.env("GOW3_UPSCALER", "fsr");
         cmd.env("GOW3_FSR1", "1");
         cmd.env("GOW3_RCAS", "1");
         cmd.env("GOW3_FSR_SHARPNESS", "0.8");
     } else {
-        cmd.env("GOW3_UPSCALER", "off");
+        cmd.env("GOW3_UPSCALER", "none");
         cmd.env("GOW3_FSR1", "0");
         cmd.env("GOW3_RCAS", "0");
+        cmd.env("GOW3_FSR_SHARPNESS", "0.0");
     }
-    if config.disable_motion_blur {
-        cmd.env("GOW3_OBJECT_MOTION", "0");
-    }
+    cmd.env("GOW3_OBJECT_MOTION", if config.disable_motion_blur { "0" } else { "1" });
     cmd.env("GOW3_READBACKS", if config.patch_readbacks { "1" } else { "0" });
     cmd.env("GOW3_READBACK_LINEAR", if config.patch_readbacks { "1" } else { "0" });
     cmd.env("GOW3_FORCE_READBACK", if config.patch_readbacks { "1" } else { "0" });
@@ -850,7 +862,13 @@ pub fn launch_gow3(
     cmd.env("GOW3_ASYNC_FENCES", "1");
     cmd.env("GOW3_ASYNC_SHADERS", "1");
     cmd.env("GOW3_FPS_LIMIT", config.target_fps.to_string());
-    cmd.env("GOW3_GC_BUDGET_MB", config.vram_gc_budget_mb.to_string());
+
+    let effective_budget = if config.cached_hardware.vram_mb > 0 {
+        config.vram_gc_budget_mb.min(config.cached_hardware.vram_mb).max(1536)
+    } else {
+        config.vram_gc_budget_mb
+    };
+    cmd.env("GOW3_GC_BUDGET_MB", effective_budget.to_string());
     cmd.env("GOW3_DMEM_POOL_MB", config.dmem_mb.to_string());
     cmd.env("GOW3_DMEM_MB", config.dmem_mb.to_string());
     cmd.env("GOW3_DEFAULT_ENGINE_FPS", config.target_fps.to_string());

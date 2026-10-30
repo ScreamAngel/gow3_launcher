@@ -180,14 +180,16 @@
             <Line Type="bytes" Address="0x0041b2e7" Value="b901000000909090"/>
         </PatchList>
     </Metadata>
-    <Metadata Title="God of War III Remastered" Name="Graphics - Disable Motion Blur" Note="Disables the camera and object motion blur render pass, improving performance on low-end systems and removing motion smearing." Author="gow3-launcher" PatchVer="1.0" AppVer="01.02" AppElf="eboot.bin" isEnabled="false">
+    <Metadata Title="God of War III Remastered" Name="Graphics - Disable Motion Blur" Note="Disables the camera and object motion blur render pass, improving performance on low-end systems and removing motion smearing." Author="gow3-launcher" PatchVer="1.1" AppVer="01.02" AppElf="eboot.bin" isEnabled="false">
         <PatchList>
-            <Line Type="bytes" Address="0x004b201a" Value="0f1f440000"/>
+            <Line Type="bytes" Address="0x0056ae80" Value="c3"/>
+            <Line Type="bytes" Address="0x0056b0e0" Value="c3"/>
         </PatchList>
     </Metadata>
-    <Metadata Title="God of War III Remastered" Name="Graphics - Disable Depth of Field" Note="Disables the Depth of Field (DoF) post-processing blur pass, increasing FPS on budget GPUs and keeping background details sharp." Author="gow3-launcher" PatchVer="1.0" AppVer="01.02" AppElf="eboot.bin" isEnabled="false">
+    <Metadata Title="God of War III Remastered" Name="Graphics - Disable Depth of Field" Note="Disables the Depth of Field (DoF) post-processing blur pass, increasing FPS on budget GPUs and keeping background details sharp." Author="gow3-launcher" PatchVer="1.1" AppVer="01.02" AppElf="eboot.bin" isEnabled="false">
         <PatchList>
-            <Line Type="bytes" Address="0x004b20f6" Value="0f1f440000"/>
+            <Line Type="bytes" Address="0x00565ac0" Value="c3"/>
+            <Line Type="bytes" Address="0x00566090" Value="c3"/>
         </PatchList>
     </Metadata>
 </Patch>

@@ -822,10 +822,12 @@ pub fn launch_gow3(
     cmd.env("GOW3_INTERNAL_WIDTH", internal_w.to_string());
     cmd.env("GOW3_INTERNAL_HEIGHT", internal_h.to_string());
     if config.fsr_enabled {
+        cmd.env("GOW3_UPSCALER", "fsr");
         cmd.env("GOW3_FSR1", "1");
         cmd.env("GOW3_RCAS", "1");
         cmd.env("GOW3_FSR_SHARPNESS", "0.8");
     } else {
+        cmd.env("GOW3_UPSCALER", "off");
         cmd.env("GOW3_FSR1", "0");
         cmd.env("GOW3_RCAS", "0");
     }

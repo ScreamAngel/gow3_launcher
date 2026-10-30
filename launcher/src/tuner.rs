@@ -68,7 +68,20 @@ fn update_run_sh(base_dir: &Path, config: &LauncherConfig) -> Result<(), String>
     let mut content = fs::read_to_string(&run_sh).map_err(|e| e.to_string())?;
 
     let mut patches = Vec::new();
-    patches.push("Bug Fix - Texture Corruption Fix".to_string());
+    let res_patch = match config.render_resolution.as_str() {
+        "480p" => Some("Resolution Patch - 480p"),
+        "720p" => Some("Resolution Patch - 720p"),
+        "800p" => Some("Resolution Patch - 800p"),
+        "1440p" => Some("Resolution Patch - 1440p"),
+        "1800p" => Some("Resolution Patch - 1800p"),
+        "4K" => Some("Resolution Patch - 4K"),
+        _ => None,
+    };
+    if let Some(p) = res_patch {
+        patches.push(p.to_string());
+    } else {
+        patches.push("Bug Fix - Texture Corruption Fix".to_string());
+    }
     patches.push("Bug Fix - Startup Black Screen".to_string());
     patches.push("Skip Any Video With X Button".to_string());
     if config.patch_delta_time {
@@ -87,8 +100,11 @@ fn update_run_sh(base_dir: &Path, config: &LauncherConfig) -> Result<(), String>
     replace_or_insert_env(&mut content, "GOW3_RENDER_RES", &res_env);
     replace_or_insert_env(&mut content, "GOW3_INTERNAL_WIDTH", &internal_w.to_string());
     replace_or_insert_env(&mut content, "GOW3_INTERNAL_HEIGHT", &internal_h.to_string());
+    replace_or_insert_env(&mut content, "GOW3_UPSCALER", if config.fsr_enabled { "fsr" } else { "off" });
     replace_or_insert_env(&mut content, "GOW3_FSR1", if config.fsr_enabled { "1" } else { "0" });
     replace_or_insert_env(&mut content, "GOW3_RCAS", if config.fsr_enabled { "1" } else { "0" });
+    replace_or_insert_env(&mut content, "GOW3_FSR_SHARPNESS", if config.fsr_enabled { "0.8" } else { "0.0" });
+    replace_or_insert_env(&mut content, "GOW3_OBJECT_MOTION", if config.disable_motion_blur { "0" } else { "1" });
     replace_or_insert_env(&mut content, "GOW3_GC_BUDGET_MB", &config.vram_gc_budget_mb.to_string());
     replace_or_insert_env(&mut content, "GOW3_DMEM_POOL_MB", &config.dmem_mb.to_string());
     replace_or_insert_env(&mut content, "GOW3_DEFAULT_ENGINE_FPS", &config.target_fps.to_string());
@@ -190,9 +206,12 @@ fn update_gow3_ini(base_dir: &Path, config: &LauncherConfig) -> Result<(), Strin
     replace_ini_key(&mut content, "render_resolution", &config.render_resolution);
     replace_ini_key(&mut content, "internal_width", &internal_w.to_string());
     replace_ini_key(&mut content, "internal_height", &internal_h.to_string());
+    replace_ini_key(&mut content, "upscaler", if config.fsr_enabled { "fsr" } else { "off" });
     replace_ini_key(&mut content, "fsr1", if config.fsr_enabled { "1" } else { "0" });
     replace_ini_key(&mut content, "rcas", if config.fsr_enabled { "1" } else { "0" });
     replace_ini_key(&mut content, "rcas_strength", "250");
+    replace_ini_key(&mut content, "sharpen", if config.fsr_enabled { "1" } else { "0" });
+    replace_ini_key(&mut content, "sharpness", if config.fsr_enabled { "0.80" } else { "0.00" });
     replace_ini_key(&mut content, "object_motion", if config.disable_motion_blur { "0" } else { "1" });
     replace_ini_key(&mut content, "budget", &config.vram_gc_budget_mb.to_string());
     replace_ini_key(&mut content, "engine_fps", &config.target_fps.to_string());

@@ -198,7 +198,7 @@ def update_run_sh(settings):
     dmem = settings["dmem_mb"]
 
     # Target patches string
-    patches_str = f"Bug Fix - Texture Corruption Fix;Bug Fix - Startup Black Screen;Skip Any Video With X Button;Frame Rate Patch - {target_hz} FPS"
+    patches_str = f"Bug Fix - Texture Corruption Fix;Bug Fix - Startup Black Screen;Bug Fix - Intro Crash Fix;Skip Any Video With X Button;Frame Rate Patch - {target_hz} FPS"
 
     # Update or add GOW3_GC_BUDGET_MB near the top
     if re.search(r"^export GOW3_GC_BUDGET_MB=.*$", content, re.M):

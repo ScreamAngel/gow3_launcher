@@ -22,6 +22,13 @@
             <Line Type="bytes" Address="0x018ba600" Value="02000000"/>
         </PatchList>
     </Metadata>
+    <Metadata Title="God of War III Remastered" Name="Bug Fix - Intro Crash Fix" Note="Fixes crash at offset 0x2c54b2 when finishing or skipping intro cinematics by expanding the event node memory pool from 128 to 2048 entries with automatic heap growth, and guarding against null node dereferencing." Author="gow3-launcher" PatchVer="1.0" AppVer="01.02" AppElf="eboot.bin" isEnabled="true">
+        <PatchList>
+            <Line Type="bytes" Address="0x006b36ae" Value="6a305eba00080000b9800000006a04415890"/>
+            <Line Type="bytes" Address="0x006c54a7" Value="0f84d600000090"/>
+            <Line Type="bytes" Address="0x006c6387" Value="0f84d600000090"/>
+        </PatchList>
+    </Metadata>
     <Metadata Title="God of War III Remastered" Name="Resolution Patch - 480p" Note="Decreases game output resolution to 854x480 and increases Video Arena to 2.25 GiB. Requires setting DMEM to 2048 MB or more. Only leave one resolution patch enabled; do not enable it with Bug Fix - Texture Corruption Fix." Author="kvicken + cuesta4" PatchVer="1.1" AppVer="01.02" AppElf="eboot.bin" isEnabled="false">
         <PatchList>
             <Line Type="bytes" Address="0x005f0c5b" Value="56030000"/>

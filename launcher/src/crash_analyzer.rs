@@ -41,6 +41,16 @@ pub fn analyze_post_game(base_dir: &Path, exit_code: Option<i32>) -> Option<Cras
         });
     }
 
+    // Check for Intro Transition / Memory Pool Crash (0x2c54b2)
+    if tail_str.contains("0x2c54b2") {
+        return Some(CrashDiagnosis {
+            title: "💥 Giriş İntrosu / Sahne Geçiş Çökmesi Algılandı (0x2c54b2)".to_string(),
+            description: "Oyun motorunun olay havuzu (128 eleman) yüksek kare hızında veya introyu geçerken tükendiği için boş bellek adresi (0x10) referans alınarak çöktü.".to_string(),
+            recommendation: "v1.6.1.4 sürümündeki 'Bug Fix - Intro Crash Fix' yaması havuzu 2048'e çıkarıp otomatik genişletme ve güvenli NULL kontrolü ekler. Launcher'ı güncelleyip oyunu tekrar başlatın.".to_string(),
+            log_snippet: extract_relevant_snippet(&tail_str, "0x2c54b2"),
+        });
+    }
+
     // 2. Check for Incomplete Haswell/Intel iGPU on hybrid laptops
     if tail_str.contains("Haswell Vulkan support is incomplete") || (tail_str.contains("MESA-INTEL") && tail_str.contains("DepthStencilAttachment")) {
         return Some(CrashDiagnosis {

@@ -83,6 +83,7 @@ fn update_run_sh(base_dir: &Path, config: &LauncherConfig) -> Result<(), String>
         patches.push("Bug Fix - Texture Corruption Fix".to_string());
     }
     patches.push("Bug Fix - Startup Black Screen".to_string());
+    patches.push("Bug Fix - Intro Crash Fix".to_string());
     patches.push("Skip Any Video With X Button".to_string());
     if config.patch_delta_time {
         patches.push(format!("Frame Rate Patch - {} FPS", config.target_fps));

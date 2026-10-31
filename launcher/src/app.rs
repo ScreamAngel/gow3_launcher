@@ -956,6 +956,16 @@ impl LauncherApp {
             }
         }
 
+        if self.bg_texture.is_none() {
+            if let Ok(img) = image::load_from_memory(include_bytes!("../../pic1.png")) {
+                let size = [img.width() as _, img.height() as _];
+                let img_buffer = img.to_rgba8();
+                let pixels = img_buffer.as_flat_samples();
+                let color_img = egui::ColorImage::from_rgba_unmultiplied(size, pixels.as_slice());
+                self.bg_texture = Some(ctx.load_texture("gow3_full_bg", color_img, Default::default()));
+            }
+        }
+
         let logo_path = self.base_dir.join("gow3-remastered.png");
         let logo_img = if logo_path.is_file() {
             image::open(&logo_path).ok()
@@ -1122,7 +1132,7 @@ impl LauncherApp {
         });
     }
 
-    fn start_engine_download(&mut self) {
+    fn start_engine_download(&mut self, is_alternative: bool) {
         if self.is_downloading_engine {
             return;
         }
@@ -1132,7 +1142,7 @@ impl LauncherApp {
 
         let base_dir_clone = self.base_dir.clone();
         thread::spawn(move || {
-            let res = crate::runner::download_engine(&base_dir_clone);
+            let res = crate::runner::download_engine(&base_dir_clone, is_alternative);
             let _ = tx.send(res);
         });
     }
@@ -1927,18 +1937,34 @@ impl eframe::App for LauncherApp {
                                         .size(12.0),
                                 );
                             } else {
-                                let dl_btn = egui::Button::new(
-                                    egui::RichText::new(self.t("engine_download"))
-                                        .size(11.0)
-                                        .color(egui::Color32::WHITE)
-                                        .strong(),
-                                )
-                                .fill(egui::Color32::from_rgb(180, 80, 45))
-                                .corner_radius(egui::CornerRadius::same(5));
+                                ui.horizontal(|ui| {
+                                    let dl_btn = egui::Button::new(
+                                        egui::RichText::new(format!("📥 {}", self.t("engine_download")))
+                                            .size(11.0)
+                                            .color(egui::Color32::WHITE)
+                                            .strong(),
+                                    )
+                                    .fill(egui::Color32::from_rgb(180, 80, 45))
+                                    .corner_radius(egui::CornerRadius::same(5));
 
-                                if ui.add(dl_btn).clicked() {
-                                    self.start_engine_download();
-                                }
+                                    if ui.add(dl_btn).clicked() {
+                                        self.start_engine_download(false);
+                                    }
+
+                                    let alt_btn = egui::Button::new(
+                                        egui::RichText::new(format!("⚡ {}", self.t("engine_download_alt")))
+                                            .size(11.0)
+                                            .color(egui::Color32::from_rgb(230, 240, 255))
+                                            .strong(),
+                                    )
+                                    .fill(egui::Color32::from_rgb(45, 75, 120))
+                                    .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgb(80, 130, 200)))
+                                    .corner_radius(egui::CornerRadius::same(5));
+
+                                    if ui.add(alt_btn).on_hover_text(self.t("engine_download_alt_tooltip")).clicked() {
+                                        self.start_engine_download(true);
+                                    }
+                                });
                             }
                         }
                     });
@@ -3067,6 +3093,7 @@ impl eframe::App for LauncherApp {
             let mut close_modal = false;
             let mut open_log = false;
             let mut copy_error = false;
+            let mut retry_alt_engine = false;
 
             egui::Window::new(self.t("err_modal_title"))
                 .collapsible(false)
@@ -3184,6 +3211,23 @@ impl eframe::App for LauncherApp {
                             copy_error = true;
                         }
 
+                        // Alternative download button if engine is missing
+                        if !self.has_engine {
+                            let alt_dl_btn = egui::Button::new(
+                                egui::RichText::new(self.t("retry_with_alt"))
+                                    .color(egui::Color32::from_rgb(255, 230, 140))
+                                    .strong(),
+                            )
+                            .fill(egui::Color32::from_rgb(55, 42, 18))
+                            .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgb(190, 140, 45)))
+                            .corner_radius(egui::CornerRadius::same(6))
+                            .min_size(egui::vec2(160.0, 32.0));
+
+                            if ui.add(alt_dl_btn).clicked() {
+                                retry_alt_engine = true;
+                            }
+                        }
+
                         // Close Button on Right
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             let close_btn = egui::Button::new(
@@ -3198,6 +3242,11 @@ impl eframe::App for LauncherApp {
                         });
                     });
                 });
+
+            if retry_alt_engine {
+                self.error_modal = None;
+                self.start_engine_download(true);
+            }
 
             if copy_error {
                 let full_report = format!(

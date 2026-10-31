@@ -293,28 +293,72 @@ pub fn ensure_safe_preload_lib(base_dir: &Path) -> Option<PathBuf> {
 }
 
 #[allow(dead_code)]
-pub fn download_windows_engine(base_dir: &Path) -> Result<String, String> {
+fn find_file_recursive(dir: &Path, filename: &str) -> Option<PathBuf> {
+    if let Ok(entries) = fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_file() && path.file_name().map_or(false, |n| n == filename) {
+                return Some(path);
+            } else if path.is_dir() {
+                if let Ok(ft) = entry.file_type() {
+                    if ft.is_dir() && !ft.is_symlink() {
+                        if let Some(found) = find_file_recursive(&path, filename) {
+                            return Some(found);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
+#[allow(dead_code)]
+pub fn download_windows_engine(base_dir: &Path, is_alternative: bool) -> Result<String, String> {
     let dest_bin = base_dir.join("bin");
     let _ = fs::create_dir_all(&dest_bin);
 
     #[cfg(target_os = "windows")]
     {
-        crate::log_info!("Starting Windows engine download to {}...", dest_bin.display());
+        crate::log_info!("Starting Windows engine download to {} (Alternative mode: {})...", dest_bin.display(), is_alternative);
+        let urls = if is_alternative {
+            [
+                "https://github.com/FelipePrado0/SpartanPort/releases/download/windows-v2.4.1/gow3-windows.zip",
+                "https://github.com/FelipePrado0/gow3_pc/releases/download/windows-v2.4.1/gow3-windows.zip",
+            ]
+        } else {
+            [
+                "https://github.com/FelipePrado0/gow3_pc/releases/download/windows-v2.4.1/gow3-windows.zip",
+                "https://github.com/FelipePrado0/SpartanPort/releases/download/windows-v2.4.1/gow3-windows.zip",
+            ]
+        };
+
+        let primary_url = urls[0];
+        let secondary_url = urls[1];
+
         let ps_code = format!(
             r#"
             $ProgressPreference = 'SilentlyContinue';
-            [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12;
-            $url = 'https://github.com/FelipePrado0/gow3_pc/releases/download/windows-v2.4.1/gow3-windows.zip';
+            [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 -bor [Net.SecurityProtocolType]::Tls13;
+            $url1 = '{url1}';
+            $url2 = '{url2}';
             $zip = Join-Path $env:TEMP 'gow3_win_download.zip';
             $tempDir = Join-Path $env:TEMP 'gow3_win_extracted';
             if (Test-Path $tempDir) {{ Remove-Item $tempDir -Recurse -Force }};
             if (Test-Path $zip) {{ Remove-Item $zip -Force }};
             Write-Host 'Downloading Windows engine package (~74MB)...';
+            $wc = New-Object System.Net.WebClient;
+            $wc.Headers.Add('User-Agent', 'gow3-launcher');
             try {{
-                (New-Object System.Net.WebClient).DownloadFile($url, $zip);
+                $wc.DownloadFile($url1, $zip);
             }} catch {{
-                Write-Error "İndirme Hatası: $_";
-                exit 2;
+                Write-Host "Primary URL failed, trying secondary URL: $_";
+                try {{
+                    $wc.DownloadFile($url2, $zip);
+                }} catch {{
+                    Write-Error "İndirme Hatası: $_";
+                    exit 2;
+                }}
             }}
             Write-Host 'Extracting Windows package...';
             try {{
@@ -349,6 +393,8 @@ pub fn download_windows_engine(base_dir: &Path) -> Result<String, String> {
             Remove-Item $zip -Force;
             Write-Host 'Windows engine download and extraction completed successfully.';
             "#,
+            url1 = primary_url,
+            url2 = secondary_url,
             dest_bin = dest_bin.to_string_lossy().replace('\'', "''"),
             base_dir = base_dir.to_string_lossy().replace('\'', "''")
         );
@@ -389,63 +435,98 @@ pub fn download_windows_engine(base_dir: &Path) -> Result<String, String> {
 
     #[cfg(not(target_os = "windows"))]
     {
+        let _ = (base_dir, is_alternative, &dest_bin);
         Err("Bu fonksiyon yalnızca Windows üzerinde çalışır.".to_string())
     }
 }
 
 #[allow(dead_code)]
-pub fn download_linux_engine(base_dir: &Path) -> Result<String, String> {
+pub fn download_linux_engine(base_dir: &Path, is_alternative: bool) -> Result<String, String> {
     let dest_bin = base_dir.join("bin");
     let _ = fs::create_dir_all(&dest_bin);
 
     #[cfg(not(target_os = "windows"))]
     {
-        crate::log_info!("Starting Linux game engine download...");
-        let url = "https://github.com/FelipePrado0/gow3_pc/releases/download/windows-v2.4.1/gow3-x86_64.AppImage";
+        crate::log_info!("Starting Linux game engine download (Alternative mode: {})...", is_alternative);
+        let urls = if is_alternative {
+            [
+                "https://github.com/FelipePrado0/SpartanPort/releases/download/windows-v2.4.1/gow3-x86_64.AppImage",
+                "https://github.com/FelipePrado0/gow3_pc/releases/download/windows-v2.4.1/gow3-x86_64.AppImage",
+            ]
+        } else {
+            [
+                "https://github.com/FelipePrado0/gow3_pc/releases/download/windows-v2.4.1/gow3-x86_64.AppImage",
+                "https://github.com/FelipePrado0/SpartanPort/releases/download/windows-v2.4.1/gow3-x86_64.AppImage",
+            ]
+        };
+
         let temp_dir = std::env::temp_dir().join("gow3_linux_extracted");
         let _ = fs::remove_dir_all(&temp_dir);
         let _ = fs::create_dir_all(&temp_dir);
         let appimage_path = temp_dir.join("gow3-x86_64.AppImage");
 
-        crate::log_info!("Downloading AppImage from {} to {}", url, appimage_path.display());
-        let curl_output = Command::new("curl")
-            .args(["-L", "--fail", "--connect-timeout", "20", url, "-o", &appimage_path.to_string_lossy()])
-            .output();
+        let mut download_success = false;
+        let mut err_details = String::new();
 
-        let (success, err_details) = match curl_output {
-            Ok(output) if output.status.success() => (true, String::new()),
-            Ok(output) => {
-                let err_str = String::from_utf8_lossy(&output.stderr).to_string();
-                crate::log_warn!("curl failed (status {:?}): {}. Trying wget...", output.status.code(), err_str);
-                let wget_out = Command::new("wget")
-                    .args(["--timeout=20", url, "-O", &appimage_path.to_string_lossy()])
-                    .output();
-                match wget_out {
-                    Ok(w_out) if w_out.status.success() => (true, String::new()),
-                    Ok(w_out) => {
-                        let w_err = String::from_utf8_lossy(&w_out.stderr).to_string();
-                        (false, format!("curl hatası: {}\nwget hatası: {}", err_str, w_err))
+        for url in urls {
+            crate::log_info!("Attempting to download AppImage from: {}", url);
+            let mut curl_args = vec!["-L", "--fail", "--connect-timeout", "20"];
+            if is_alternative {
+                curl_args.push("-k");
+            }
+            curl_args.extend(["-o", appimage_path.to_str().unwrap_or("")]);
+            curl_args.insert(curl_args.len() - 2, url);
+
+            let curl_res = Command::new("curl").args(&curl_args).output();
+            match curl_res {
+                Ok(output) if output.status.success() && appimage_path.is_file() => {
+                    download_success = true;
+                    crate::log_info!("Downloaded AppImage successfully via curl.");
+                    break;
+                }
+                Ok(output) => {
+                    let err = String::from_utf8_lossy(&output.stderr).to_string();
+                    crate::log_warn!("curl failed: {}. Trying wget...", err);
+                    let mut wget_args = vec!["--timeout=20"];
+                    if is_alternative {
+                        wget_args.push("--no-check-certificate");
                     }
-                    Err(we) => (false, format!("curl hatası: {}\nwget çalıştırılamadı: {}", err_str, we)),
+                    wget_args.extend([url, "-O", appimage_path.to_str().unwrap_or("")]);
+                    if let Ok(w_out) = Command::new("wget").args(&wget_args).output() {
+                        if w_out.status.success() && appimage_path.is_file() {
+                            download_success = true;
+                            crate::log_info!("Downloaded AppImage successfully via wget.");
+                            break;
+                        } else {
+                            err_details = format!("curl hatası: {}\nwget hatası: {}", err, String::from_utf8_lossy(&w_out.stderr));
+                        }
+                    } else {
+                        err_details = format!("curl hatası: {}", err);
+                    }
+                }
+                Err(e) => {
+                    crate::log_warn!("curl execution failed: {}. Trying wget...", e);
+                    let mut wget_args = vec!["--timeout=20"];
+                    if is_alternative {
+                        wget_args.push("--no-check-certificate");
+                    }
+                    wget_args.extend([url, "-O", appimage_path.to_str().unwrap_or("")]);
+                    if let Ok(w_out) = Command::new("wget").args(&wget_args).output() {
+                        if w_out.status.success() && appimage_path.is_file() {
+                            download_success = true;
+                            crate::log_info!("Downloaded AppImage successfully via wget.");
+                            break;
+                        } else {
+                            err_details = format!("wget hatası: {}", String::from_utf8_lossy(&w_out.stderr));
+                        }
+                    } else {
+                        err_details = format!("curl ve wget çalıştırılamadı: {}", e);
+                    }
                 }
             }
-            Err(e) => {
-                crate::log_warn!("curl çalıştırılamadı: {}. Trying wget...", e);
-                let wget_out = Command::new("wget")
-                    .args(["--timeout=20", url, "-O", &appimage_path.to_string_lossy()])
-                    .output();
-                match wget_out {
-                    Ok(w_out) if w_out.status.success() => (true, String::new()),
-                    Ok(w_out) => {
-                        let w_err = String::from_utf8_lossy(&w_out.stderr).to_string();
-                        (false, format!("curl çalıştırılamadı: {}\nwget hatası: {}", e, w_err))
-                    }
-                    Err(we) => (false, format!("Hem curl ({}) hem wget ({}) çalıştırılamadı.", e, we)),
-                }
-            }
-        };
+        }
 
-        if !success {
+        if !download_success {
             let _ = fs::remove_dir_all(&temp_dir);
             let msg = format!("Linux AppImage paketi indirilemedi.\nDetaylar:\n{}", err_details);
             crate::log_error!("{}", msg);
@@ -467,17 +548,75 @@ pub fn download_linux_engine(base_dir: &Path) -> Result<String, String> {
 
         match ext_output {
             Ok(output) if output.status.success() => {
-                let squash_bin = temp_dir.join("squashfs-root/bin");
-                if squash_bin.is_dir() {
+                let squash_root = temp_dir.join("squashfs-root");
+
+                // Locate directory containing gow3-probe
+                // Priority order:
+                // 1. usr/share/gow3/bin (official FelipePrado0 / SpartanPort AppImage layout)
+                // 2. bin
+                // 3. usr/bin
+                // 4. Recursive search inside squashfs-root
+                let candidates = [
+                    squash_root.join("usr/share/gow3/bin"),
+                    squash_root.join("bin"),
+                    squash_root.join("usr/bin"),
+                ];
+
+                let probe_dir = candidates
+                    .into_iter()
+                    .find(|dir| dir.join("gow3-probe").is_file())
+                    .or_else(|| {
+                        find_file_recursive(&squash_root, "gow3-probe")
+                            .and_then(|p| p.parent().map(|d| d.to_path_buf()))
+                    });
+
+                if let Some(source_bin) = probe_dir {
+                    crate::log_info!("Found gow3-probe directory at: {}", source_bin.display());
+
+                    // 1. Copy probe binary and all sibling assets (including gpu/ directory) into dest_bin
                     let _ = Command::new("cp")
-                        .args(["-r", &format!("{}/.", squash_bin.to_string_lossy()), &dest_bin.to_string_lossy()])
+                        .args(["-r", &format!("{}/.", source_bin.to_string_lossy()), &dest_bin.to_string_lossy()])
                         .status();
                     let _ = Command::new("chmod")
                         .args(["+x", &dest_bin.join("gow3-probe").to_string_lossy()])
                         .status();
+                    if dest_bin.join("gow3-gpu-capabilities").is_file() {
+                        let _ = Command::new("chmod")
+                            .args(["+x", &dest_bin.join("gow3-gpu-capabilities").to_string_lossy()])
+                            .status();
+                    }
+
+                    // 2. Copy shared libraries from usr/lib and lib into dest_bin/lib
+                    let dest_lib = dest_bin.join("lib");
+                    let _ = fs::create_dir_all(&dest_lib);
+
+                    for lib_candidate in [squash_root.join("usr/lib"), squash_root.join("lib")] {
+                        if lib_candidate.is_dir() {
+                            crate::log_info!("Copying shared libraries from {} to {}", lib_candidate.display(), dest_lib.display());
+                            let _ = Command::new("cp")
+                                .args(["-r", &format!("{}/.", lib_candidate.to_string_lossy()), &dest_lib.to_string_lossy()])
+                                .status();
+                        }
+                    }
+
+                    // 3. Copy scripts and patches if available in squashfs-root
+                    let scripts_src = squash_root.join("scripts");
+                    if scripts_src.is_dir() && !base_dir.join("scripts").is_dir() {
+                        let _ = Command::new("cp")
+                            .args(["-r", &format!("{}/.", scripts_src.to_string_lossy()), &base_dir.join("scripts").to_string_lossy()])
+                            .status();
+                    }
+                    let patches_src = squash_root.join("patches");
+                    if patches_src.is_dir() && !base_dir.join("patches").is_dir() {
+                        let _ = Command::new("cp")
+                            .args(["-r", &format!("{}/.", patches_src.to_string_lossy()), &base_dir.join("patches").to_string_lossy()])
+                            .status();
+                    }
+
                     extract_success = true;
                 } else {
-                    extract_err = "AppImage çıkarıldı ancak 'squashfs-root/bin' klasörü bulunamadı.".to_string();
+                    extract_err = "AppImage çıkarıldı ancak paket içinde 'gow3-probe' binary dosyası bulunamadı.".to_string();
+                    crate::log_error!("{}", extract_err);
                 }
             }
             Ok(output) => {
@@ -503,18 +642,19 @@ pub fn download_linux_engine(base_dir: &Path) -> Result<String, String> {
 
     #[cfg(target_os = "windows")]
     {
+        let _ = (base_dir, is_alternative, &dest_bin);
         Err("Bu fonksiyon yalnızca Linux üzerinde çalışır.".to_string())
     }
 }
 
-pub fn download_engine(base_dir: &Path) -> Result<String, String> {
+pub fn download_engine(base_dir: &Path, is_alternative: bool) -> Result<String, String> {
     #[cfg(target_os = "windows")]
     {
-        download_windows_engine(base_dir)
+        download_windows_engine(base_dir, is_alternative)
     }
     #[cfg(not(target_os = "windows"))]
     {
-        download_linux_engine(base_dir)
+        download_linux_engine(base_dir, is_alternative)
     }
 }
 
@@ -524,7 +664,7 @@ pub fn ensure_game_engine(base_dir: &Path) -> Result<PathBuf, String> {
     }
 
     // Try automatic download if missing
-    let _ = download_engine(base_dir);
+    let _ = download_engine(base_dir, false);
     if let Some(p) = find_game_engine(base_dir) {
         return Ok(p);
     }
@@ -1086,6 +1226,29 @@ pub fn launch_gow3(
             }
         }
         cmd.env("LD_PRELOAD", preload);
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let bin_dir = base_dir.join("bin");
+        let lib_dir = bin_dir.join("lib");
+        let gpu_dir = bin_dir.join("gpu");
+        let mut ld_paths = Vec::new();
+        if lib_dir.is_dir() {
+            ld_paths.push(lib_dir);
+        }
+        if gpu_dir.is_dir() {
+            ld_paths.push(gpu_dir);
+        }
+        if bin_dir.is_dir() {
+            ld_paths.push(bin_dir);
+        }
+        if let Some(existing_ld) = std::env::var_os("LD_LIBRARY_PATH") {
+            ld_paths.extend(std::env::split_paths(&existing_ld));
+        }
+        if let Ok(new_ld) = std::env::join_paths(ld_paths) {
+            cmd.env("LD_LIBRARY_PATH", new_ld);
+        }
     }
     cmd.env(
         "SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS",

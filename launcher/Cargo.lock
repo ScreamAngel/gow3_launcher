@@ -1784,11 +1784,12 @@ dependencies = [
 
 [[package]]
 name = "launcher"
-version = "1.7.0"
+version = "1.8.0"
 dependencies = [
  "eframe",
  "egui_extras",
  "image",
+ "libc",
  "rfd",
  "serde",
  "serde_json",

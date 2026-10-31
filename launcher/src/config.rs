@@ -284,7 +284,7 @@ fn default_last_commit() -> String {
     "c5638d9956002b8a9f09a240028f6793ddf7b2f8".to_string()
 }
 fn default_launcher_version() -> String {
-    "v1.7".to_string()
+    "v1.8".to_string()
 }
 fn default_render_resolution() -> String {
     "native".to_string()
@@ -475,6 +475,17 @@ impl LauncherConfig {
                 s if s.starts_with("kp") && s.len() == 3 && s[2..].chars().all(|c| c.is_ascii_digit()) => {
                     format!("Keypad {}", &s[2..])
                 }
+                "kp_plus" | "kpplus" => "Keypad +".to_string(),
+                "kp_minus" | "kpminus" => "Keypad -".to_string(),
+                "kp_multiply" | "kpasterisk" => "Keypad *".to_string(),
+                "kp_divide" | "kpslash" => "Keypad /".to_string(),
+                "kp_enter" | "kpenter" => "Keypad Enter".to_string(),
+                "kp_period" | "kpperiod" => "Keypad .".to_string(),
+                "leftbutton" | "mouse1" => "LeftButton".to_string(),
+                "rightbutton" | "mouse2" => "RightButton".to_string(),
+                "middlebutton" | "mouse3" => "MiddleButton".to_string(),
+                "sidebuttonback" | "mouse4" => "SideButtonBack".to_string(),
+                "sidebuttonforward" | "mouse5" => "SideButtonForward".to_string(),
                 "shift" | "lshift" => "Left Shift".to_string(),
                 "rshift" => "Right Shift".to_string(),
                 "ctrl" | "lctrl" => "Left Ctrl".to_string(),
@@ -591,8 +602,8 @@ pub fn key_to_sdl_scancode(key: &str) -> Option<u8> {
         "up" => Some(82),
 
         // Numpad (SDL_SCANCODE_KP_1 = 89 .. SDL_SCANCODE_KP_0 = 98)
-        "kp_divide" | "kpdivide" | "numdivide" => Some(84),
-        "kp_multiply" | "kpmultiply" | "nummultiply" => Some(85),
+        "kp_divide" | "kpdivide" | "numdivide" | "kpslash" => Some(84),
+        "kp_multiply" | "kpmultiply" | "nummultiply" | "kpasterisk" => Some(85),
         "kp_minus" | "kpminus" | "numminus" => Some(86),
         "kp_plus" | "kpplus" | "numplus" => Some(87),
         "kp_enter" | "kpenter" | "numenter" => Some(88),
@@ -617,5 +628,35 @@ pub fn key_to_sdl_scancode(key: &str) -> Option<u8> {
         "ralt" => Some(230),
 
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_numpad_scancodes() {
+        assert_eq!(key_to_sdl_scancode("kp0"), Some(98));
+        assert_eq!(key_to_sdl_scancode("kp1"), Some(89));
+        assert_eq!(key_to_sdl_scancode("kp2"), Some(90));
+        assert_eq!(key_to_sdl_scancode("kp3"), Some(91));
+        assert_eq!(key_to_sdl_scancode("kp4"), Some(92));
+        assert_eq!(key_to_sdl_scancode("kp5"), Some(93));
+        assert_eq!(key_to_sdl_scancode("kp6"), Some(94));
+        assert_eq!(key_to_sdl_scancode("kp7"), Some(95));
+        assert_eq!(key_to_sdl_scancode("kp8"), Some(96));
+        assert_eq!(key_to_sdl_scancode("kp9"), Some(97));
+        assert_eq!(key_to_sdl_scancode("kpplus"), Some(87));
+        assert_eq!(key_to_sdl_scancode("kpminus"), Some(86));
+        assert_eq!(key_to_sdl_scancode("kpasterisk"), Some(85));
+        assert_eq!(key_to_sdl_scancode("kpslash"), Some(84));
+        assert_eq!(key_to_sdl_scancode("kpenter"), Some(88));
+        assert_eq!(key_to_sdl_scancode("kpperiod"), Some(99));
+    }
+
+    #[test]
+    fn test_launcher_version_is_v18() {
+        assert_eq!(default_launcher_version(), "v1.8");
     }
 }

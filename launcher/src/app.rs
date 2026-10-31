@@ -48,6 +48,136 @@ pub enum KeyBindingTarget {
     AxisRightXPlus,
 }
 
+#[cfg(target_os = "windows")]
+pub fn check_physical_numpad() -> Option<&'static str> {
+    unsafe extern "system" {
+        fn GetAsyncKeyState(vKey: i32) -> i16;
+    }
+    unsafe {
+        let is_down = |vk: i32| -> bool { (GetAsyncKeyState(vk) as u16 & 0x8000) != 0 };
+        if is_down(0x60) { return Some("kp0"); }
+        if is_down(0x61) { return Some("kp1"); }
+        if is_down(0x62) { return Some("kp2"); }
+        if is_down(0x63) { return Some("kp3"); }
+        if is_down(0x64) { return Some("kp4"); }
+        if is_down(0x65) { return Some("kp5"); }
+        if is_down(0x66) { return Some("kp6"); }
+        if is_down(0x67) { return Some("kp7"); }
+        if is_down(0x68) { return Some("kp8"); }
+        if is_down(0x69) { return Some("kp9"); }
+        if is_down(0x6A) { return Some("kpasterisk"); }
+        if is_down(0x6B) { return Some("kpplus"); }
+        if is_down(0x6D) { return Some("kpminus"); }
+        if is_down(0x6E) { return Some("kpperiod"); }
+        if is_down(0x6F) { return Some("kpslash"); }
+    }
+    None
+}
+
+#[cfg(target_os = "linux")]
+pub fn check_physical_numpad() -> Option<&'static str> {
+    use std::ffi::{c_char, c_void};
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    static X11_FAILED: AtomicBool = AtomicBool::new(false);
+    if X11_FAILED.load(Ordering::Relaxed) {
+        return None;
+    }
+
+    type XOpenDisplayFn = unsafe extern "C" fn(*const c_char) -> *mut c_void;
+    type XCloseDisplayFn = unsafe extern "C" fn(*mut c_void) -> i32;
+    type XQueryKeymapFn = unsafe extern "C" fn(*mut c_void, *mut u8) -> i32;
+
+    unsafe {
+        let lib = libc::dlopen(b"libX11.so.6\0".as_ptr() as *const c_char, libc::RTLD_LAZY);
+        if lib.is_null() {
+            X11_FAILED.store(true, Ordering::Relaxed);
+            return None;
+        }
+
+        let open_sym = libc::dlsym(lib, b"XOpenDisplay\0".as_ptr() as *const c_char);
+        let close_sym = libc::dlsym(lib, b"XCloseDisplay\0".as_ptr() as *const c_char);
+        let query_sym = libc::dlsym(lib, b"XQueryKeymap\0".as_ptr() as *const c_char);
+
+        if open_sym.is_null() || close_sym.is_null() || query_sym.is_null() {
+            libc::dlclose(lib);
+            X11_FAILED.store(true, Ordering::Relaxed);
+            return None;
+        }
+
+        let open_disp: XOpenDisplayFn = std::mem::transmute(open_sym);
+        let close_disp: XCloseDisplayFn = std::mem::transmute(close_sym);
+        let query_keymap: XQueryKeymapFn = std::mem::transmute(query_sym);
+
+        let disp = open_disp(std::ptr::null());
+        if disp.is_null() {
+            libc::dlclose(lib);
+            return None;
+        }
+
+        let mut keys = [0u8; 32];
+        query_keymap(disp, keys.as_mut_ptr());
+        close_disp(disp);
+        libc::dlclose(lib);
+
+        let is_pressed = |kc: usize| -> bool {
+            (keys[kc / 8] & (1 << (kc % 8))) != 0
+        };
+
+        if is_pressed(90) { return Some("kp0"); }
+        if is_pressed(87) { return Some("kp1"); }
+        if is_pressed(88) { return Some("kp2"); }
+        if is_pressed(89) { return Some("kp3"); }
+        if is_pressed(83) { return Some("kp4"); }
+        if is_pressed(84) { return Some("kp5"); }
+        if is_pressed(85) { return Some("kp6"); }
+        if is_pressed(79) { return Some("kp7"); }
+        if is_pressed(80) { return Some("kp8"); }
+        if is_pressed(81) { return Some("kp9"); }
+        if is_pressed(86) { return Some("kpplus"); }
+        if is_pressed(82) { return Some("kpminus"); }
+        if is_pressed(63) { return Some("kpasterisk"); }
+        if is_pressed(106) { return Some("kpslash"); }
+        if is_pressed(91) { return Some("kpperiod"); }
+        if is_pressed(104) { return Some("kpenter"); }
+    }
+    None
+}
+
+#[cfg(not(any(target_os = "windows", target_os = "linux")))]
+pub fn check_physical_numpad() -> Option<&'static str> {
+    None
+}
+
+pub fn apply_binding_to_config(config: &mut LauncherConfig, target: KeyBindingTarget, new_key: String) {
+    match target {
+        KeyBindingTarget::Triangle => config.keyboard_bindings.triangle = new_key,
+        KeyBindingTarget::Circle => config.keyboard_bindings.circle = new_key,
+        KeyBindingTarget::Cross => config.keyboard_bindings.cross = new_key,
+        KeyBindingTarget::Square => config.keyboard_bindings.square = new_key,
+        KeyBindingTarget::L1 => config.keyboard_bindings.l1 = new_key,
+        KeyBindingTarget::R1 => config.keyboard_bindings.r1 = new_key,
+        KeyBindingTarget::L2 => config.keyboard_bindings.l2 = new_key,
+        KeyBindingTarget::R2 => config.keyboard_bindings.r2 = new_key,
+        KeyBindingTarget::L3 => config.keyboard_bindings.l3 = new_key,
+        KeyBindingTarget::R3 => config.keyboard_bindings.r3 = new_key,
+        KeyBindingTarget::Options => config.keyboard_bindings.options = new_key,
+        KeyBindingTarget::TouchpadCenter => config.keyboard_bindings.touchpad_center = new_key,
+        KeyBindingTarget::PadUp => config.keyboard_bindings.pad_up = new_key,
+        KeyBindingTarget::PadDown => config.keyboard_bindings.pad_down = new_key,
+        KeyBindingTarget::PadLeft => config.keyboard_bindings.pad_left = new_key,
+        KeyBindingTarget::PadRight => config.keyboard_bindings.pad_right = new_key,
+        KeyBindingTarget::AxisLeftYMinus => config.keyboard_bindings.axis_left_y_minus = new_key,
+        KeyBindingTarget::AxisLeftYPlus => config.keyboard_bindings.axis_left_y_plus = new_key,
+        KeyBindingTarget::AxisLeftXMinus => config.keyboard_bindings.axis_left_x_minus = new_key,
+        KeyBindingTarget::AxisLeftXPlus => config.keyboard_bindings.axis_left_x_plus = new_key,
+        KeyBindingTarget::AxisRightYMinus => config.keyboard_bindings.axis_right_y_minus = new_key,
+        KeyBindingTarget::AxisRightYPlus => config.keyboard_bindings.axis_right_y_plus = new_key,
+        KeyBindingTarget::AxisRightXMinus => config.keyboard_bindings.axis_right_x_minus = new_key,
+        KeyBindingTarget::AxisRightXPlus => config.keyboard_bindings.axis_right_x_plus = new_key,
+    }
+}
+
 pub fn egui_key_to_shadps4(key: egui::Key) -> Option<&'static str> {
     match key {
         egui::Key::ArrowDown => Some("down"),
@@ -120,7 +250,7 @@ pub fn egui_key_to_shadps4(key: egui::Key) -> Option<&'static str> {
 }
 
 pub fn format_key_display(key_str: &str) -> String {
-    match key_str.to_lowercase().as_str() {
+    match key_str.trim().to_lowercase().as_str() {
         "kp0" => "Numpad 0".to_string(),
         "kp1" => "Numpad 1".to_string(),
         "kp2" => "Numpad 2".to_string(),
@@ -131,6 +261,25 @@ pub fn format_key_display(key_str: &str) -> String {
         "kp7" => "Numpad 7".to_string(),
         "kp8" => "Numpad 8".to_string(),
         "kp9" => "Numpad 9".to_string(),
+        "kpplus" | "kp_plus" => "Numpad +".to_string(),
+        "kpminus" | "kp_minus" => "Numpad -".to_string(),
+        "kpasterisk" | "kp_multiply" => "Numpad *".to_string(),
+        "kpslash" | "kp_divide" => "Numpad /".to_string(),
+        "kpenter" | "kp_enter" => "Numpad Enter".to_string(),
+        "kpperiod" | "kp_period" => "Numpad .".to_string(),
+        "kpcomma" => "Numpad ,".to_string(),
+        "kpequals" => "Numpad =".to_string(),
+
+        // Mouse buttons
+        "leftbutton" | "mouse1" => "🖱 Fare Sol Tık".to_string(),
+        "rightbutton" | "mouse2" => "🖱 Fare Sağ Tık".to_string(),
+        "middlebutton" | "mouse3" => "🖱 Fare Orta Tık".to_string(),
+        "sidebuttonback" | "mouse4" => "🖱 Yan 1 (Geri)".to_string(),
+        "sidebuttonforward" | "mouse5" => "🖱 Yan 2 (İleri)".to_string(),
+        "mousewheelup" => "🖱 Tekerlek Yukarı".to_string(),
+        "mousewheeldown" => "🖱 Tekerlek Aşağı".to_string(),
+
+        // Direction & Navigation
         "up" => "Yukarı (Up)".to_string(),
         "down" => "Aşağı (Down)".to_string(),
         "left" => "Sol (Left)".to_string(),
@@ -493,7 +642,7 @@ fn render_binding_row(
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             let is_listening = listening_for == Some(target);
             let btn_text = if is_listening {
-                "[ Tuşa basın... / ESC ]".to_string()
+                "[ Tuşa / Fareye basın... ]".to_string()
             } else {
                 format_key_display(current_key)
             };
@@ -1005,12 +1154,33 @@ impl eframe::App for LauncherApp {
 
             ctx.input(|i| {
                 for event in &i.events {
-                    if let egui::Event::Key { key, pressed: true, .. } = event {
-                        if *key == egui::Key::Escape {
-                            cancel = true;
-                        } else if let Some(shad_name) = egui_key_to_shadps4(*key) {
-                            captured_key = Some(shad_name.to_string());
+                    match event {
+                        egui::Event::Key { key, pressed: true, .. } => {
+                            if *key == egui::Key::Escape {
+                                cancel = true;
+                            } else if let Some(numpad_key) = check_physical_numpad() {
+                                captured_key = Some(numpad_key.to_string());
+                            } else if let Some(shad_name) = egui_key_to_shadps4(*key) {
+                                captured_key = Some(shad_name.to_string());
+                            }
                         }
+                        egui::Event::PointerButton { button, pressed: true, .. } => {
+                            match button {
+                                egui::PointerButton::Secondary => captured_key = Some("rightbutton".to_string()),
+                                egui::PointerButton::Middle => captured_key = Some("middlebutton".to_string()),
+                                egui::PointerButton::Extra1 => captured_key = Some("sidebuttonback".to_string()),
+                                egui::PointerButton::Extra2 => captured_key = Some("sidebuttonforward".to_string()),
+                                _ => {}
+                            }
+                        }
+                        egui::Event::MouseWheel { delta, .. } => {
+                            if delta.y > 6.0 {
+                                captured_key = Some("mousewheelup".to_string());
+                            } else if delta.y < -6.0 {
+                                captured_key = Some("mousewheeldown".to_string());
+                            }
+                        }
+                        _ => {}
                     }
                 }
             });
@@ -1018,32 +1188,7 @@ impl eframe::App for LauncherApp {
             if cancel {
                 self.listening_key_for = None;
             } else if let Some(new_key) = captured_key {
-                match target {
-                    KeyBindingTarget::Triangle => self.config.keyboard_bindings.triangle = new_key,
-                    KeyBindingTarget::Circle => self.config.keyboard_bindings.circle = new_key,
-                    KeyBindingTarget::Cross => self.config.keyboard_bindings.cross = new_key,
-                    KeyBindingTarget::Square => self.config.keyboard_bindings.square = new_key,
-                    KeyBindingTarget::L1 => self.config.keyboard_bindings.l1 = new_key,
-                    KeyBindingTarget::R1 => self.config.keyboard_bindings.r1 = new_key,
-                    KeyBindingTarget::L2 => self.config.keyboard_bindings.l2 = new_key,
-                    KeyBindingTarget::R2 => self.config.keyboard_bindings.r2 = new_key,
-                    KeyBindingTarget::L3 => self.config.keyboard_bindings.l3 = new_key,
-                    KeyBindingTarget::R3 => self.config.keyboard_bindings.r3 = new_key,
-                    KeyBindingTarget::Options => self.config.keyboard_bindings.options = new_key,
-                    KeyBindingTarget::TouchpadCenter => self.config.keyboard_bindings.touchpad_center = new_key,
-                    KeyBindingTarget::PadUp => self.config.keyboard_bindings.pad_up = new_key,
-                    KeyBindingTarget::PadDown => self.config.keyboard_bindings.pad_down = new_key,
-                    KeyBindingTarget::PadLeft => self.config.keyboard_bindings.pad_left = new_key,
-                    KeyBindingTarget::PadRight => self.config.keyboard_bindings.pad_right = new_key,
-                    KeyBindingTarget::AxisLeftYMinus => self.config.keyboard_bindings.axis_left_y_minus = new_key,
-                    KeyBindingTarget::AxisLeftYPlus => self.config.keyboard_bindings.axis_left_y_plus = new_key,
-                    KeyBindingTarget::AxisLeftXMinus => self.config.keyboard_bindings.axis_left_x_minus = new_key,
-                    KeyBindingTarget::AxisLeftXPlus => self.config.keyboard_bindings.axis_left_x_plus = new_key,
-                    KeyBindingTarget::AxisRightYMinus => self.config.keyboard_bindings.axis_right_y_minus = new_key,
-                    KeyBindingTarget::AxisRightYPlus => self.config.keyboard_bindings.axis_right_y_plus = new_key,
-                    KeyBindingTarget::AxisRightXMinus => self.config.keyboard_bindings.axis_right_x_minus = new_key,
-                    KeyBindingTarget::AxisRightXPlus => self.config.keyboard_bindings.axis_right_x_plus = new_key,
-                }
+                apply_binding_to_config(&mut self.config, target, new_key);
                 self.listening_key_for = None;
             }
         }
@@ -2503,7 +2648,8 @@ impl eframe::App for LauncherApp {
             || self.show_first_launch_modal
             || self.active_crash_diagnosis.is_some()
             || self.show_log_modal
-            || self.update_modal.is_some();
+            || self.update_modal.is_some()
+            || self.listening_key_for.is_some();
 
         if modal_active {
             ui.painter().rect_filled(
@@ -2875,5 +3021,180 @@ impl eframe::App for LauncherApp {
                     });
                 });
         }
+
+        // --- MODAL 6: KEY / MOUSE BINDING MODAL ---
+        if let Some(target) = self.listening_key_for {
+            let mut picked_key: Option<String> = None;
+            let mut close_modal = false;
+
+            let target_name = match target {
+                KeyBindingTarget::Triangle => self.t("act_triangle"),
+                KeyBindingTarget::Circle => self.t("act_circle"),
+                KeyBindingTarget::Cross => self.t("act_cross"),
+                KeyBindingTarget::Square => self.t("act_square"),
+                KeyBindingTarget::L1 => self.t("act_l1"),
+                KeyBindingTarget::R1 => self.t("act_r1"),
+                KeyBindingTarget::L2 => self.t("act_l2"),
+                KeyBindingTarget::R2 => self.t("act_r2"),
+                KeyBindingTarget::L3 => self.t("act_l3"),
+                KeyBindingTarget::R3 => self.t("act_r3"),
+                KeyBindingTarget::Options => self.t("act_options"),
+                KeyBindingTarget::TouchpadCenter => self.t("act_touchpad"),
+                KeyBindingTarget::PadUp => self.t("act_dpad_up"),
+                KeyBindingTarget::PadDown => self.t("act_dpad_down"),
+                KeyBindingTarget::PadLeft => self.t("act_dpad_left"),
+                KeyBindingTarget::PadRight => self.t("act_dpad_right"),
+                KeyBindingTarget::AxisLeftYMinus => self.t("act_move_up"),
+                KeyBindingTarget::AxisLeftYPlus => self.t("act_move_down"),
+                KeyBindingTarget::AxisLeftXMinus => self.t("act_move_left"),
+                KeyBindingTarget::AxisLeftXPlus => self.t("act_move_right"),
+                KeyBindingTarget::AxisRightYMinus => self.t("act_cam_up"),
+                KeyBindingTarget::AxisRightYPlus => self.t("act_cam_down"),
+                KeyBindingTarget::AxisRightXMinus => self.t("act_cam_left"),
+                KeyBindingTarget::AxisRightXPlus => self.t("act_cam_right"),
+            };
+
+            egui::Window::new(self.t("key_bind_modal_title"))
+                .collapsible(false)
+                .resizable(false)
+                .default_width(540.0)
+                .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
+                .show(&ctx, |ui| {
+                    ui.spacing_mut().item_spacing = egui::vec2(8.0, 8.0);
+                    ui.horizontal(|ui| {
+                        paint_ps_badge(ui, target);
+                        ui.label(
+                            egui::RichText::new(target_name)
+                                .size(16.0)
+                                .strong()
+                                .color(egui::Color32::from_rgb(255, 215, 100)),
+                        );
+                    });
+                    ui.label(
+                        egui::RichText::new(self.t("key_bind_modal_desc"))
+                            .size(12.0)
+                            .color(egui::Color32::from_rgb(200, 205, 220)),
+                    );
+                    ui.separator();
+
+                    // Section 1: Mouse Buttons
+                    ui.label(
+                        egui::RichText::new(self.t("sec_mouse_bindings"))
+                            .strong()
+                            .color(egui::Color32::from_rgb(140, 210, 255))
+                            .size(13.0),
+                    );
+
+                    ui.horizontal_wrapped(|ui| {
+                        let mouse_options = [
+                            (self.t("mouse_left_btn"), "leftbutton"),
+                            (self.t("mouse_right_btn"), "rightbutton"),
+                            (self.t("mouse_middle_btn"), "middlebutton"),
+                            (self.t("mouse_side1_btn"), "sidebuttonback"),
+                            (self.t("mouse_side2_btn"), "sidebuttonforward"),
+                            (self.t("mouse_wheel_up"), "mousewheelup"),
+                            (self.t("mouse_wheel_down"), "mousewheeldown"),
+                        ];
+                        for (label, key_code) in mouse_options {
+                            let btn = egui::Button::new(
+                                egui::RichText::new(label).size(11.5).strong().color(egui::Color32::WHITE),
+                            )
+                            .fill(egui::Color32::from_rgb(32, 45, 65))
+                            .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgb(70, 110, 160)))
+                            .corner_radius(egui::CornerRadius::same(5));
+                            if ui.add(btn).clicked() {
+                                picked_key = Some(key_code.to_string());
+                            }
+                        }
+                    });
+
+                    ui.add_space(4.0);
+                    ui.separator();
+
+                    // Section 2: Numpad Grid
+                    ui.label(
+                        egui::RichText::new(self.t("sec_numpad_bindings"))
+                            .strong()
+                            .color(egui::Color32::from_rgb(255, 180, 100))
+                            .size(13.0),
+                    );
+
+                    let numpad_rows = [
+                        [("7", "kp7"), ("8", "kp8"), ("9", "kp9"), ("/", "kpslash")],
+                        [("4", "kp4"), ("5", "kp5"), ("6", "kp6"), ("*", "kpasterisk")],
+                        [("1", "kp1"), ("2", "kp2"), ("3", "kp3"), ("-", "kpminus")],
+                        [("0", "kp0"), (".", "kpperiod"), ("Enter", "kpenter"), ("+", "kpplus")],
+                    ];
+
+                    for row in numpad_rows {
+                        ui.horizontal(|ui| {
+                            for (label, key_code) in row {
+                                let btn = egui::Button::new(
+                                    egui::RichText::new(format!("KP {}", label)).size(11.5).strong().color(egui::Color32::WHITE),
+                                )
+                                .min_size(egui::vec2(72.0, 26.0))
+                                .fill(egui::Color32::from_rgb(45, 38, 55))
+                                .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgb(130, 90, 160)))
+                                .corner_radius(egui::CornerRadius::same(5));
+                                if ui.add(btn).clicked() {
+                                    picked_key = Some(key_code.to_string());
+                                }
+                            }
+                        });
+                    }
+
+                    ui.add_space(6.0);
+                    ui.separator();
+
+                    // Cancel button
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        let cancel_btn = egui::Button::new(
+                            egui::RichText::new(format!("❌ {}", self.t("cancel_btn"))).size(12.0).strong(),
+                        )
+                        .min_size(egui::vec2(120.0, 30.0))
+                        .fill(egui::Color32::from_rgb(70, 25, 25))
+                        .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgb(170, 60, 60)))
+                        .corner_radius(egui::CornerRadius::same(6));
+                        if ui.add(cancel_btn).clicked() {
+                            close_modal = true;
+                        }
+                    });
+                });
+
+            if let Some(new_k) = picked_key {
+                apply_binding_to_config(&mut self.config, target, new_k);
+                self.listening_key_for = None;
+            } else if close_modal {
+                self.listening_key_for = None;
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_format_key_display() {
+        assert!(format_key_display("leftbutton").contains("Sol Tık"));
+        assert!(format_key_display("rightbutton").contains("Sağ Tık"));
+        assert!(format_key_display("middlebutton").contains("Orta Tık"));
+        assert!(format_key_display("sidebuttonback").contains("Yan 1"));
+        assert!(format_key_display("sidebuttonforward").contains("Yan 2"));
+        assert_eq!(format_key_display("kp8"), "Numpad 8");
+        assert_eq!(format_key_display("kp2"), "Numpad 2");
+        assert_eq!(format_key_display("kpplus"), "Numpad +");
+    }
+
+    #[test]
+    fn test_apply_binding_to_config() {
+        let mut cfg = LauncherConfig::default();
+        apply_binding_to_config(&mut cfg, KeyBindingTarget::Triangle, "leftbutton".to_string());
+        assert_eq!(cfg.keyboard_bindings.triangle, "leftbutton");
+        apply_binding_to_config(&mut cfg, KeyBindingTarget::Square, "rightbutton".to_string());
+        assert_eq!(cfg.keyboard_bindings.square, "rightbutton");
+        apply_binding_to_config(&mut cfg, KeyBindingTarget::Cross, "kp2".to_string());
+        assert_eq!(cfg.keyboard_bindings.cross, "kp2");
     }
 }

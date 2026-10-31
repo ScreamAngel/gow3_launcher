@@ -109,7 +109,7 @@ impl KeyboardBindings {
     /// - Options: Enter
     /// - Share veya Select: Backspace
     /// - DPAD: Ok Tuşları (Yukarı, Aşağı, Sol, Sağ)
-    /// - L1/R1/L2/R2/L3/R3: Q, I, E, O, X, M
+    /// - L1/R1/L2/R2/L3/R3: Q, E, Z, X, C, V
     pub fn recommended() -> Self {
         Self {
             triangle: "u".to_string(),
@@ -117,11 +117,11 @@ impl KeyboardBindings {
             cross: "g".to_string(),
             square: "t".to_string(),
             l1: "q".to_string(),
-            r1: "i".to_string(),
-            l2: "e".to_string(),
-            r2: "o".to_string(),
-            l3: "x".to_string(),
-            r3: "m".to_string(),
+            r1: "e".to_string(),
+            l2: "z".to_string(),
+            r2: "x".to_string(),
+            l3: "c".to_string(),
+            r3: "v".to_string(),
             options: "enter".to_string(),
             touchpad_center: "backspace".to_string(),
             pad_up: "up".to_string(),
@@ -149,7 +149,7 @@ impl KeyboardBindings {
     /// - Options: Enter
     /// - Share veya Select: Backspace
     /// - DPAD: Ok Tuşları (Yukarı, Aşağı, Sol, Sağ)
-    /// - L1/R1/L2/R2/L3/R3: Q, R, E, C, X, Z
+    /// - L1/R1/L2/R2/L3/R3: Q, E, Z, X, C, V
     pub fn mouse_keyboard() -> Self {
         Self {
             triangle: "rightbutton".to_string(),
@@ -157,11 +157,11 @@ impl KeyboardBindings {
             cross: "space".to_string(),
             square: "leftbutton".to_string(),
             l1: "q".to_string(),
-            r1: "r".to_string(),
-            l2: "e".to_string(),
-            r2: "c".to_string(),
-            l3: "x".to_string(),
-            r3: "z".to_string(),
+            r1: "e".to_string(),
+            l2: "z".to_string(),
+            r2: "x".to_string(),
+            l3: "c".to_string(),
+            r3: "v".to_string(),
             options: "enter".to_string(),
             touchpad_center: "backspace".to_string(),
             pad_up: "up".to_string(),
@@ -470,10 +470,12 @@ impl LauncherConfig {
         if path.exists() {
             if let Ok(content) = fs::read_to_string(&path) {
                 if let Ok(mut cfg) = serde_json::from_str::<LauncherConfig>(&content) {
-                    // If the user's config still has the old default bindings (wasd_cvbn with triangle='c' and square='v' or wasd_numpad with triangle='kp8'),
+                    // If the user's config still has old default bindings,
                     // automatically update to the new recommended preset.
                     if (cfg.keyboard_bindings.triangle == "c" && cfg.keyboard_bindings.square == "v")
                         || (cfg.keyboard_bindings.triangle == "kp8" && cfg.keyboard_bindings.square == "kp4" && cfg.keyboard_bindings.cross == "kp2")
+                        || (cfg.keyboard_bindings.triangle == "u" && cfg.keyboard_bindings.r1 == "i")
+                        || (cfg.keyboard_bindings.triangle == "rightbutton" && cfg.keyboard_bindings.r1 == "r")
                     {
                         cfg.keyboard_bindings = KeyboardBindings::recommended();
                         let _ = cfg.save(base_dir);
@@ -726,6 +728,12 @@ mod tests {
         assert_eq!(p1.axis_right_y_plus, "kp2");
         assert_eq!(p1.axis_right_x_minus, "kp4");
         assert_eq!(p1.axis_right_x_plus, "kp6");
+        assert_eq!(p1.l1, "q");
+        assert_eq!(p1.r1, "e");
+        assert_eq!(p1.l2, "z");
+        assert_eq!(p1.r2, "x");
+        assert_eq!(p1.l3, "c");
+        assert_eq!(p1.r3, "v");
         assert_eq!(p1.options, "enter");
         assert_eq!(p1.touchpad_center, "backspace");
         assert_eq!(p1.pad_up, "up");
@@ -738,6 +746,12 @@ mod tests {
         assert_eq!(p2.square, "leftbutton");
         assert_eq!(p2.circle, "f");
         assert_eq!(p2.cross, "space");
+        assert_eq!(p2.l1, "q");
+        assert_eq!(p2.r1, "e");
+        assert_eq!(p2.l2, "z");
+        assert_eq!(p2.r2, "x");
+        assert_eq!(p2.l3, "c");
+        assert_eq!(p2.r3, "v");
         assert_eq!(p2.axis_left_y_minus, "w");
         assert_eq!(p2.axis_left_x_minus, "a");
         assert_eq!(p2.axis_left_y_plus, "s");

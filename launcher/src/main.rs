@@ -2,11 +2,12 @@ mod app;
 mod config;
 mod crash_analyzer;
 mod i18n;
+pub mod logger;
+mod runner;
 mod scanner;
 mod system;
 mod tuner;
 mod updater;
-mod runner;
 
 use app::LauncherApp;
 use eframe::egui;
@@ -33,16 +34,23 @@ fn main() -> eframe::Result<()> {
         std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
     };
 
+    // Initialize launcher file logging
+    logger::init_logger(&base_dir);
+
     let args: Vec<String> = std::env::args().collect();
     if args.iter().any(|a| a == "--play" || a == "--start" || a == "-p") {
+        log_info!("Command line argument '--play' detected. Launching game directly...");
         let config = config::LauncherConfig::load(&base_dir);
         let gamemode_avail = system::is_gamemode_available();
         let use_gamemode = gamemode_avail && config.use_gamemode;
         let _ = tuner::apply_settings(&base_dir, &config);
         match runner::launch_gow3(&base_dir, &config, use_gamemode, None) {
-            Ok(code) => std::process::exit(code),
+            Ok(code) => {
+                log_info!("Game process exited with status code: {}", code);
+                std::process::exit(code);
+            }
             Err(e) => {
-                eprintln!("Error launching God of War III: {}", e);
+                log_error!("Error launching God of War III via CLI: {}", e);
                 std::process::exit(1);
             }
         }

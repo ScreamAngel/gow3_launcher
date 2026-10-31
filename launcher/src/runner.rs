@@ -116,6 +116,8 @@ pub fn download_portable_python(base_dir: &Path) -> Result<String, String> {
     let python_dir = runtime_dir.join("python");
     let _ = fs::create_dir_all(&python_dir);
 
+    crate::log_info!("Starting portable Python download to {}...", python_dir.display());
+
     #[cfg(target_os = "windows")]
     {
         let ps_code = format!(
@@ -124,25 +126,50 @@ pub fn download_portable_python(base_dir: &Path) -> Result<String, String> {
             [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12;
             $url = 'https://www.python.org/ftp/python/3.11.9/python-3.11.9-embed-amd64.zip';
             $zip = Join-Path $env:TEMP 'gow3_python_embed.zip';
-            $dest = '{}';
+            $dest = '{python_dest}';
             if (Test-Path $zip) {{ Remove-Item $zip -Force }};
             Write-Host 'Downloading Python 3.11 embed package...';
-            (New-Object System.Net.WebClient).DownloadFile($url, $zip);
+            try {{
+                (New-Object System.Net.WebClient).DownloadFile($url, $zip);
+            }} catch {{
+                Write-Error "Python download failed: $_";
+                exit 2;
+            }}
             if (!(Test-Path $dest)) {{ New-Item -ItemType Directory -Path $dest -Force | Out-Null }};
-            Write-Host 'Extracting archive...';
-            Expand-Archive -Path $zip -DestinationPath $dest -Force;
+            Write-Host 'Extracting Python archive...';
+            try {{
+                Expand-Archive -Path $zip -DestinationPath $dest -Force;
+            }} catch {{
+                Write-Error "Python extract failed: $_";
+                exit 3;
+            }}
             Remove-Item $zip -Force;
             "#,
-            python_dir.to_string_lossy().replace('\'', "''")
+            python_dest = python_dir.to_string_lossy().replace('\'', "''")
         );
 
-        let status = Command::new("powershell")
+        let output = Command::new("powershell")
             .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", &ps_code])
-            .status()
-            .map_err(|e| format!("PowerShell ile Python indirme komutu çalıştırılamadı: {}", e))?;
+            .output()
+            .map_err(|e| {
+                let msg = format!("PowerShell ile Python indirme komutu çalıştırılamadı: {}", e);
+                crate::log_error!("{}", msg);
+                msg
+            })?;
 
-        if !status.success() {
-            return Err("PowerShell üzerinden Python 3 indirilemedi.".to_string());
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        crate::log_info!("PowerShell Python download output: {}\nErrors: {}", stdout, stderr);
+
+        if !output.status.success() {
+            let msg = format!(
+                "PowerShell üzerinden Python 3 indirilemedi (Kod {:?})\nDetay:\n{}\n{}",
+                output.status.code(),
+                stdout.trim(),
+                stderr.trim()
+            );
+            crate::log_error!("{}", msg);
+            return Err(msg);
         }
 
         // Configure python311._pth to enable import site and recognize scripts directory
@@ -162,10 +189,10 @@ pub fn download_portable_python(base_dir: &Path) -> Result<String, String> {
                 "-o",
                 &zip_path.to_string_lossy(),
             ])
-            .status();
+            .output();
 
-        if let Ok(st) = curl_res {
-            if st.success() {
+        match curl_res {
+            Ok(output) if output.status.success() => {
                 let _ = Command::new("unzip")
                     .args(["-o", "-q", &zip_path.to_string_lossy(), "-d", &python_dir.to_string_lossy()])
                     .status();
@@ -175,10 +202,27 @@ pub fn download_portable_python(base_dir: &Path) -> Result<String, String> {
                 let pth_content = "python311.zip\n.\n..\nimport site\n";
                 let _ = fs::write(pth_file, pth_content);
             }
+            Ok(output) => {
+                let err = String::from_utf8_lossy(&output.stderr);
+                crate::log_warn!("curl failed to download python embed: {}", err);
+            }
+            Err(e) => {
+                crate::log_warn!("curl not found: {}", e);
+            }
         }
     }
 
-    find_python(base_dir).map_err(|_| "Python 3 indirildi ancak doğrulanamadı.".to_string())
+    match find_python(base_dir) {
+        Ok(p) => {
+            crate::log_info!("Python interpreter verified: {}", p);
+            Ok(p)
+        }
+        Err(e) => {
+            let msg = format!("Python 3 doğrulanamadı: {}", e);
+            crate::log_error!("{}", msg);
+            Err(msg)
+        }
+    }
 }
 
 /// Ensures Python 3 is available, automatically downloading portable package if missing
@@ -255,6 +299,7 @@ pub fn download_windows_engine(base_dir: &Path) -> Result<String, String> {
 
     #[cfg(target_os = "windows")]
     {
+        crate::log_info!("Starting Windows engine download to {}...", dest_bin.display());
         let ps_code = format!(
             r#"
             $ProgressPreference = 'SilentlyContinue';
@@ -265,9 +310,19 @@ pub fn download_windows_engine(base_dir: &Path) -> Result<String, String> {
             if (Test-Path $tempDir) {{ Remove-Item $tempDir -Recurse -Force }};
             if (Test-Path $zip) {{ Remove-Item $zip -Force }};
             Write-Host 'Downloading Windows engine package (~74MB)...';
-            (New-Object System.Net.WebClient).DownloadFile($url, $zip);
+            try {{
+                (New-Object System.Net.WebClient).DownloadFile($url, $zip);
+            }} catch {{
+                Write-Error "İndirme Hatası: $_";
+                exit 2;
+            }}
             Write-Host 'Extracting Windows package...';
-            Expand-Archive -Path $zip -DestinationPath $tempDir -Force;
+            try {{
+                Expand-Archive -Path $zip -DestinationPath $tempDir -Force;
+            }} catch {{
+                Write-Error "Arşiv Açma Hatası: $_";
+                exit 3;
+            }}
 
             $probe = Get-ChildItem -Path $tempDir -Recurse -Filter "gow3-probe.exe" | Select-Object -First 1;
             if ($probe) {{
@@ -276,7 +331,8 @@ pub fn download_windows_engine(base_dir: &Path) -> Result<String, String> {
                 if (!(Test-Path $destBin)) {{ New-Item -ItemType Directory -Path $destBin -Force | Out-Null }};
                 Copy-Item "$sourceBin\*" -Destination $destBin -Recurse -Force;
             }} else {{
-                throw "gow3-probe.exe extracted archive icinde bulunamadi!";
+                Write-Error "gow3-probe.exe extracted archive icinde bulunamadi!";
+                exit 4;
             }}
 
             $base = '{base_dir}';
@@ -291,25 +347,44 @@ pub fn download_windows_engine(base_dir: &Path) -> Result<String, String> {
 
             Remove-Item $tempDir -Recurse -Force;
             Remove-Item $zip -Force;
+            Write-Host 'Windows engine download and extraction completed successfully.';
             "#,
             dest_bin = dest_bin.to_string_lossy().replace('\'', "''"),
             base_dir = base_dir.to_string_lossy().replace('\'', "''")
         );
 
-        let status = Command::new("powershell")
+        let output = Command::new("powershell")
             .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", &ps_code])
-            .status()
-            .map_err(|e| format!("PowerShell Windows motoru indirme komutu çalıştırılamadı: {}", e))?;
+            .output()
+            .map_err(|e| {
+                let msg = format!("PowerShell Windows motoru indirme komutu çalıştırılamadı: {}", e);
+                crate::log_error!("{}", msg);
+                msg
+            })?;
 
-        if !status.success() {
-            return Err("PowerShell üzerinden Windows motor paketi indirilemedi veya açılamadı.".to_string());
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        crate::log_info!("PowerShell engine download output: {}\nErrors: {}", stdout, stderr);
+
+        if !output.status.success() {
+            let msg = format!(
+                "PowerShell üzerinden Windows motor paketi indirilemedi (Çıkış kodu: {:?})\nDetay:\n{}\n{}",
+                output.status.code(),
+                stdout.trim(),
+                stderr.trim()
+            );
+            crate::log_error!("{}", msg);
+            return Err(msg);
         }
 
         if find_game_engine(base_dir).is_some() {
+            crate::log_info!("Windows game engine successfully installed at {}", dest_bin.display());
             return Ok("Windows oyun motoru başarıyla kuruldu!".to_string());
         }
 
-        Err("Windows oyun motoru ('bin/gow3-probe.exe') arşivden çıkarılamadı.".to_string())
+        let msg = "Windows oyun motoru ('bin/gow3-probe.exe') arşivden çıkarılamadı veya dosya bulunamadı.".to_string();
+        crate::log_error!("{}", msg);
+        Err(msg)
     }
 
     #[cfg(not(target_os = "windows"))]
@@ -325,43 +400,73 @@ pub fn download_linux_engine(base_dir: &Path) -> Result<String, String> {
 
     #[cfg(not(target_os = "windows"))]
     {
+        crate::log_info!("Starting Linux game engine download...");
         let url = "https://github.com/FelipePrado0/gow3_pc/releases/download/windows-v2.4.1/gow3-x86_64.AppImage";
         let temp_dir = std::env::temp_dir().join("gow3_linux_extracted");
         let _ = fs::remove_dir_all(&temp_dir);
         let _ = fs::create_dir_all(&temp_dir);
         let appimage_path = temp_dir.join("gow3-x86_64.AppImage");
 
-        let dl_status = Command::new("curl")
-            .args(["-sL", url, "-o", &appimage_path.to_string_lossy()])
-            .status();
+        crate::log_info!("Downloading AppImage from {} to {}", url, appimage_path.display());
+        let curl_output = Command::new("curl")
+            .args(["-L", "--fail", "--connect-timeout", "20", url, "-o", &appimage_path.to_string_lossy()])
+            .output();
 
-        let success = match dl_status {
-            Ok(s) if s.success() => true,
-            _ => {
-                Command::new("wget")
-                    .args(["-q", url, "-O", &appimage_path.to_string_lossy()])
-                    .status()
-                    .map(|s| s.success())
-                    .unwrap_or(false)
+        let (success, err_details) = match curl_output {
+            Ok(output) if output.status.success() => (true, String::new()),
+            Ok(output) => {
+                let err_str = String::from_utf8_lossy(&output.stderr).to_string();
+                crate::log_warn!("curl failed (status {:?}): {}. Trying wget...", output.status.code(), err_str);
+                let wget_out = Command::new("wget")
+                    .args(["--timeout=20", url, "-O", &appimage_path.to_string_lossy()])
+                    .output();
+                match wget_out {
+                    Ok(w_out) if w_out.status.success() => (true, String::new()),
+                    Ok(w_out) => {
+                        let w_err = String::from_utf8_lossy(&w_out.stderr).to_string();
+                        (false, format!("curl hatası: {}\nwget hatası: {}", err_str, w_err))
+                    }
+                    Err(we) => (false, format!("curl hatası: {}\nwget çalıştırılamadı: {}", err_str, we)),
+                }
+            }
+            Err(e) => {
+                crate::log_warn!("curl çalıştırılamadı: {}. Trying wget...", e);
+                let wget_out = Command::new("wget")
+                    .args(["--timeout=20", url, "-O", &appimage_path.to_string_lossy()])
+                    .output();
+                match wget_out {
+                    Ok(w_out) if w_out.status.success() => (true, String::new()),
+                    Ok(w_out) => {
+                        let w_err = String::from_utf8_lossy(&w_out.stderr).to_string();
+                        (false, format!("curl çalıştırılamadı: {}\nwget hatası: {}", e, w_err))
+                    }
+                    Err(we) => (false, format!("Hem curl ({}) hem wget ({}) çalıştırılamadı.", e, we)),
+                }
             }
         };
 
         if !success {
             let _ = fs::remove_dir_all(&temp_dir);
-            return Err("Linux AppImage paketi indirilemedi (curl/wget başarısız oldu).".to_string());
+            let msg = format!("Linux AppImage paketi indirilemedi.\nDetaylar:\n{}", err_details);
+            crate::log_error!("{}", msg);
+            return Err(msg);
         }
 
         let _ = Command::new("chmod")
             .args(["+x", &appimage_path.to_string_lossy()])
             .status();
 
-        let ext_status = Command::new(&appimage_path)
+        crate::log_info!("Extracting AppImage using --appimage-extract...");
+        let ext_output = Command::new(&appimage_path)
             .arg("--appimage-extract")
             .current_dir(&temp_dir)
-            .status();
+            .output();
 
-        if let Ok(st) = ext_status {
-            if st.success() {
+        let mut extract_err = String::new();
+        let mut extract_success = false;
+
+        match ext_output {
+            Ok(output) if output.status.success() => {
                 let squash_bin = temp_dir.join("squashfs-root/bin");
                 if squash_bin.is_dir() {
                     let _ = Command::new("cp")
@@ -370,17 +475,30 @@ pub fn download_linux_engine(base_dir: &Path) -> Result<String, String> {
                     let _ = Command::new("chmod")
                         .args(["+x", &dest_bin.join("gow3-probe").to_string_lossy()])
                         .status();
+                    extract_success = true;
+                } else {
+                    extract_err = "AppImage çıkarıldı ancak 'squashfs-root/bin' klasörü bulunamadı.".to_string();
                 }
+            }
+            Ok(output) => {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                extract_err = format!("AppImage çıkarma hatası (çıkış kodu {:?}): {}", output.status.code(), stderr);
+            }
+            Err(e) => {
+                extract_err = format!("AppImage çıkarma komutu çalıştırılamadı: {}", e);
             }
         }
 
         let _ = fs::remove_dir_all(&temp_dir);
 
-        if find_game_engine(base_dir).is_some() {
+        if extract_success && find_game_engine(base_dir).is_some() {
+            crate::log_info!("Linux game engine successfully installed at {}", dest_bin.display());
             return Ok("Linux oyun motoru başarıyla kuruldu!".to_string());
         }
 
-        Err("Linux oyun motoru paketten çıkarılamadı.".to_string())
+        let msg = format!("Linux oyun motoru paketten çıkarılamadı.\nDetay:\n{}", extract_err);
+        crate::log_error!("{}", msg);
+        Err(msg)
     }
 
     #[cfg(target_os = "windows")]
@@ -589,15 +707,24 @@ pub fn launch_gow3(
     use_gamemode: bool,
     running_pid: Option<Arc<AtomicU32>>,
 ) -> Result<i32, String> {
+    crate::log_info!("Initiating God of War III launch sequence...");
     let game_dir = Path::new(&config.game_dir);
     if !game_dir.join("eboot.bin").is_file() {
-        return Err("Oyun klasöründe 'eboot.bin' bulunamadı!".to_string());
+        let msg = format!("Oyun klasöründe ('{}') 'eboot.bin' bulunamadı!", game_dir.display());
+        crate::log_error!("{}", msg);
+        return Err(msg);
     }
 
+    crate::log_info!("Game directory verified: {}", game_dir.display());
     let probe_bin = ensure_game_engine(base_dir)?;
+    crate::log_info!("Game engine binary found: {}", probe_bin.display());
 
     let out_dir = base_dir.join("out");
-    fs::create_dir_all(&out_dir).map_err(|e| format!("'out' klasörü oluşturulamadı: {}", e))?;
+    fs::create_dir_all(&out_dir).map_err(|e| {
+        let msg = format!("'out' klasörü oluşturulamadı: {}", e);
+        crate::log_error!("{}", msg);
+        msg
+    })?;
 
     // Ensure assets exist (uses .runtime if scripts/ or patches/ are missing from disk)
     let (runtime_scripts, runtime_patches) = ensure_runtime_assets(base_dir)?;
@@ -991,24 +1118,38 @@ pub fn launch_gow3(
     cmd.stdout(Stdio::from(log_file));
     cmd.stderr(Stdio::from(log_file_err));
 
-    let mut child = cmd.spawn().map_err(|e| format!("Oyun başlatılamadı: {}", e))?;
+    crate::log_info!("Spawning game process (use_gamemode: {}, display_mode: {:?})...", use_gamemode, config.display_mode);
+    let mut child = cmd.spawn().map_err(|e| {
+        let msg = format!("Oyun başlatılamadı: {}", e);
+        crate::log_error!("{}", msg);
+        msg
+    })?;
+    let child_pid = child.id();
+    crate::log_info!("Game process running with PID: {}", child_pid);
+
     if let Some(ref pid_holder) = running_pid {
-        pid_holder.store(child.id(), Ordering::SeqCst);
+        pid_holder.store(child_pid, Ordering::SeqCst);
     }
 
     #[cfg(target_os = "windows")]
     if config.display_mode == crate::config::DisplayMode::Windowed {
-        adjust_windows_windowed_mode(child.id());
+        adjust_windows_windowed_mode(child_pid);
     }
 
-    let exit_status = child.wait().map_err(|e| format!("Oyun beklenirken hata oluştu: {}", e));
+    let exit_status = child.wait().map_err(|e| {
+        let msg = format!("Oyun beklenirken hata oluştu: {}", e);
+        crate::log_error!("{}", msg);
+        msg
+    });
 
     if let Some(ref pid_holder) = running_pid {
         pid_holder.store(0, Ordering::SeqCst);
     }
 
     let status = exit_status?;
-    Ok(status.code().unwrap_or(-1))
+    let code = status.code().unwrap_or(-1);
+    crate::log_info!("Game process exited with status code: {}", code);
+    Ok(code)
 }
 
 #[cfg(test)]

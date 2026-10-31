@@ -5,7 +5,7 @@ use std::process::Command;
 use crate::config::LauncherConfig;
 use crate::tuner::apply_settings;
 
-pub const BUILTIN_VERSION: &str = "v1.8";
+pub const BUILTIN_VERSION: &str = "v1.8.1";
 pub const GITHUB_REPO: &str = "ScreamAngel/gow3_launcher";
 pub const GITHUB_REPO_URL: &str = "https://github.com/ScreamAngel/gow3_launcher.git";
 
@@ -193,6 +193,7 @@ pub fn check_github_update(
     _current_commit: &str,
     current_version: &str,
 ) -> Result<UpdateInfo, String> {
+    crate::log_info!("Checking updates for running launcher {} (repo: {})...", current_version, GITHUB_REPO);
     let release_api_url = format!("https://api.github.com/repos/{}/releases/latest", GITHUB_REPO);
     let commit_api_url = format!("https://api.github.com/repos/{}/commits/HEAD", GITHUB_REPO);
 
@@ -299,6 +300,14 @@ pub fn check_github_update(
     // Do NOT flag update as needed if current launcher is already at or above the remote release tag!
     // Prevents redundant re-downloads when already running v1.7.
     let is_new = is_newer_version || has_missing_files;
+
+    crate::log_info!(
+        "Update check complete: remote tag={:?}, is_newer_version={}, has_missing_files={} -> is_new={}",
+        version_tag,
+        is_newer_version,
+        has_missing_files,
+        is_new
+    );
 
     Ok(UpdateInfo {
         commit_sha: remote_sha,
@@ -417,10 +426,10 @@ mod tests {
             assert!(info.is_new);
         }
 
-        // Test with current version v1.7: should NOT report as an update
-        let res_current = check_github_update(Path::new(".."), "test_dummy_sha", "v1.7");
+        // Test with current version v1.8.1: should NOT report as an update
+        let res_current = check_github_update(Path::new(".."), "test_dummy_sha", "v1.8.1");
         if let Ok(info) = res_current {
-            // Because remote release on GitHub is v1.6.1.6, and current is v1.7, and files are present, is_new must be false!
+            // Because remote release on GitHub is v1.8, and current is v1.8.1, and files are present, is_new must be false!
             assert!(!info.is_new);
         }
     }

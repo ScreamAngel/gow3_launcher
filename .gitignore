@@ -18,6 +18,7 @@ __pycache__/
 # Logs & Configs generated during play
 *.log
 gow3_log.txt
+launcher_log.txt
 last_run.log
 gow3.ini
 

@@ -286,7 +286,7 @@ fn default_last_commit() -> String {
     "c5638d9956002b8a9f09a240028f6793ddf7b2f8".to_string()
 }
 fn default_launcher_version() -> String {
-    "v1.8".to_string()
+    "v1.8.1".to_string()
 }
 fn default_render_resolution() -> String {
     "native".to_string()
@@ -675,7 +675,7 @@ mod tests {
     }
 
     #[test]
-    fn test_launcher_version_is_v18() {
-        assert_eq!(default_launcher_version(), "v1.8");
+    fn test_launcher_version_is_v181() {
+        assert_eq!(default_launcher_version(), "v1.8.1");
     }
 }

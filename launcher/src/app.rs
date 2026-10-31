@@ -776,7 +776,7 @@ pub struct LauncherApp {
 
     // Game Running & Monitoring State
     is_game_running: bool,
-    game_exit_rx: Option<Receiver<Option<i32>>>,
+    game_exit_rx: Option<Receiver<Result<i32, String>>>,
     running_pid: Arc<AtomicU32>,
 
     // Python dependency state
@@ -795,6 +795,14 @@ pub struct LauncherApp {
     show_log_modal: bool,
     log_content: String,
 
+    // Error & Diagnostics Modal
+    error_modal: Option<ErrorModalData>,
+    error_copied_feedback: Option<std::time::Instant>,
+
+    // Launcher Log Modal
+    show_launcher_log_modal: bool,
+    launcher_log_content: String,
+
     // Textures
     bg_texture: Option<egui::TextureHandle>,
     logo_texture: Option<egui::TextureHandle>,
@@ -804,6 +812,14 @@ pub struct LauncherApp {
 
     // Dynamic Launcher Version
     launcher_version: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct ErrorModalData {
+    pub title: String,
+    pub summary: String,
+    pub details: String,
+    pub log_hint: Option<String>,
 }
 
 impl LauncherApp {
@@ -865,6 +881,10 @@ impl LauncherApp {
             active_crash_diagnosis: None,
             show_log_modal: false,
             log_content: String::new(),
+            error_modal: None,
+            error_copied_feedback: None,
+            show_launcher_log_modal: false,
+            launcher_log_content: String::new(),
             bg_texture: None,
             logo_texture: None,
             icon_texture: None,
@@ -872,6 +892,25 @@ impl LauncherApp {
             tux_texture: None,
             launcher_version,
         };
+
+        crate::log_info!("Launcher UI initialized successfully. Version: {}", app.launcher_version);
+        crate::log_info!(
+            "Hardware Specs: CPU: '{}' ({} cores, {} threads) -> Grade: {:?}, GPU: '{}' ({} MB VRAM), RAM: {} MB, Refresh Rate: {} Hz",
+            app.config.cached_hardware.cpu_name,
+            app.config.cached_hardware.cpu_cores,
+            app.config.cached_hardware.cpu_threads,
+            crate::system::evaluate_cpu(&app.config.cached_hardware.cpu_name, app.config.cached_hardware.cpu_cores, app.config.cached_hardware.cpu_threads),
+            app.config.cached_hardware.gpu_name,
+            app.config.cached_hardware.vram_mb,
+            app.config.cached_hardware.ram_mb,
+            app.config.cached_hardware.refresh_rate_hz
+        );
+        crate::log_info!(
+            "Environment Status: Python available: {}, Game Engine available: {}, Game Directory valid: {}",
+            app.has_python,
+            app.has_engine,
+            app.is_game_valid
+        );
 
         app.load_textures(&cc.egui_ctx);
         app.start_silent_update_check();
@@ -1127,16 +1166,16 @@ impl LauncherApp {
         thread::spawn(move || {
             match crate::runner::launch_gow3(&base_dir_clone, &config_clone, use_gamemode, Some(pid_holder)) {
                 Ok(code) => {
-                    let _ = tx.send(Some(code));
+                    let _ = tx.send(Ok(code));
                 }
                 Err(err) => {
-                    eprintln!("Launch error: {}", err);
+                    crate::log_error!("Launch error: {}", err);
                     let log_path = base_dir_clone.join("gow3_log.txt");
                     if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(&log_path) {
                         use std::io::Write;
                         let _ = writeln!(f, "\n[LAUNCH ERROR] {}", err);
                     }
-                    let _ = tx.send(Some(-1));
+                    let _ = tx.send(Err(err));
                 }
             }
         });
@@ -1232,12 +1271,27 @@ impl eframe::App for LauncherApp {
 
         // 3. Check game process exit & analyze crash
         if let Some(ref rx) = self.game_exit_rx {
-            if let Ok(exit_code) = rx.try_recv() {
+            if let Ok(res) = rx.try_recv() {
                 self.is_game_running = false;
                 self.game_exit_rx = None;
 
-                if let Some(diagnosis) = analyze_post_game(&self.base_dir, exit_code) {
-                    self.active_crash_diagnosis = Some(diagnosis);
+                match res {
+                    Ok(exit_code) => {
+                        crate::log_info!("Game process ended with exit code: {}", exit_code);
+                        if let Some(diagnosis) = analyze_post_game(&self.base_dir, Some(exit_code)) {
+                            self.active_crash_diagnosis = Some(diagnosis);
+                        }
+                    }
+                    Err(err) => {
+                        crate::log_error!("Game failed to run: {}", err);
+                        self.status_message = Some((format!("Başlatma hatası: {}", err), true));
+                        self.error_modal = Some(ErrorModalData {
+                            title: self.t("err_game_launch_title").to_string(),
+                            summary: self.t("err_game_launch_summary").to_string(),
+                            details: err,
+                            log_hint: Some(self.t("err_game_launch_hint").to_string()),
+                        });
+                    }
                 }
             }
         }
@@ -1274,9 +1328,17 @@ impl eframe::App for LauncherApp {
                     Ok(_) => {
                         self.has_python = true;
                         self.status_message = Some((self.t("python_download_success").to_string(), false));
+                        crate::log_info!("Python 3 environment successfully configured.");
                     }
                     Err(e) => {
                         self.status_message = Some((format!("{}{}", self.t("python_download_err"), e), true));
+                        crate::log_error!("Python 3 download failed: {}", e);
+                        self.error_modal = Some(ErrorModalData {
+                            title: self.t("err_python_dl_title").to_string(),
+                            summary: self.t("err_python_dl_summary").to_string(),
+                            details: e,
+                            log_hint: Some(self.t("err_python_dl_hint").to_string()),
+                        });
                     }
                 }
             }
@@ -1292,9 +1354,17 @@ impl eframe::App for LauncherApp {
                         self.has_engine = true;
                         self.has_python = crate::runner::find_python(&self.base_dir).is_ok();
                         self.status_message = Some((self.t("engine_download_success").to_string(), false));
+                        crate::log_info!("Game engine installed successfully.");
                     }
                     Err(e) => {
                         self.status_message = Some((format!("Hata: {}", e), true));
+                        crate::log_error!("Game engine download failed: {}", e);
+                        self.error_modal = Some(ErrorModalData {
+                            title: self.t("err_engine_dl_title").to_string(),
+                            summary: self.t("err_engine_dl_summary").to_string(),
+                            details: e,
+                            log_hint: Some(self.t("err_engine_dl_hint").to_string()),
+                        });
                     }
                 }
             }
@@ -1948,13 +2018,13 @@ impl eframe::App for LauncherApp {
                 ui.add_space(6.0);
                 ui.horizontal(|ui| {
                     let log_btn = egui::Button::new(
-                        egui::RichText::new(format!("📋 {}", self.t("view_log")))
+                        egui::RichText::new(self.t("game_log_btn"))
                             .color(egui::Color32::from_rgb(200, 205, 220)),
                     )
                     .fill(egui::Color32::from_rgb(28, 30, 42))
                     .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(255, 255, 255, 25)))
                     .corner_radius(egui::CornerRadius::same(6))
-                    .min_size(egui::vec2(140.0, 32.0));
+                    .min_size(egui::vec2(125.0, 32.0));
 
                     let res = ui.add(log_btn);
                     if res.hovered() {
@@ -1965,6 +2035,24 @@ impl eframe::App for LauncherApp {
                         self.log_content = std::fs::read_to_string(&log_path)
                             .unwrap_or_else(|_| "Log file is empty or not created yet.".to_string());
                         self.show_log_modal = true;
+                    }
+
+                    let launcher_log_btn = egui::Button::new(
+                        egui::RichText::new(self.t("launcher_log_btn"))
+                            .color(egui::Color32::from_rgb(200, 205, 220)),
+                    )
+                    .fill(egui::Color32::from_rgb(28, 30, 42))
+                    .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(255, 255, 255, 25)))
+                    .corner_radius(egui::CornerRadius::same(6))
+                    .min_size(egui::vec2(135.0, 32.0));
+
+                    let res = ui.add(launcher_log_btn);
+                    if res.hovered() {
+                        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+                    }
+                    if res.clicked() {
+                        self.launcher_log_content = crate::logger::read_launcher_log(&self.base_dir);
+                        self.show_launcher_log_modal = true;
                     }
 
                     let kill_btn = egui::Button::new(
@@ -2651,17 +2739,17 @@ impl eframe::App for LauncherApp {
                         self.apply_all_optimizations();
                     }
 
-                    let log_btn = egui::Button::new(
-                        egui::RichText::new(format!("📋 {}", self.t("view_log")))
-                            .size(14.0)
+                    let game_log_btn = egui::Button::new(
+                        egui::RichText::new(self.t("game_log_btn"))
+                            .size(13.0)
                             .color(egui::Color32::from_rgb(200, 205, 220)),
                     )
                     .fill(egui::Color32::from_rgb(28, 30, 42))
                     .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(255, 255, 255, 25)))
                     .corner_radius(egui::CornerRadius::same(8))
-                    .min_size(egui::vec2(140.0, 42.0));
+                    .min_size(egui::vec2(130.0, 42.0));
 
-                    let res = ui.add(log_btn);
+                    let res = ui.add(game_log_btn);
                     if res.hovered() {
                         ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
                     }
@@ -2670,6 +2758,25 @@ impl eframe::App for LauncherApp {
                         self.log_content = std::fs::read_to_string(&log_path)
                             .unwrap_or_else(|_| "Log file is empty or not created yet.".to_string());
                         self.show_log_modal = true;
+                    }
+
+                    let launcher_log_btn = egui::Button::new(
+                        egui::RichText::new(self.t("launcher_log_btn"))
+                            .size(13.0)
+                            .color(egui::Color32::from_rgb(200, 205, 220)),
+                    )
+                    .fill(egui::Color32::from_rgb(28, 30, 42))
+                    .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(255, 255, 255, 25)))
+                    .corner_radius(egui::CornerRadius::same(8))
+                    .min_size(egui::vec2(140.0, 42.0));
+
+                    let res = ui.add(launcher_log_btn);
+                    if res.hovered() {
+                        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+                    }
+                    if res.clicked() {
+                        self.launcher_log_content = crate::logger::read_launcher_log(&self.base_dir);
+                        self.show_launcher_log_modal = true;
                     }
                 });
             }
@@ -2683,6 +2790,8 @@ impl eframe::App for LauncherApp {
             || self.show_first_launch_modal
             || self.active_crash_diagnosis.is_some()
             || self.show_log_modal
+            || self.show_launcher_log_modal
+            || self.error_modal.is_some()
             || self.update_modal.is_some()
             || self.listening_key_for.is_some();
 
@@ -2881,21 +2990,236 @@ impl eframe::App for LauncherApp {
                 });
         }
 
-        // --- MODAL 4: LOG MODAL ---
+        // --- MODAL 4: GAME LOG MODAL ---
         if self.show_log_modal {
-            egui::Window::new("gow3_log.txt")
+            egui::Window::new("gow3_log.txt (God of War III Engine Log)")
                 .collapsible(false)
                 .resizable(true)
-                .default_size(egui::vec2(600.0, 400.0))
+                .default_size(egui::vec2(680.0, 440.0))
+                .min_width(450.0)
+                .min_height(250.0)
                 .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
                 .show(&ctx, |ui| {
-                    egui::ScrollArea::vertical().show(ui, |ui| {
-                        ui.label(egui::RichText::new(&self.log_content).monospace().size(11.0));
+                    egui::ScrollArea::vertical()
+                        .max_height(ui.available_height() - 44.0)
+                        .show(ui, |ui| {
+                            ui.label(egui::RichText::new(&self.log_content).monospace().size(11.0));
+                        });
+                    ui.separator();
+                    ui.horizontal(|ui| {
+                        if ui.button(self.t("refresh_log")).clicked() {
+                            let log_path = self.base_dir.join("gow3_log.txt");
+                            self.log_content = std::fs::read_to_string(&log_path)
+                                .unwrap_or_else(|_| "Log file is empty or not created yet.".to_string());
+                        }
+                        if ui.button(self.t("open_in_editor")).clicked() {
+                            let log_path = self.base_dir.join("gow3_log.txt");
+                            crate::logger::open_file_path(&log_path);
+                        }
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            if ui.button(self.t("close")).clicked() {
+                                self.show_log_modal = false;
+                            }
+                        });
                     });
-                    if ui.button(self.t("close")).clicked() {
-                        self.show_log_modal = false;
-                    }
                 });
+        }
+
+        // --- LAUNCHER LOG MODAL ---
+        if self.show_launcher_log_modal {
+            egui::Window::new("launcher_log.txt (God of War III Launcher Protokolü)")
+                .collapsible(false)
+                .resizable(true)
+                .default_size(egui::vec2(720.0, 480.0))
+                .min_width(480.0)
+                .min_height(280.0)
+                .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
+                .show(&ctx, |ui| {
+                    egui::ScrollArea::vertical()
+                        .max_height(ui.available_height() - 44.0)
+                        .show(ui, |ui| {
+                            ui.label(
+                                egui::RichText::new(&self.launcher_log_content)
+                                    .monospace()
+                                    .size(11.5)
+                                    .color(egui::Color32::from_rgb(220, 225, 235)),
+                            );
+                        });
+                    ui.separator();
+                    ui.horizontal(|ui| {
+                        if ui.button(self.t("refresh_log")).clicked() {
+                            self.launcher_log_content = crate::logger::read_launcher_log(&self.base_dir);
+                        }
+                        if ui.button(self.t("open_in_editor")).clicked() {
+                            crate::logger::open_log_in_editor(&self.base_dir);
+                        }
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            if ui.button(self.t("close")).clicked() {
+                                self.show_launcher_log_modal = false;
+                            }
+                        });
+                    });
+                });
+        }
+
+        // --- ERROR POP-UP MODAL ---
+        if let Some(ref err_data) = self.error_modal.clone() {
+            let mut close_modal = false;
+            let mut open_log = false;
+            let mut copy_error = false;
+
+            egui::Window::new(self.t("err_modal_title"))
+                .collapsible(false)
+                .resizable(true)
+                .default_size(egui::vec2(580.0, 360.0))
+                .min_width(450.0)
+                .min_height(280.0)
+                .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
+                .show(&ctx, |ui| {
+                    ui.spacing_mut().item_spacing = egui::vec2(8.0, 8.0);
+
+                    // Title Header with Icon
+                    ui.horizontal(|ui| {
+                        ui.heading(
+                            egui::RichText::new(&err_data.title)
+                                .color(egui::Color32::from_rgb(248, 113, 113))
+                                .size(17.0)
+                                .strong(),
+                        );
+                    });
+
+                    // Summary Banner
+                    egui::Frame::group(ui.style())
+                        .fill(egui::Color32::from_rgb(38, 22, 25))
+                        .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgb(180, 50, 50)))
+                        .corner_radius(egui::CornerRadius::same(6))
+                        .inner_margin(10.0)
+                        .show(ui, |ui| {
+                            ui.label(
+                                egui::RichText::new(&err_data.summary)
+                                    .color(egui::Color32::from_rgb(255, 210, 210))
+                                    .size(13.5)
+                                    .strong(),
+                            );
+                        });
+
+                    // Technical Details Block
+                    ui.add_space(2.0);
+                    ui.label(
+                        egui::RichText::new("Teknik Detaylar / Hata Çıktısı:")
+                            .size(12.0)
+                            .color(egui::Color32::from_rgb(180, 185, 200))
+                            .strong(),
+                    );
+
+                    egui::Frame::group(ui.style())
+                        .fill(egui::Color32::from_rgb(18, 19, 24))
+                        .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgb(50, 55, 70)))
+                        .corner_radius(egui::CornerRadius::same(6))
+                        .inner_margin(8.0)
+                        .show(ui, |ui| {
+                            egui::ScrollArea::vertical()
+                                .max_height(160.0)
+                                .auto_shrink([false, false])
+                                .show(ui, |ui| {
+                                    ui.add(
+                                        egui::TextEdit::multiline(&mut err_data.details.as_str())
+                                            .font(egui::TextStyle::Monospace)
+                                            .text_color(egui::Color32::from_rgb(235, 200, 150))
+                                            .desired_width(f32::INFINITY),
+                                    );
+                                });
+                        });
+
+                    // Log Hint if present
+                    if let Some(ref hint) = err_data.log_hint {
+                        ui.add_space(2.0);
+                        ui.label(
+                            egui::RichText::new(format!("💡 İpucu: {}", hint))
+                                .size(11.5)
+                                .color(egui::Color32::from_rgb(130, 200, 255))
+                                .italics(),
+                        );
+                    }
+
+                    ui.add_space(4.0);
+                    ui.separator();
+
+                    // Action Buttons Footer
+                    ui.horizontal(|ui| {
+                        // Open Log File button
+                        let open_log_btn = egui::Button::new(
+                            egui::RichText::new(self.t("open_log_file"))
+                                .color(egui::Color32::WHITE)
+                                .strong(),
+                        )
+                        .fill(egui::Color32::from_rgb(35, 55, 85))
+                        .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgb(70, 110, 165)))
+                        .corner_radius(egui::CornerRadius::same(6))
+                        .min_size(egui::vec2(150.0, 32.0));
+
+                        if ui.add(open_log_btn).clicked() {
+                            open_log = true;
+                        }
+
+                        // Copy Error Button
+                        let is_recently_copied = self.error_copied_feedback.map_or(false, |t| t.elapsed().as_secs() < 3);
+                        let copy_text = if is_recently_copied {
+                            self.t("copied_notice")
+                        } else {
+                            self.t("copy_error")
+                        };
+
+                        let copy_btn = egui::Button::new(
+                            egui::RichText::new(copy_text)
+                                .color(if is_recently_copied { egui::Color32::from_rgb(110, 255, 140) } else { egui::Color32::WHITE })
+                                .strong(),
+                        )
+                        .fill(if is_recently_copied { egui::Color32::from_rgb(30, 60, 40) } else { egui::Color32::from_rgb(45, 48, 60) })
+                        .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgb(90, 95, 120)))
+                        .corner_radius(egui::CornerRadius::same(6))
+                        .min_size(egui::vec2(140.0, 32.0));
+
+                        if ui.add(copy_btn).clicked() {
+                            copy_error = true;
+                        }
+
+                        // Close Button on Right
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            let close_btn = egui::Button::new(
+                                egui::RichText::new(self.t("close")).strong(),
+                            )
+                            .min_size(egui::vec2(90.0, 32.0))
+                            .corner_radius(egui::CornerRadius::same(6));
+
+                            if ui.add(close_btn).clicked() {
+                                close_modal = true;
+                            }
+                        });
+                    });
+                });
+
+            if copy_error {
+                let full_report = format!(
+                    "God of War III Launcher Hata Raporu:\n{}\n\nÖzet:\n{}\n\nDetaylar:\n{}\n\nİpucu:\n{}",
+                    err_data.title,
+                    err_data.summary,
+                    err_data.details,
+                    err_data.log_hint.as_deref().unwrap_or("-")
+                );
+                ui.ctx().copy_text(full_report);
+                self.error_copied_feedback = Some(std::time::Instant::now());
+            }
+
+            if open_log {
+                crate::logger::open_log_in_editor(&self.base_dir);
+                self.launcher_log_content = crate::logger::read_launcher_log(&self.base_dir);
+                self.show_launcher_log_modal = true;
+            }
+
+            if close_modal {
+                self.error_modal = None;
+            }
         }
 
         // --- MODAL 5: UPDATE CHECKER & INTEGRATION MODAL ---

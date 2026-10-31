@@ -301,7 +301,7 @@ fn default_deadzone() -> u32 {
     2
 }
 fn default_vram_budget() -> u64 {
-    6144
+    5120
 }
 fn default_dmem() -> u64 {
     9216
@@ -383,7 +383,7 @@ impl LauncherConfig {
                 self.fsr_enabled = false;
                 self.disable_motion_blur = false;
                 self.disable_dof = false;
-                self.vram_gc_budget_mb = 6144;
+                self.vram_gc_budget_mb = 5120;
                 self.target_fps = 60;
             }
             GraphicPreset::Ultra => {
@@ -441,8 +441,9 @@ impl LauncherConfig {
         let vram = self.cached_hardware.vram_mb;
         if vram > 0 {
             // Guard against PCIe memory thrashing / swapping to system RAM over slow bus:
-            // Desktop environment, window compositor and GPU drivers consume ~350-512MB of VRAM.
-            // Texture GC budget must stay within available physical VRAM.
+            // Desktop environment, window compositor (Wayland/X11) and GPU drivers consume ~600-1200MB of VRAM.
+            // Game framebuffers, guest DMA buffers, swapchains and staging memory consume another ~1-1.5GB.
+            // Texture GC budget must leave sufficient headroom to avoid driver memory exhaustion (address 0x108 SIGSEGV).
             let safe_ceiling = if vram <= 2048 {
                 1280
             } else if vram <= 3072 {
@@ -450,11 +451,13 @@ impl LauncherConfig {
             } else if vram <= 4096 {
                 3072
             } else if vram <= 6144 {
-                4608
+                4096
             } else if vram <= 8192 {
-                6144
+                5120
+            } else if vram <= 12288 {
+                8192
             } else {
-                vram.saturating_sub(1024)
+                vram.saturating_sub(2048)
             };
             self.vram_gc_budget_mb.min(safe_ceiling)
         } else {

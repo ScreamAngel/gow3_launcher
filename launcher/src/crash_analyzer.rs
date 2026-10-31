@@ -121,6 +121,28 @@ pub fn analyze_post_game(base_dir: &Path, exit_code: Option<i32>) -> Option<Cras
         });
     }
 
+    // NVIDIA Vulkan Driver Dynamic Rendering / VRAM Sınırı Çökmesi (libnvidia-glcore / EndRendering / 0x108)
+    if (tail_str.contains("libnvidia-glcore") || tail_str.contains("EndRendering"))
+        && (tail_str.contains("0x108") || tail_str.contains("FlushBarriers") || tail_str.contains("DispatchRecord"))
+    {
+        return Some(CrashDiagnosis {
+            title: "💥 NVIDIA Vulkan Sürücü Çökmesi (Dynamic Rendering / VRAM Sınırı)".to_string(),
+            description: "NVIDIA Vulkan sürücüsü (libnvidia-glcore), sahne bariyerleri boşaltılırken (FlushBarriers -> EndRendering) VRAM yetersizliği veya komut senkronizasyonu hatası nedeniyle çöktü (Hata adresi: 0x108). Bu durum özellikle 8 GB ekran kartlarında doku temizleme bütçesi aşırı yüksek seçildiğinde veya çoklu iş parçacığı çakışmasında meydana gelir.".to_string(),
+            recommendation: "1. Launcher üzerinden 'Doku Havuzu (VRAM GC)' ayarını 5120 MB veya 4096 MB olarak seçin (8 GB kartlar için güvenli sınır).\n2. Launcher v1.8.2 güncellemesiyle Vulkan komut kayıt senkronizasyonu düzeltilmiş ve otomatik taşma koruması eklenmiştir. Oyunu tekrar başlatabilirsiniz.".to_string(),
+            log_snippet: extract_relevant_snippet(&tail_str, "libnvidia-glcore"),
+        });
+    }
+
+    // General NVIDIA driver crash
+    if tail_str.contains("libnvidia-glcore") {
+        return Some(CrashDiagnosis {
+            title: "💥 NVIDIA Grafik Sürücüsü Hatası (libnvidia-glcore)".to_string(),
+            description: "NVIDIA Vulkan sürücüsü grafik komutlarını işlerken beklenmedik bir hata ile kapandı.".to_string(),
+            recommendation: "Ekran kartı sürücünüzün güncel olduğundan emin olun, VRAM GC bütçesini 4096-5120 MB seviyesine çekin ve arka plandaki diğer GPU uygulamalarını kapatın.".to_string(),
+            log_snippet: extract_relevant_snippet(&tail_str, "libnvidia-glcore"),
+        });
+    }
+
     // 4. Check for Assertion Failure or SIGSEGV
     if tail_str.contains("Assertion failed") || tail_str.contains("SIGSEGV") || tail_str.contains("panic") || (exit_code.is_some() && exit_code != Some(0)) {
         let code_str = exit_code.map(|c| c.to_string()).unwrap_or_else(|| "Bilinmeyen".to_string());
@@ -152,5 +174,30 @@ fn extract_relevant_snippet(log: &str, keyword: &str) -> String {
         lines.iter().rev().take(8).cloned().collect::<Vec<&str>>().join("\n")
     } else {
         snippet.join("\n")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_diagnose_nvidia_endrendering_crash() {
+        let temp_dir = std::env::temp_dir().join("gow3_crash_test_nvidia");
+        let _ = fs::create_dir_all(&temp_dir);
+        let log_content = r#"
+Host fault (signal 11) in /usr/lib/libnvidia-glcore.so.615.78.08+0xd60b72 (?), address 0x108
+  #2 /usr/lib/libnvidia-glcore.so.615.78.08+0xd60b72 (?)
+  #3 /usr/lib/libnvidia-glcore.so.615.78.08+0xd56693 (?)
+  #4 .../gow3-linux/bin/lib/libgow3gpu.so+0x31ec70 (_ZN6Vulkan9Scheduler12EndRenderingEv)
+  #5 .../gow3-linux/bin/lib/libgow3gpu.so+0x2fb5d4 (_ZN6Vulkan7Runtime13FlushBarriersEv)
+  #6 .../gow3-linux/bin/lib/libgow3gpu.so+0x2d98e5 (_ZN6Vulkan10Rasterizer14DispatchRecordEPKNS_15ComputePipelineE)
+  #7 .../gow3-linux/bin/lib/libgow3gpu.so+0x2f02a0 (_ZN6Vulkan10Rasterizer13RunDrawPacketEPvPKhj)
+"#;
+        fs::write(temp_dir.join("gow3_log.txt"), log_content).unwrap();
+        let diag = analyze_post_game(&temp_dir, Some(11)).expect("Should diagnose NVIDIA EndRendering crash");
+        assert!(diag.title.contains("NVIDIA Vulkan Sürücü Çökmesi"));
+        assert!(diag.recommendation.contains("5120 MB"));
+        let _ = fs::remove_dir_all(&temp_dir);
     }
 }

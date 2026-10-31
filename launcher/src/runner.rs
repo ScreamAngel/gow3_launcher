@@ -1184,7 +1184,13 @@ pub fn launch_gow3(
     cmd.env("GOW3_PIPELINE_CACHE", "1");
     cmd.env("GOW3_PARALLEL_WARMUP", "1");
     cmd.env("GOW3_BACKGROUND_WARMUP", "1");
-    cmd.env("GOW3_VK_RECORD_THREAD", "1");
+    // Vulkan Recording Synchronization:
+    // GOW3_VK_RECORD_THREAD=1 uses an asynchronous worker thread to record Vulkan command buffers.
+    // On NVIDIA drivers, during compute dispatch barrier flushes (Runtime::FlushBarriers -> Scheduler::EndRendering),
+    // this causes vkCmdEndRendering to race with the worker thread, dereferencing null dynamic rendering state
+    // and triggering "Host fault (signal 11) in libnvidia-glcore.so at address 0x108".
+    // Setting GOW3_VK_RECORD_THREAD=0 forces synchronous in-order recording, completely eliminating this crash.
+    cmd.env("GOW3_VK_RECORD_THREAD", "0");
     cmd.env("GOW3_PRESENT_THREAD", "1");
     cmd.env("GOW3_ASYNC_FENCES", "1");
     cmd.env("GOW3_ASYNC_SHADERS", "1");

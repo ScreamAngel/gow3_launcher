@@ -2439,8 +2439,9 @@ impl eframe::App for LauncherApp {
                             2048 => "2048 MB (3 GB GPU / Steam Deck)",
                             3072 => "3072 MB (4 GB GPU)",
                             4096 => "4096 MB (6 GB GPU)",
-                            6144 => "6144 MB (8 GB GPU - Varsayılan)",
-                            8192 => "8192 MB (10 GB+ GPU / Yüksek)",
+                            5120 => "5120 MB (8 GB GPU - Önerilen / Kararlı)",
+                            6144 => "6144 MB (10-12 GB GPU)",
+                            8192 => "8192 MB (12-16 GB+ GPU / Yüksek)",
                             _ => "Özel Bütçe",
                         };
                         egui::ComboBox::from_id_salt("vram_gc_combo")
@@ -2450,8 +2451,9 @@ impl eframe::App for LauncherApp {
                                 ui.selectable_value(&mut self.config.vram_gc_budget_mb, 2048, "2048 MB (3 GB GPU / Steam Deck)");
                                 ui.selectable_value(&mut self.config.vram_gc_budget_mb, 3072, "3072 MB (4 GB GPU)");
                                 ui.selectable_value(&mut self.config.vram_gc_budget_mb, 4096, "4096 MB (6 GB GPU)");
-                                ui.selectable_value(&mut self.config.vram_gc_budget_mb, 6144, "6144 MB (8 GB GPU - Varsayılan)");
-                                ui.selectable_value(&mut self.config.vram_gc_budget_mb, 8192, "8192 MB (10 GB+ GPU / Yüksek)");
+                                ui.selectable_value(&mut self.config.vram_gc_budget_mb, 5120, "5120 MB (8 GB GPU - Önerilen / Kararlı)");
+                                ui.selectable_value(&mut self.config.vram_gc_budget_mb, 6144, "6144 MB (10-12 GB GPU)");
+                                ui.selectable_value(&mut self.config.vram_gc_budget_mb, 8192, "8192 MB (12-16 GB+ GPU / Yüksek)");
                             });
                     });
                     ui.label(egui::RichText::new(self.t("vram_budget_desc")).color(egui::Color32::LIGHT_GRAY).size(11.0));

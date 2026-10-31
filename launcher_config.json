@@ -8,7 +8,7 @@
   "async_readbacks": true,
   "skip_cinematics": true,
   "use_gamemode": true,
-  "vram_gc_budget_mb": 6144,
+  "vram_gc_budget_mb": 5120,
   "dmem_mb": 9216,
   "cached_hardware": {
     "gpu_name": "NVIDIA GeForce RTX 4070 Laptop GPU",

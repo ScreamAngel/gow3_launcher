@@ -149,7 +149,8 @@ fn update_run_sh(base_dir: &Path, config: &LauncherConfig) -> Result<(), String>
     replace_or_insert_env(&mut content, "GOW3_PIPELINE_CACHE", "1");
     replace_or_insert_env(&mut content, "GOW3_PARALLEL_WARMUP", "1");
     replace_or_insert_env(&mut content, "GOW3_BACKGROUND_WARMUP", "1");
-    replace_or_insert_env(&mut content, "GOW3_VK_RECORD_THREAD", "1");
+    // Force synchronous command recording (avoids dynamic rendering FlushBarriers race in NVIDIA libnvidia-glcore)
+    replace_or_insert_env(&mut content, "GOW3_VK_RECORD_THREAD", "0");
     replace_or_insert_env(&mut content, "GOW3_PRESENT_THREAD", "1");
     replace_or_insert_env(&mut content, "GOW3_ASYNC_FENCES", "1");
     replace_or_insert_env(&mut content, "GOW3_ASYNC_SHADERS", "1");
@@ -261,7 +262,7 @@ fn update_gow3_ini(base_dir: &Path, config: &LauncherConfig) -> Result<(), Strin
         replace_ini_key(&mut content, "render_resolution", "native");
         replace_ini_key(&mut content, "internal_width", "1920");
         replace_ini_key(&mut content, "internal_height", "1080");
-        replace_ini_key(&mut content, "upscaler", "off");
+        replace_ini_key(&mut content, "upscaler", "none");
         replace_ini_key(&mut content, "fsr1", "0");
         replace_ini_key(&mut content, "rcas", "0");
         replace_ini_key(&mut content, "sharpen", "0");
@@ -376,7 +377,8 @@ fn update_user_config_toml(base_dir: &Path, config: &LauncherConfig) -> Result<(
         if let Some(end) = content[idx..].find('\n') {
             let prefix = &content[..idx];
             let suffix = &content[idx + end..];
-            content = format!("{}vulkan_gc_budget = {}{}", prefix, config.vram_gc_budget_mb, suffix);
+            let effective_budget = config.get_effective_vram_budget();
+            content = format!("{}vulkan_gc_budget = {}{}", prefix, effective_budget, suffix);
         }
     }
 

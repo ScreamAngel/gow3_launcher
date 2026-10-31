@@ -54,22 +54,7 @@ fn main() -> eframe::Result<()> {
         .with_min_inner_size([650.0, 550.0])
         .with_resizable(true);
 
-    // Try load window icon: check base_dir first, then fallback to embedded asset
-    let icon_data = if let Ok(img) = image::open(base_dir.join("gow3.png")) {
-        let width = img.width();
-        let height = img.height();
-        let rgba = img.to_rgba8().into_raw();
-        Some(egui::IconData { rgba, width, height })
-    } else if let Ok(img) = image::load_from_memory(include_bytes!("../../gow3.png")) {
-        let width = img.width();
-        let height = img.height();
-        let rgba = img.to_rgba8().into_raw();
-        Some(egui::IconData { rgba, width, height })
-    } else {
-        None
-    };
-
-    if let Some(icon) = icon_data {
+    if let Some(icon) = load_window_icon(&base_dir) {
         viewport = viewport.with_icon(icon);
     }
 
@@ -87,4 +72,44 @@ fn main() -> eframe::Result<()> {
             Ok(Box::new(LauncherApp::new(cc, base_dir_clone)))
         }),
     )
+}
+
+fn load_window_icon(base_dir: &std::path::Path) -> Option<egui::IconData> {
+    // 1. Try to load gow3.png from base_dir, current_dir, exe_dir, or fallback to embedded asset
+    let img = if let Ok(img) = image::open(base_dir.join("gow3.png")) {
+        Some(img)
+    } else if let Ok(cur) = std::env::current_dir() {
+        if let Ok(img) = image::open(cur.join("gow3.png")) {
+            Some(img)
+        } else {
+            None
+        }
+    } else {
+        None
+    }
+    .or_else(|| {
+        if let Ok(exe_p) = std::env::current_exe() {
+            if let Some(parent) = exe_p.parent() {
+                if let Ok(img) = image::open(parent.join("gow3.png")) {
+                    return Some(img);
+                }
+            }
+        }
+        image::load_from_memory(include_bytes!("../../gow3.png")).ok()
+    })?;
+
+    // Downscale to 256x256 if larger:
+    // Windows Win32 User32 CreateIcon fails on dimensions > 256, causing taskbar icon to revert to generic.
+    // Scaling to 256x256 ensures smooth High-DPI rendering and 100% Win32 / Wayland / X11 taskbar compatibility.
+    let (w, h) = (img.width(), img.height());
+    let resized = if w > 256 || h > 256 || w != h {
+        img.resize_exact(256, 256, image::imageops::FilterType::Lanczos3)
+    } else {
+        img
+    };
+
+    let width = resized.width();
+    let height = resized.height();
+    let rgba = resized.to_rgba8().into_raw();
+    Some(egui::IconData { rgba, width, height })
 }

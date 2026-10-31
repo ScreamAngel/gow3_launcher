@@ -16,6 +16,8 @@ pub struct UpdateInfo {
     pub commit_date: String,
     pub is_new: bool,
     pub version_tag: Option<String>,
+    pub has_missing_files: bool,
+    pub missing_files: Vec<String>,
 }
 
 pub fn parse_version_numbers(v: &str) -> Vec<u32> {
@@ -161,7 +163,36 @@ fn http_download_file(url: &str, dest: &Path) -> Result<(), String> {
     Err("Dosya indirilemedi.".to_string())
 }
 
-pub fn check_github_update(current_commit: &str, current_version: &str) -> Result<UpdateInfo, String> {
+pub fn check_installation_integrity(base_dir: &Path) -> Vec<String> {
+    let mut missing = Vec::new();
+
+    // 1. Icon file
+    if !base_dir.join("gow3.png").is_file() {
+        missing.push("gow3.png".to_string());
+    }
+
+    // 2. Patches XML
+    let has_patch = base_dir.join("patches/God_of_War_III_Remastered.xml").is_file()
+        || base_dir.join(".runtime/patches/God_of_War_III_Remastered.xml").is_file();
+    if !has_patch {
+        missing.push("patches/God_of_War_III_Remastered.xml".to_string());
+    }
+
+    // 3. Auto tune script
+    let has_script = base_dir.join("scripts/auto_tune.py").is_file()
+        || base_dir.join(".runtime/scripts/auto_tune.py").is_file();
+    if !has_script {
+        missing.push("scripts/auto_tune.py".to_string());
+    }
+
+    missing
+}
+
+pub fn check_github_update(
+    base_dir: &Path,
+    _current_commit: &str,
+    current_version: &str,
+) -> Result<UpdateInfo, String> {
     let release_api_url = format!("https://api.github.com/repos/{}/releases/latest", GITHUB_REPO);
     let commit_api_url = format!("https://api.github.com/repos/{}/commits/HEAD", GITHUB_REPO);
 
@@ -254,16 +285,20 @@ pub fn check_github_update(current_commit: &str, current_version: &str) -> Resul
         return Err("GitHub deposuna ulaşılamadı. İnternet bağlantınızı kontrol edin veya daha sonra tekrar deneyin.".to_string());
     }
 
+    // Version Check:
+    // Only true if the remote version tag is STRICTLY HIGHER than current running launcher version.
     let is_newer_version = if let Some(ref tag) = version_tag {
         compare_version_strings(tag, current_version) > std::cmp::Ordering::Equal
     } else {
         false
     };
 
-    let is_newer_commit = !remote_sha.is_empty()
-        && (current_commit.trim().is_empty() || current_commit.trim() != remote_sha.trim());
+    let missing_files = check_installation_integrity(base_dir);
+    let has_missing_files = !missing_files.is_empty();
 
-    let is_new = is_newer_version || is_newer_commit;
+    // Do NOT flag update as needed if current launcher is already at or above the remote release tag!
+    // Prevents redundant re-downloads when already running v1.7.
+    let is_new = is_newer_version || has_missing_files;
 
     Ok(UpdateInfo {
         commit_sha: remote_sha,
@@ -271,6 +306,8 @@ pub fn check_github_update(current_commit: &str, current_version: &str) -> Resul
         commit_date,
         is_new,
         version_tag,
+        has_missing_files,
+        missing_files,
     })
 }
 
@@ -345,6 +382,16 @@ pub fn apply_github_update(
         );
         let patch_dest = patches_dir.join("God_of_War_III_Remastered.xml");
         let _ = http_download_file(&raw_patch_url, &patch_dest);
+
+        // Also fetch gow3.png if missing
+        let icon_file = base_dir.join("gow3.png");
+        if !icon_file.is_file() {
+            let raw_icon_url = format!("https://raw.githubusercontent.com/{}/main/gow3.png", GITHUB_REPO);
+            let _ = http_download_file(&raw_icon_url, &icon_file);
+        }
+
+        // Also ensure runtime assets are unpacked
+        let _ = crate::runner::ensure_runtime_assets(base_dir);
     }
 
     let _ = apply_settings(base_dir, config);
@@ -364,10 +411,17 @@ mod tests {
 
     #[test]
     fn test_check_github_update() {
-        let res = check_github_update("test_dummy_sha", "v0.1");
+        let res = check_github_update(Path::new(".."), "test_dummy_sha", "v0.1");
         if let Ok(info) = res {
             assert!(!info.commit_sha.is_empty() || info.version_tag.is_some());
             assert!(info.is_new);
+        }
+
+        // Test with current version v1.7: should NOT report as an update
+        let res_current = check_github_update(Path::new(".."), "test_dummy_sha", "v1.7");
+        if let Ok(info) = res_current {
+            // Because remote release on GitHub is v1.6.1.6, and current is v1.7, and files are present, is_new must be false!
+            assert!(!info.is_new);
         }
     }
 

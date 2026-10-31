@@ -892,10 +892,11 @@ impl LauncherApp {
         let (tx, rx) = channel();
         self.update_rx = Some(rx);
 
+        let base_dir_clone = self.base_dir.clone();
         let current_commit = self.config.last_git_commit.clone();
         let current_ver = self.launcher_version.clone();
         thread::spawn(move || {
-            let res = check_github_update(&current_commit, &current_ver);
+            let res = check_github_update(&base_dir_clone, &current_commit, &current_ver);
             let _ = tx.send(res);
         });
     }
@@ -909,10 +910,11 @@ impl LauncherApp {
         let (tx, rx) = channel();
         self.update_rx = Some(rx);
 
+        let base_dir_clone = self.base_dir.clone();
         let current_commit = self.config.last_git_commit.clone();
         let current_ver = self.launcher_version.clone();
         thread::spawn(move || {
-            let res = check_github_update(&current_commit, &current_ver);
+            let res = check_github_update(&base_dir_clone, &current_commit, &current_ver);
             let _ = tx.send(res);
         });
     }
@@ -2717,7 +2719,9 @@ impl eframe::App for LauncherApp {
 
         // --- MODAL 5: UPDATE CHECKER & INTEGRATION MODAL ---
         if let Some(info) = self.update_modal.clone() {
-            let title = if info.is_new {
+            let title = if info.has_missing_files {
+                "God of War III - Dosya Onarımı"
+            } else if info.is_new {
                 self.t("update_modal_title")
             } else {
                 self.t("up_to_date_title")
@@ -2731,7 +2735,13 @@ impl eframe::App for LauncherApp {
                 .show(&ctx, |ui| {
                     ui.spacing_mut().item_spacing = egui::vec2(10.0, 10.0);
 
-                    if info.is_new {
+                    if info.has_missing_files {
+                        ui.heading(
+                            egui::RichText::new("⚠️ Eksik / Bozuk Dosya Tespit Edildi")
+                                .color(egui::Color32::from_rgb(255, 170, 60))
+                                .size(16.0),
+                        );
+                    } else if info.is_new {
                         ui.heading(
                             egui::RichText::new(self.t("update_available_notice"))
                                 .color(egui::Color32::from_rgb(105, 225, 110))
@@ -2750,19 +2760,43 @@ impl eframe::App for LauncherApp {
                         .corner_radius(egui::CornerRadius::same(8))
                         .inner_margin(12.0)
                         .show(ui, |ui| {
-                            if let Some(ref tag) = info.version_tag {
+                            if info.is_new && !info.has_missing_files {
+                                if let Some(ref tag) = info.version_tag {
+                                    ui.horizontal(|ui| {
+                                        ui.label(
+                                            egui::RichText::new("🏷️ Yeni Sürüm:")
+                                                .color(egui::Color32::from_rgb(180, 180, 190))
+                                                .strong(),
+                                        );
+                                        ui.label(
+                                            egui::RichText::new(tag)
+                                                .color(egui::Color32::from_rgb(105, 225, 110))
+                                                .strong(),
+                                        );
+                                    });
+                                }
+                            } else {
                                 ui.horizontal(|ui| {
                                     ui.label(
-                                        egui::RichText::new("🏷️ Sürüm:")
+                                        egui::RichText::new("🏷️ Mevcut Sürüm:")
                                             .color(egui::Color32::from_rgb(180, 180, 190))
                                             .strong(),
                                     );
                                     ui.label(
-                                        egui::RichText::new(tag)
-                                            .color(egui::Color32::from_rgb(105, 225, 110))
+                                        egui::RichText::new(format!("{} (Güncel)", self.launcher_version))
+                                            .color(egui::Color32::from_rgb(100, 200, 255))
                                             .strong(),
                                     );
                                 });
+                            }
+
+                            if info.has_missing_files {
+                                ui.add_space(4.0);
+                                ui.label(
+                                    egui::RichText::new(format!("Eksik Dosyalar: {}", info.missing_files.join(", ")))
+                                        .color(egui::Color32::from_rgb(255, 170, 60))
+                                        .size(12.0),
+                                );
                             }
 
                             let short_sha = if info.commit_sha.len() > 7 {
@@ -2794,7 +2828,9 @@ impl eframe::App for LauncherApp {
                     ui.separator();
 
                     ui.horizontal(|ui| {
-                        let btn_text = if info.is_new {
+                        let btn_text = if info.has_missing_files {
+                            "Eksik Dosyaları İndir ve Onar"
+                        } else if info.is_new {
                             self.t("apply_update")
                         } else {
                             self.t("force_sync")

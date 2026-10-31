@@ -16,7 +16,7 @@ Launcher for God Of War 3 PC on Linux and Windows
    ## 🌟 Key Features                                                                                                                                                                    
                                                                                                                                                                                           
    - 🦀 **Native Rust GUI Launcher (`gow3-launcher`):** Built with `eframe`/`egui`. Ultra-fast, lightweight, with a sleek game-art interface and no heavy dependencies.                                                                                                                                                                           
-    - 🖥️ **Hardware Auto-Detection:** Automatically inspects GPU model, dedicated VRAM, system RAM, and display refresh rate (Hz) on launch.                                              
+    - 🖥️ **Hardware Auto-Detection:** Automatically inspects GPU model, CPU model, dedicated VRAM, system RAM, and display refresh rate (Hz) on launch.                                              
     - ⏱️ **144Hz / High-Hz Delta-Time Sync:** Eliminates the infamous 2x speed bug on 144Hz+ gaming displays by syncing engine delta-time with target framerates.                         
     - 🎨 **Texture Glitch Fix (Instant Readbacks):** Prevents snowy, bright, or reflection textures from corrupting into golden-yellow artifacts.                                         
     - 🎮 **Feral GameMode Integration:** Built-in toggle for `gamemoderun` to maximize CPU governor and GPU clocks during gameplay.                                                       
@@ -137,7 +137,7 @@ Launcher for God Of War 3 PC on Linux and Windows
                                                                                                                                                                                           
    ### Özellikler:
    1. **Tek ve Sade Rust Launcher:** Karmaşık `.sh` scriptleri kaldırılmış, tüm pipeline doğrudan `gow3-launcher` içine gömülmüştür.
-   2. **Otomatik Donanım Algılama:** GPU, VRAM, RAM ve monitör yenileme hızınızı (Hz) anında tespit eder.
+   2. **Otomatik Donanım Algılama:** GPU, CPU, VRAM, RAM ve monitör yenileme hızınızı (Hz) anında tespit eder.
    3. **144 Hz Düzeltmesi:** Yüksek yenileme hızlı monitörlerde oyunun hızlı akmasını (2x speed) engelleyen Delta-Time yaması.
    4. **Doku Bozulması Koruması:** Karlı sahnelerdeki sararma hatasını çözen Instant Readbacks yaması.
    5. **Feral GameMode:** Tek tıkla `gamemoderun` performans modu desteği.

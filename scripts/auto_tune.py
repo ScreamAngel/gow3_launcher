@@ -118,8 +118,10 @@ def calculate_settings(specs, override_hz=None):
         gc_budget_mb = 4608
     elif vram_mb >= 3500:
         gc_budget_mb = 3072
-    else:
+    elif vram_mb >= 2500:
         gc_budget_mb = 2048
+    else:
+        gc_budget_mb = 1280
 
     # Guest DMEM Pool (based on RAM)
     if ram_mb >= 24000:

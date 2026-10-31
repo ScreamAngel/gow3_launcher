@@ -46,7 +46,7 @@ pub fn analyze_post_game(base_dir: &Path, exit_code: Option<i32>) -> Option<Cras
         return Some(CrashDiagnosis {
             title: "💥 Büyü / Savaş Olay Havuzu Çökmesi Algılandı (0x2de2d2)".to_string(),
             description: "Büyü kullanırken veya yoğun savaş sahnelerinde oyun motorunun olay düğüm havuzu (128 eleman) tükendiği için boş bellek adresi (0x10) referans alınarak çöktü.".to_string(),
-            recommendation: "v1.6.1.6 sürümündeki evrensel bellek havuzu genişletmesi ve NULL koruması bu sorunu çözer. Launcher'ı güncelleyip oyunu tekrar başlatın.".to_string(),
+            recommendation: "v1.7 sürümündeki evrensel bellek havuzu genişletmesi ve NULL koruması bu sorunu çözer. Launcher'ı güncelleyip oyunu tekrar başlatın.".to_string(),
             log_snippet: extract_relevant_snippet(&tail_str, "0x2de2d2"),
         });
     }
@@ -56,7 +56,7 @@ pub fn analyze_post_game(base_dir: &Path, exit_code: Option<i32>) -> Option<Cras
         return Some(CrashDiagnosis {
             title: "💥 Giriş İntrosu / Sahne Geçiş Çökmesi Algılandı (0x2c54b2)".to_string(),
             description: "Oyun motorunun olay havuzu (128 eleman) yüksek kare hızında veya introyu geçerken tükendiği için boş bellek adresi (0x10) referans alınarak çöktü.".to_string(),
-            recommendation: "v1.6.1.6 sürümündeki 'Bug Fix - Intro Crash Fix' yaması havuzu 2048'e çıkarıp otomatik genişletme ve güvenli NULL kontrolü ekler. Launcher'ı güncelleyip oyunu tekrar başlatın.".to_string(),
+            recommendation: "v1.7 sürümündeki 'Bug Fix - Intro Crash Fix' yaması havuzu 2048'e çıkarıp otomatik genişletme ve güvenli NULL kontrolü ekler. Launcher'ı güncelleyip oyunu tekrar başlatın.".to_string(),
             log_snippet: extract_relevant_snippet(&tail_str, "0x2c54b2"),
         });
     }
@@ -66,7 +66,7 @@ pub fn analyze_post_game(base_dir: &Path, exit_code: Option<i32>) -> Option<Cras
         return Some(CrashDiagnosis {
             title: "💥 Vulkan Grafik Teslimat Hatası (Device Lost)".to_string(),
             description: "Vulkan grafik komutları GPU'ya teslim edilirken sürücü zaman aşımına uğradı veya ölçekleyici (Upscaler/FSR) çakışması yaşandı.".to_string(),
-            recommendation: "v1.6.1.6 sürümünde Native 1080p ve çözünürlük ölçekleyici ortam değişkenleri düzeltilmiştir. Launcher'ı güncelleyip grafik profilini 'Dengeli (Native 1080p)' seçeneğine ayarlayarak oyunu başlatın.".to_string(),
+            recommendation: "v1.7 sürümünde Native 1080p ve çözünürlük ölçekleyici ortam değişkenleri düzeltilmiştir. Launcher'ı güncelleyip grafik profilini 'Dengeli (Native 1080p)' seçeneğine ayarlayarak oyunu başlatın.".to_string(),
             log_snippet: extract_relevant_snippet(&tail_str, "SubmitExecution"),
         });
     }

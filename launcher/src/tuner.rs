@@ -120,19 +120,26 @@ fn update_run_sh(base_dir: &Path, config: &LauncherConfig) -> Result<(), String>
     }
     replace_or_insert_env(&mut content, "GOW3_OBJECT_MOTION", if config.disable_motion_blur { "0" } else { "1" });
 
-    let effective_budget = if config.cached_hardware.vram_mb > 0 {
-        config.vram_gc_budget_mb.min(config.cached_hardware.vram_mb).max(1536)
-    } else {
-        config.vram_gc_budget_mb
-    };
+    let effective_budget = config.get_effective_vram_budget();
     replace_or_insert_env(&mut content, "GOW3_GC_BUDGET_MB", &effective_budget.to_string());
     replace_or_insert_env(&mut content, "GOW3_DMEM_POOL_MB", &config.dmem_mb.to_string());
     replace_or_insert_env(&mut content, "GOW3_DEFAULT_ENGINE_FPS", &config.target_fps.to_string());
     replace_or_insert_env(&mut content, "GOW3_FORCE_READBACK", if config.patch_readbacks { "1" } else { "0" });
     replace_or_insert_env(&mut content, "GOW3_READBACKS", if config.patch_readbacks { "1" } else { "0" });
     replace_or_insert_env(&mut content, "GOW3_READBACK_LINEAR", if config.patch_readbacks { "1" } else { "0" });
-    replace_or_insert_env(&mut content, "GOW3_DEFERRED_READBACK", "0");
-    replace_or_insert_env(&mut content, "GOW3_STALE_READBACK", "0");
+    replace_or_insert_env(&mut content, "GOW3_DEFERRED_READBACK", if config.async_readbacks { "1" } else { "0" });
+    replace_or_insert_env(&mut content, "GOW3_STALE_READBACK", if config.async_readbacks { "1" } else { "0" });
+
+    let cpu_threads = crate::system::detect_cpu_threads();
+    let (prep_workers, copy_threads) = if cpu_threads <= 4 {
+        (2, 1)
+    } else if cpu_threads <= 8 {
+        (4, 2)
+    } else {
+        (6, 4)
+    };
+    replace_or_insert_env(&mut content, "GOW3_PREP_WORKERS", &prep_workers.to_string());
+    replace_or_insert_env(&mut content, "GOW3_COPY_THREADS", &copy_threads.to_string());
     replace_or_insert_env(&mut content, "GOW3_INTERP_INT_FIX", "1");
     replace_or_insert_env(&mut content, "GOW3_DIRECT_MEMORY_ACCESS", "1");
     replace_or_insert_env(&mut content, "GOW3_PIPELINE_CACHE", "1");
@@ -233,8 +240,8 @@ fn update_gow3_ini(base_dir: &Path, config: &LauncherConfig) -> Result<(), Strin
     let readbacks_val = if config.patch_readbacks { "true" } else { "false" };
     replace_ini_key(&mut content, "readbacks", readbacks_val);
     replace_ini_key(&mut content, "readbackLinearImages", readbacks_val);
-    replace_ini_key(&mut content, "deferred_readback", "0");
-    replace_ini_key(&mut content, "stale_readback", "0");
+    replace_ini_key(&mut content, "deferred_readback", if config.async_readbacks { "1" } else { "0" });
+    replace_ini_key(&mut content, "stale_readback", if config.async_readbacks { "1" } else { "0" });
     replace_ini_key(&mut content, "async_shaders", "1");
     if config.render_resolution == "native" {
         replace_ini_key(&mut content, "render_resolution", "native");
@@ -259,11 +266,7 @@ fn update_gow3_ini(base_dir: &Path, config: &LauncherConfig) -> Result<(), Strin
     replace_ini_key(&mut content, "rcas_strength", "250");
     replace_ini_key(&mut content, "object_motion", if config.disable_motion_blur { "0" } else { "1" });
 
-    let effective_budget = if config.cached_hardware.vram_mb > 0 {
-        config.vram_gc_budget_mb.min(config.cached_hardware.vram_mb).max(1536)
-    } else {
-        config.vram_gc_budget_mb
-    };
+    let effective_budget = config.get_effective_vram_budget();
     replace_ini_key(&mut content, "budget", &effective_budget.to_string());
     replace_ini_key(&mut content, "engine_fps", &config.target_fps.to_string());
     replace_ini_key(&mut content, "fps_limit", &config.target_fps.to_string());

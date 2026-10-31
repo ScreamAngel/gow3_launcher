@@ -1920,21 +1920,21 @@ impl eframe::App for LauncherApp {
                         ui.add_space(8.0);
                         ui.label(target_fps_label);
                         let current_text = match self.config.target_fps {
-                            30 => "30 FPS (Pil Tasarrufu & Düşük Güç)".to_string(),
-                            40 => "40 FPS (Steam Deck 40Hz İdeal)".to_string(),
+                            30 => "30 FPS (Konsol Kilidi & Düşük Sistem - Maksimum Kararlılık)".to_string(),
+                            40 => "40 FPS (Steam Deck 40Hz & Düşük Sistem - Sıfır Takılma)".to_string(),
                             60 => "60 FPS (Varsayılan - Akıcı & Kararlı)".to_string(),
                             90 => "90 FPS (Steam Deck OLED 90Hz)".to_string(),
-                            120 => "120 FPS (120Hz Ultra Akıcı - 60Hz Fizik)".to_string(),
-                            144 => "144 FPS (144Hz Ultra Akıcı - 60Hz Fizik)".to_string(),
-                            165 => "165 FPS (165Hz Ultra Akıcı - 60Hz Fizik)".to_string(),
-                            240 => "240 FPS (240Hz Maksimum - 60Hz Fizik)".to_string(),
+                            120 => "120 FPS (120Hz Ultra Akıcı - 60Hz Fizik Korumalı)".to_string(),
+                            144 => "144 FPS (144Hz Ultra Akıcı - 60Hz Fizik Korumalı)".to_string(),
+                            165 => "165 FPS (165Hz Ultra Akıcı - 60Hz Fizik Korumalı)".to_string(),
+                            240 => "240 FPS (240Hz Maksimum - 60Hz Fizik Korumalı)".to_string(),
                             other => format!("{} FPS", other),
                         };
                         egui::ComboBox::from_id_salt("hz_combo")
                             .selected_text(current_text)
                             .show_ui(ui, |ui| {
-                                ui.selectable_value(&mut self.config.target_fps, 30, "30 FPS (Pil Tasarrufu & Düşük Güç)");
-                                ui.selectable_value(&mut self.config.target_fps, 40, "40 FPS (Steam Deck 40Hz İdeal)");
+                                ui.selectable_value(&mut self.config.target_fps, 30, "30 FPS (Konsol Kilidi & Düşük Sistem - Maksimum Kararlılık)");
+                                ui.selectable_value(&mut self.config.target_fps, 40, "40 FPS (Steam Deck 40Hz & Düşük Sistem - Sıfır Takılma)");
                                 ui.selectable_value(&mut self.config.target_fps, 60, "60 FPS (Varsayılan - Akıcı & Kararlı)");
                                 ui.selectable_value(&mut self.config.target_fps, 90, "90 FPS (Steam Deck OLED 90Hz)");
                                 ui.selectable_value(&mut self.config.target_fps, 120, "120 FPS (120Hz Ultra Akıcı - 60Hz Fizik Korumalı)");
@@ -1960,32 +1960,55 @@ impl eframe::App for LauncherApp {
 
                     ui.add_space(8.0);
 
-                    // --- 7. VRAM GC BUDGET ---
+                    // --- 7. ASENKRON GERİ OKUMA (DEFERRED READBACK - ANTİ-STUTTER / DROP ÖNLEME) ---
+                    let async_readback_label = self.t("async_readbacks");
+                    let async_readback_desc = self.t("async_readbacks_desc");
+                    ui.horizontal(|ui| {
+                        toggle_switch(ui, &mut self.config.async_readbacks);
+                        if ui.add(egui::Label::new(egui::RichText::new(async_readback_label).strong()).sense(egui::Sense::click())).clicked() {
+                            self.config.async_readbacks = !self.config.async_readbacks;
+                        }
+                    });
+                    ui.label(egui::RichText::new(async_readback_desc).color(egui::Color32::LIGHT_GRAY).size(11.0));
+
+                    ui.add_space(8.0);
+
+                    // --- 8. VRAM GC BUDGET ---
                     ui.horizontal(|ui| {
                         ui.label(egui::RichText::new(self.t("vram_budget")).strong().color(egui::Color32::WHITE));
                         let vram_text = match self.config.vram_gc_budget_mb {
-                            2048 => "2048 MB (2 GB GPU / Düşük Sistem)",
-                            3072 => "3072 MB (3 GB GPU / Steam Deck)",
-                            4096 => "4096 MB (4 GB GPU)",
-                            6144 => "6144 MB (6 GB GPU - Varsayılan)",
-                            8192 => "8192 MB (8 GB+ GPU / Yüksek)",
+                            1280 => "1280 MB (2 GB GPU / Düşük Sistem - PCIe Taşma Korumalı)",
+                            2048 => "2048 MB (3 GB GPU / Steam Deck)",
+                            3072 => "3072 MB (4 GB GPU)",
+                            4096 => "4096 MB (6 GB GPU)",
+                            6144 => "6144 MB (8 GB GPU - Varsayılan)",
+                            8192 => "8192 MB (10 GB+ GPU / Yüksek)",
                             _ => "Özel Bütçe",
                         };
                         egui::ComboBox::from_id_salt("vram_gc_combo")
                             .selected_text(vram_text)
                             .show_ui(ui, |ui| {
-                                ui.selectable_value(&mut self.config.vram_gc_budget_mb, 2048, "2048 MB (2 GB GPU / Düşük Sistem)");
-                                ui.selectable_value(&mut self.config.vram_gc_budget_mb, 3072, "3072 MB (3 GB GPU / Steam Deck)");
-                                ui.selectable_value(&mut self.config.vram_gc_budget_mb, 4096, "4096 MB (4 GB GPU)");
-                                ui.selectable_value(&mut self.config.vram_gc_budget_mb, 6144, "6144 MB (6 GB GPU - Varsayılan)");
-                                ui.selectable_value(&mut self.config.vram_gc_budget_mb, 8192, "8192 MB (8 GB+ GPU / Yüksek)");
+                                ui.selectable_value(&mut self.config.vram_gc_budget_mb, 1280, "1280 MB (2 GB GPU / Düşük Sistem - PCIe Taşma Korumalı)");
+                                ui.selectable_value(&mut self.config.vram_gc_budget_mb, 2048, "2048 MB (3 GB GPU / Steam Deck)");
+                                ui.selectable_value(&mut self.config.vram_gc_budget_mb, 3072, "3072 MB (4 GB GPU)");
+                                ui.selectable_value(&mut self.config.vram_gc_budget_mb, 4096, "4096 MB (6 GB GPU)");
+                                ui.selectable_value(&mut self.config.vram_gc_budget_mb, 6144, "6144 MB (8 GB GPU - Varsayılan)");
+                                ui.selectable_value(&mut self.config.vram_gc_budget_mb, 8192, "8192 MB (10 GB+ GPU / Yüksek)");
                             });
                     });
                     ui.label(egui::RichText::new(self.t("vram_budget_desc")).color(egui::Color32::LIGHT_GRAY).size(11.0));
 
+                    let effective = self.config.get_effective_vram_budget();
+                    if effective != self.config.vram_gc_budget_mb && self.config.cached_hardware.vram_mb > 0 {
+                        ui.label(egui::RichText::new(format!(
+                            "🛡️ Donanım Koruması Devrede: Ekran kartınızın kapasitesine ({} MB) göre aktif VRAM bütçesi {} MB olarak güvenli şekilde sınırlandırıldı.",
+                            self.config.cached_hardware.vram_mb, effective
+                        )).color(egui::Color32::from_rgb(102, 225, 106)).size(11.0));
+                    }
+
                     ui.add_space(8.0);
 
-                    // --- 8. SİNEMATİKLERİ ATLAMA ---
+                    // --- 9. SİNEMATİKLERİ ATLAMA ---
                     let skip_cinematics_label = self.t("skip_cinematics");
                     let skip_cinematics_desc = self.t("skip_cinematics_desc");
                     ui.horizontal(|ui| {

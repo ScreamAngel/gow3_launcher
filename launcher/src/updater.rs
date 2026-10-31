@@ -5,7 +5,7 @@ use std::process::Command;
 use crate::config::LauncherConfig;
 use crate::tuner::apply_settings;
 
-pub const BUILTIN_VERSION: &str = "v1.6.1.6";
+pub const BUILTIN_VERSION: &str = "v1.7";
 pub const GITHUB_REPO: &str = "ScreamAngel/gow3_launcher";
 pub const GITHUB_REPO_URL: &str = "https://github.com/ScreamAngel/gow3_launcher.git";
 

@@ -16,6 +16,12 @@ pub fn detect_hardware() -> CachedHardware {
     }
 }
 
+pub fn detect_cpu_threads() -> usize {
+    std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(4)
+}
+
 pub fn is_gamemode_available() -> bool {
     #[cfg(target_os = "windows")]
     {

@@ -192,6 +192,8 @@ pub struct LauncherConfig {
     #[serde(default = "default_true")]
     pub patch_readbacks: bool,
     #[serde(default = "default_true")]
+    pub async_readbacks: bool,
+    #[serde(default = "default_true")]
     pub skip_cinematics: bool,
     #[serde(default = "default_true")]
     pub use_gamemode: bool,
@@ -261,7 +263,7 @@ fn default_last_commit() -> String {
     "c5638d9956002b8a9f09a240028f6793ddf7b2f8".to_string()
 }
 fn default_launcher_version() -> String {
-    "v1.6.1.6".to_string()
+    "v1.7".to_string()
 }
 fn default_render_resolution() -> String {
     "native".to_string()
@@ -277,6 +279,7 @@ impl Default for LauncherConfig {
             target_fps: default_target_fps(),
             patch_delta_time: true,
             patch_readbacks: true,
+            async_readbacks: true,
             skip_cinematics: true,
             use_gamemode: true,
             vram_gc_budget_mb: default_vram_budget(),
@@ -305,10 +308,10 @@ impl LauncherConfig {
         match preset {
             GraphicPreset::UltraLow => {
                 self.render_resolution = "480p".to_string();
-                self.fsr_enabled = true;
+                self.fsr_enabled = false;
                 self.disable_motion_blur = true;
                 self.disable_dof = true;
-                self.vram_gc_budget_mb = 2048;
+                self.vram_gc_budget_mb = 1280;
                 self.target_fps = 60;
             }
             GraphicPreset::Low => {
@@ -316,7 +319,7 @@ impl LauncherConfig {
                 self.fsr_enabled = true;
                 self.disable_motion_blur = true;
                 self.disable_dof = true;
-                self.vram_gc_budget_mb = 3072;
+                self.vram_gc_budget_mb = 2048;
                 self.target_fps = 60;
             }
             GraphicPreset::SteamDeck => {
@@ -324,7 +327,7 @@ impl LauncherConfig {
                 self.fsr_enabled = true;
                 self.disable_motion_blur = true;
                 self.disable_dof = true;
-                self.vram_gc_budget_mb = 3072;
+                self.vram_gc_budget_mb = 2048;
                 self.target_fps = 40;
             }
             GraphicPreset::Balanced => {
@@ -350,7 +353,7 @@ impl LauncherConfig {
     }
 
     pub fn check_preset_match(&mut self) {
-        if self.render_resolution == "480p" && self.fsr_enabled && self.disable_motion_blur && self.disable_dof {
+        if self.render_resolution == "480p" && !self.fsr_enabled && self.disable_motion_blur && self.disable_dof {
             self.graphic_preset = GraphicPreset::UltraLow;
         } else if self.render_resolution == "720p" && self.fsr_enabled && self.disable_motion_blur && self.disable_dof {
             self.graphic_preset = GraphicPreset::Low;
@@ -383,6 +386,31 @@ impl LauncherConfig {
         } else {
             let (w, h) = self.get_resolution_dimensions();
             Some(format!("{}x{}", w, h))
+        }
+    }
+
+    pub fn get_effective_vram_budget(&self) -> u64 {
+        let vram = self.cached_hardware.vram_mb;
+        if vram > 0 {
+            // Guard against PCIe memory thrashing / swapping to system RAM over slow bus:
+            // Desktop environment, window compositor and GPU drivers consume ~350-512MB of VRAM.
+            // Texture GC budget must stay within available physical VRAM.
+            let safe_ceiling = if vram <= 2048 {
+                1280
+            } else if vram <= 3072 {
+                2048
+            } else if vram <= 4096 {
+                3072
+            } else if vram <= 6144 {
+                4608
+            } else if vram <= 8192 {
+                6144
+            } else {
+                vram.saturating_sub(1024)
+            };
+            self.vram_gc_budget_mb.min(safe_ceiling)
+        } else {
+            self.vram_gc_budget_mb
         }
     }
     pub fn config_path(base_dir: &Path) -> PathBuf {

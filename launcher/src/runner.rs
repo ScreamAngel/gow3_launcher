@@ -850,8 +850,26 @@ pub fn launch_gow3(
     cmd.env("GOW3_READBACKS", if config.patch_readbacks { "1" } else { "0" });
     cmd.env("GOW3_READBACK_LINEAR", if config.patch_readbacks { "1" } else { "0" });
     cmd.env("GOW3_FORCE_READBACK", if config.patch_readbacks { "1" } else { "0" });
-    cmd.env("GOW3_DEFERRED_READBACK", "0");
-    cmd.env("GOW3_STALE_READBACK", "0");
+
+    // Asynchronous & Stale Readbacks:
+    // Decouples CPU from GPU fences. CPU reads use the previous frame's copy and CPU writes proceed
+    // without stalling the render thread. Completely prevents sudden FPS drops and micro-stutters.
+    cmd.env("GOW3_DEFERRED_READBACK", if config.async_readbacks { "1" } else { "0" });
+    cmd.env("GOW3_STALE_READBACK", if config.async_readbacks { "1" } else { "0" });
+
+    // CPU Thread Tuning:
+    // Scale draw preparation workers and copy threads to CPU topology to prevent thread contention.
+    let cpu_threads = crate::system::detect_cpu_threads();
+    let (prep_workers, copy_threads) = if cpu_threads <= 4 {
+        (2, 1)
+    } else if cpu_threads <= 8 {
+        (4, 2)
+    } else {
+        (6, 4)
+    };
+    cmd.env("GOW3_PREP_WORKERS", prep_workers.to_string());
+    cmd.env("GOW3_COPY_THREADS", copy_threads.to_string());
+
     cmd.env("GOW3_INTERP_INT_FIX", "1");
     cmd.env("GOW3_DIRECT_MEMORY_ACCESS", "1");
     cmd.env("GOW3_PIPELINE_CACHE", "1");
@@ -863,11 +881,7 @@ pub fn launch_gow3(
     cmd.env("GOW3_ASYNC_SHADERS", "1");
     cmd.env("GOW3_FPS_LIMIT", config.target_fps.to_string());
 
-    let effective_budget = if config.cached_hardware.vram_mb > 0 {
-        config.vram_gc_budget_mb.min(config.cached_hardware.vram_mb).max(1536)
-    } else {
-        config.vram_gc_budget_mb
-    };
+    let effective_budget = config.get_effective_vram_budget();
     cmd.env("GOW3_GC_BUDGET_MB", effective_budget.to_string());
     cmd.env("GOW3_DMEM_POOL_MB", config.dmem_mb.to_string());
     cmd.env("GOW3_DMEM_MB", config.dmem_mb.to_string());

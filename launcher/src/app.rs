@@ -1160,8 +1160,28 @@ impl eframe::App for LauncherApp {
                                 cancel = true;
                             } else if let Some(numpad_key) = check_physical_numpad() {
                                 captured_key = Some(numpad_key.to_string());
-                            } else if let Some(shad_name) = egui_key_to_shadps4(*key) {
-                                captured_key = Some(shad_name.to_string());
+                            } else {
+                                // Direct detection: map number and keypad symbols to Numpad bindings
+                                let mapped = match *key {
+                                    egui::Key::Num0 => Some("kp0"),
+                                    egui::Key::Num1 => Some("kp1"),
+                                    egui::Key::Num2 => Some("kp2"),
+                                    egui::Key::Num3 => Some("kp3"),
+                                    egui::Key::Num4 => Some("kp4"),
+                                    egui::Key::Num5 => Some("kp5"),
+                                    egui::Key::Num6 => Some("kp6"),
+                                    egui::Key::Num7 => Some("kp7"),
+                                    egui::Key::Num8 => Some("kp8"),
+                                    egui::Key::Num9 => Some("kp9"),
+                                    egui::Key::Plus => Some("kpplus"),
+                                    egui::Key::Minus => Some("kpminus"),
+                                    egui::Key::Slash => Some("kpslash"),
+                                    egui::Key::Period => Some("kpperiod"),
+                                    other => egui_key_to_shadps4(other),
+                                };
+                                if let Some(k_str) = mapped {
+                                    captured_key = Some(k_str.to_string());
+                                }
                             }
                         }
                         egui::Event::PointerButton { button, pressed: true, .. } => {
@@ -2477,6 +2497,21 @@ impl eframe::App for LauncherApp {
                     );
 
                     ui.add_space(8.0);
+                    // Hide mouse cursor in game toggle
+                    ui.horizontal(|ui| {
+                        toggle_switch(ui, &mut self.config.hide_mouse_cursor);
+                        let hide_lbl = self.t("hide_mouse_cursor");
+                        if ui.add(egui::Label::new(egui::RichText::new(hide_lbl).strong()).sense(egui::Sense::click())).clicked() {
+                            self.config.hide_mouse_cursor = !self.config.hide_mouse_cursor;
+                        }
+                    });
+                    ui.label(
+                        egui::RichText::new(self.t("hide_mouse_cursor_desc"))
+                            .color(egui::Color32::LIGHT_GRAY)
+                            .size(11.0),
+                    );
+
+                    ui.add_space(8.0);
                     // Motion controls toggle
                     ui.horizontal(|ui| {
                         toggle_switch(ui, &mut self.config.is_motion_controls_enabled);
@@ -3142,6 +3177,28 @@ impl eframe::App for LauncherApp {
                             }
                         });
                     }
+
+                    ui.add_space(4.0);
+                    ui.label(
+                        egui::RichText::new(self.t("sec_digits_bindings"))
+                            .strong()
+                            .color(egui::Color32::from_rgb(180, 210, 230))
+                            .size(12.0),
+                    );
+                    ui.horizontal(|ui| {
+                        for num in ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"] {
+                            let btn = egui::Button::new(
+                                egui::RichText::new(num).size(12.0).strong().color(egui::Color32::WHITE),
+                            )
+                            .min_size(egui::vec2(28.0, 24.0))
+                            .fill(egui::Color32::from_rgb(30, 36, 48))
+                            .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgb(70, 85, 110)))
+                            .corner_radius(egui::CornerRadius::same(5));
+                            if ui.add(btn).clicked() {
+                                picked_key = Some(num.to_string());
+                            }
+                        }
+                    });
 
                     ui.add_space(6.0);
                     ui.separator();

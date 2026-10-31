@@ -25,6 +25,7 @@
   "display_mode": "Borderless",
   "vsync": true,
   "background_controller_input": false,
+  "hide_mouse_cursor": true,
   "is_motion_controls_enabled": true,
   "deadzone_left": 2,
   "deadzone_right": 2,

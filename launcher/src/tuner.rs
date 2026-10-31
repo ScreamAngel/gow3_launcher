@@ -173,6 +173,15 @@ fn update_run_sh(base_dir: &Path, config: &LauncherConfig) -> Result<(), String>
     replace_or_insert_env(&mut content, "GOW3_PAD_MAP", pad_map);
     replace_or_insert_env(
         &mut content,
+        "GOW3_HIDE_CURSOR",
+        if config.hide_mouse_cursor { "1" } else { "0" },
+    );
+    let input_lib = base_dir.join("bin/lib/libgow3input.so");
+    if input_lib.is_file() {
+        replace_or_insert_env(&mut content, "LD_PRELOAD", &input_lib.to_string_lossy());
+    }
+    replace_or_insert_env(
+        &mut content,
         "SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS",
         if config.background_controller_input { "1" } else { "0" },
     );

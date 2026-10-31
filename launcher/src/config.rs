@@ -251,6 +251,8 @@ pub struct LauncherConfig {
     #[serde(default)]
     pub background_controller_input: bool,
     #[serde(default = "default_true")]
+    pub hide_mouse_cursor: bool,
+    #[serde(default = "default_true")]
     pub is_motion_controls_enabled: bool,
     #[serde(default = "default_deadzone")]
     pub deadzone_left: u32,
@@ -315,6 +317,7 @@ impl Default for LauncherConfig {
             display_mode: DisplayMode::default(),
             vsync: true,
             background_controller_input: false,
+            hide_mouse_cursor: true,
             is_motion_controls_enabled: true,
             deadzone_left: default_deadzone(),
             deadzone_right: default_deadzone(),
@@ -481,11 +484,13 @@ impl LauncherConfig {
                 "kp_divide" | "kpslash" => "Keypad /".to_string(),
                 "kp_enter" | "kpenter" => "Keypad Enter".to_string(),
                 "kp_period" | "kpperiod" => "Keypad .".to_string(),
-                "leftbutton" | "mouse1" => "LeftButton".to_string(),
-                "rightbutton" | "mouse2" => "RightButton".to_string(),
-                "middlebutton" | "mouse3" => "MiddleButton".to_string(),
-                "sidebuttonback" | "mouse4" => "SideButtonBack".to_string(),
-                "sidebuttonforward" | "mouse5" => "SideButtonForward".to_string(),
+                "leftbutton" | "mouse1" | "leftclick" => "F13".to_string(),
+                "rightbutton" | "mouse2" | "rightclick" => "F14".to_string(),
+                "middlebutton" | "mouse3" | "middleclick" => "F15".to_string(),
+                "sidebuttonback" | "mouse4" | "side1" => "F16".to_string(),
+                "sidebuttonforward" | "mouse5" | "side2" => "F17".to_string(),
+                "mousewheelup" | "wheelup" => "F18".to_string(),
+                "mousewheeldown" | "wheeldown" => "F19".to_string(),
                 "shift" | "lshift" => "Left Shift".to_string(),
                 "rshift" => "Right Shift".to_string(),
                 "ctrl" | "lctrl" => "Left Ctrl".to_string(),
@@ -627,6 +632,15 @@ pub fn key_to_sdl_scancode(key: &str) -> Option<u8> {
         "rshift" => Some(229),
         "ralt" => Some(230),
 
+        // Mouse buttons (F13..F19)
+        "leftbutton" | "mouse1" | "leftclick" => Some(104),
+        "rightbutton" | "mouse2" | "rightclick" => Some(105),
+        "middlebutton" | "mouse3" | "middleclick" => Some(106),
+        "sidebuttonback" | "mouse4" | "side1" => Some(107),
+        "sidebuttonforward" | "mouse5" | "side2" => Some(108),
+        "mousewheelup" | "wheelup" => Some(109),
+        "mousewheeldown" | "wheeldown" => Some(110),
+
         _ => None,
     }
 }
@@ -653,6 +667,11 @@ mod tests {
         assert_eq!(key_to_sdl_scancode("kpslash"), Some(84));
         assert_eq!(key_to_sdl_scancode("kpenter"), Some(88));
         assert_eq!(key_to_sdl_scancode("kpperiod"), Some(99));
+        assert_eq!(key_to_sdl_scancode("leftbutton"), Some(104));
+        assert_eq!(key_to_sdl_scancode("rightbutton"), Some(105));
+        assert_eq!(key_to_sdl_scancode("middlebutton"), Some(106));
+        assert_eq!(key_to_sdl_scancode("sidebuttonback"), Some(107));
+        assert_eq!(key_to_sdl_scancode("sidebuttonforward"), Some(108));
     }
 
     #[test]

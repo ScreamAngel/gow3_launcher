@@ -909,6 +909,19 @@ pub fn launch_gow3(
     let pad_map = config.build_gow3_pad_map();
     cmd.env("GOW3_KEY_MAP", &key_map);
     cmd.env("GOW3_PAD_MAP", pad_map);
+    cmd.env("GOW3_HIDE_CURSOR", if config.hide_mouse_cursor { "1" } else { "0" });
+
+    // Preload custom input bridge on Linux (intercepts mouse buttons & manages cursor focus)
+    let input_lib = base_dir.join("bin/lib/libgow3input.so");
+    if input_lib.is_file() {
+        let mut preload = input_lib.to_string_lossy().to_string();
+        if let Ok(existing) = std::env::var("LD_PRELOAD") {
+            if !existing.is_empty() {
+                preload = format!("{}:{}", preload, existing);
+            }
+        }
+        cmd.env("LD_PRELOAD", preload);
+    }
     cmd.env(
         "SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS",
         if config.background_controller_input {

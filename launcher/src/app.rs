@@ -2671,16 +2671,36 @@ impl eframe::App for LauncherApp {
 
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             if ui.button(egui::RichText::new(self.t("reset_defaults")).strong()).clicked() {
-                                self.config.keyboard_bindings = KeyboardBindings::wasd_cvbn();
+                                self.config.keyboard_bindings = KeyboardBindings::recommended();
                             }
 
                             // Preset selection buttons
-                            if ui.button(self.t("preset_numpad")).clicked() {
-                                self.config.keyboard_bindings = KeyboardBindings::wasd_numpad();
+                            let btn_p2 = egui::Button::new(
+                                egui::RichText::new(self.t("preset_mouse_kb"))
+                                    .color(egui::Color32::from_rgb(175, 215, 255))
+                                    .strong(),
+                            )
+                            .fill(egui::Color32::from_rgb(32, 50, 72))
+                            .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgb(70, 115, 170)))
+                            .corner_radius(egui::CornerRadius::same(5));
+
+                            if ui.add(btn_p2).clicked() {
+                                self.config.keyboard_bindings = KeyboardBindings::mouse_keyboard();
                             }
-                            if ui.button(self.t("preset_standard")).clicked() {
-                                self.config.keyboard_bindings = KeyboardBindings::wasd_cvbn();
+
+                            let btn_p1 = egui::Button::new(
+                                egui::RichText::new(self.t("preset_recommended"))
+                                    .color(egui::Color32::from_rgb(255, 225, 130))
+                                    .strong(),
+                            )
+                            .fill(egui::Color32::from_rgb(65, 48, 20))
+                            .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgb(190, 140, 40)))
+                            .corner_radius(egui::CornerRadius::same(5));
+
+                            if ui.add(btn_p1).clicked() {
+                                self.config.keyboard_bindings = KeyboardBindings::recommended();
                             }
+
                             ui.label(self.t("preset_label"));
                         });
                     });

@@ -94,25 +94,36 @@ pub struct KeyboardBindings {
 
 impl Default for KeyboardBindings {
     fn default() -> Self {
-        Self::wasd_cvbn()
+        Self::recommended()
     }
 }
 
 impl KeyboardBindings {
-    pub fn wasd_cvbn() -> Self {
+    /// 1. Önerilen Preset (Klavye):
+    /// - Üçgen: U
+    /// - Kare: T
+    /// - Yuvarlak: J
+    /// - X: G
+    /// - Sol Stick: W, A, S, D
+    /// - Sağ Stick: Numpad 8 (Yukarı), Numpad 2 (Aşağı), Numpad 4 (Sol), Numpad 6 (Sağ)
+    /// - Options: Enter
+    /// - Share veya Select: Backspace
+    /// - DPAD: Ok Tuşları (Yukarı, Aşağı, Sol, Sağ)
+    /// - L1/R1/L2/R2/L3/R3: Q, I, E, O, X, M
+    pub fn recommended() -> Self {
         Self {
-            triangle: "c".to_string(),
-            circle: "b".to_string(),
-            cross: "n".to_string(),
-            square: "v".to_string(),
+            triangle: "u".to_string(),
+            circle: "j".to_string(),
+            cross: "g".to_string(),
+            square: "t".to_string(),
             l1: "q".to_string(),
-            r1: "u".to_string(),
+            r1: "i".to_string(),
             l2: "e".to_string(),
             r2: "o".to_string(),
             l3: "x".to_string(),
             r3: "m".to_string(),
             options: "enter".to_string(),
-            touchpad_center: "space".to_string(),
+            touchpad_center: "backspace".to_string(),
             pad_up: "up".to_string(),
             pad_down: "down".to_string(),
             pad_left: "left".to_string(),
@@ -121,27 +132,38 @@ impl KeyboardBindings {
             axis_left_x_plus: "d".to_string(),
             axis_left_y_minus: "w".to_string(),
             axis_left_y_plus: "s".to_string(),
-            axis_right_x_minus: "j".to_string(),
-            axis_right_x_plus: "l".to_string(),
-            axis_right_y_minus: "i".to_string(),
-            axis_right_y_plus: "k".to_string(),
+            axis_right_x_minus: "kp4".to_string(),
+            axis_right_x_plus: "kp6".to_string(),
+            axis_right_y_minus: "kp8".to_string(),
+            axis_right_y_plus: "kp2".to_string(),
         }
     }
 
-    pub fn wasd_numpad() -> Self {
+    /// 2. İkinci Preset (Fare + Klavye):
+    /// - Üçgen: Fare Sağ Tık (rightbutton)
+    /// - Kare: Fare Sol Tık (leftbutton)
+    /// - Yuvarlak: F
+    /// - X: Space
+    /// - Sol Stick: W, A, S, D
+    /// - Sağ Stick: Numpad 8 (Yukarı), Numpad 2 (Aşağı), Numpad 4 (Sol), Numpad 6 (Sağ)
+    /// - Options: Enter
+    /// - Share veya Select: Backspace
+    /// - DPAD: Ok Tuşları (Yukarı, Aşağı, Sol, Sağ)
+    /// - L1/R1/L2/R2/L3/R3: Q, R, E, C, X, Z
+    pub fn mouse_keyboard() -> Self {
         Self {
-            triangle: "kp8".to_string(),
-            circle: "kp6".to_string(),
-            cross: "kp2".to_string(),
-            square: "kp4".to_string(),
+            triangle: "rightbutton".to_string(),
+            circle: "f".to_string(),
+            cross: "space".to_string(),
+            square: "leftbutton".to_string(),
             l1: "q".to_string(),
-            r1: "u".to_string(),
+            r1: "r".to_string(),
             l2: "e".to_string(),
-            r2: "o".to_string(),
+            r2: "c".to_string(),
             l3: "x".to_string(),
-            r3: "m".to_string(),
+            r3: "z".to_string(),
             options: "enter".to_string(),
-            touchpad_center: "space".to_string(),
+            touchpad_center: "backspace".to_string(),
             pad_up: "up".to_string(),
             pad_down: "down".to_string(),
             pad_left: "left".to_string(),
@@ -150,12 +172,14 @@ impl KeyboardBindings {
             axis_left_x_plus: "d".to_string(),
             axis_left_y_minus: "w".to_string(),
             axis_left_y_plus: "s".to_string(),
-            axis_right_x_minus: "j".to_string(),
-            axis_right_x_plus: "l".to_string(),
-            axis_right_y_minus: "i".to_string(),
-            axis_right_y_plus: "k".to_string(),
+            axis_right_x_minus: "kp4".to_string(),
+            axis_right_x_plus: "kp6".to_string(),
+            axis_right_y_minus: "kp8".to_string(),
+            axis_right_y_plus: "kp2".to_string(),
         }
     }
+
+
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -286,7 +310,7 @@ fn default_last_commit() -> String {
     "c5638d9956002b8a9f09a240028f6793ddf7b2f8".to_string()
 }
 fn default_launcher_version() -> String {
-    "v1.8.1".to_string()
+    "v1.8.2".to_string()
 }
 fn default_render_resolution() -> String {
     "native".to_string()
@@ -445,7 +469,15 @@ impl LauncherConfig {
         let path = Self::config_path(base_dir);
         if path.exists() {
             if let Ok(content) = fs::read_to_string(&path) {
-                if let Ok(cfg) = serde_json::from_str::<LauncherConfig>(&content) {
+                if let Ok(mut cfg) = serde_json::from_str::<LauncherConfig>(&content) {
+                    // If the user's config still has the old default bindings (wasd_cvbn with triangle='c' and square='v' or wasd_numpad with triangle='kp8'),
+                    // automatically update to the new recommended preset.
+                    if (cfg.keyboard_bindings.triangle == "c" && cfg.keyboard_bindings.square == "v")
+                        || (cfg.keyboard_bindings.triangle == "kp8" && cfg.keyboard_bindings.square == "kp4" && cfg.keyboard_bindings.cross == "kp2")
+                    {
+                        cfg.keyboard_bindings = KeyboardBindings::recommended();
+                        let _ = cfg.save(base_dir);
+                    }
                     return cfg;
                 }
             }
@@ -675,7 +707,50 @@ mod tests {
     }
 
     #[test]
-    fn test_launcher_version_is_v181() {
-        assert_eq!(default_launcher_version(), "v1.8.1");
+    fn test_launcher_version_is_v182() {
+        assert_eq!(default_launcher_version(), "v1.8.2");
+    }
+
+    #[test]
+    fn test_keyboard_presets() {
+        let p1 = KeyboardBindings::recommended();
+        assert_eq!(p1.triangle, "u");
+        assert_eq!(p1.square, "t");
+        assert_eq!(p1.circle, "j");
+        assert_eq!(p1.cross, "g");
+        assert_eq!(p1.axis_left_y_minus, "w");
+        assert_eq!(p1.axis_left_x_minus, "a");
+        assert_eq!(p1.axis_left_y_plus, "s");
+        assert_eq!(p1.axis_left_x_plus, "d");
+        assert_eq!(p1.axis_right_y_minus, "kp8");
+        assert_eq!(p1.axis_right_y_plus, "kp2");
+        assert_eq!(p1.axis_right_x_minus, "kp4");
+        assert_eq!(p1.axis_right_x_plus, "kp6");
+        assert_eq!(p1.options, "enter");
+        assert_eq!(p1.touchpad_center, "backspace");
+        assert_eq!(p1.pad_up, "up");
+        assert_eq!(p1.pad_down, "down");
+        assert_eq!(p1.pad_left, "left");
+        assert_eq!(p1.pad_right, "right");
+
+        let p2 = KeyboardBindings::mouse_keyboard();
+        assert_eq!(p2.triangle, "rightbutton");
+        assert_eq!(p2.square, "leftbutton");
+        assert_eq!(p2.circle, "f");
+        assert_eq!(p2.cross, "space");
+        assert_eq!(p2.axis_left_y_minus, "w");
+        assert_eq!(p2.axis_left_x_minus, "a");
+        assert_eq!(p2.axis_left_y_plus, "s");
+        assert_eq!(p2.axis_left_x_plus, "d");
+        assert_eq!(p2.axis_right_y_minus, "kp8");
+        assert_eq!(p2.axis_right_y_plus, "kp2");
+        assert_eq!(p2.axis_right_x_minus, "kp4");
+        assert_eq!(p2.axis_right_x_plus, "kp6");
+        assert_eq!(p2.options, "enter");
+        assert_eq!(p2.touchpad_center, "backspace");
+        assert_eq!(p2.pad_up, "up");
+        assert_eq!(p2.pad_down, "down");
+        assert_eq!(p2.pad_left, "left");
+        assert_eq!(p2.pad_right, "right");
     }
 }

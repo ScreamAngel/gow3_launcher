@@ -1784,7 +1784,7 @@ dependencies = [
 
 [[package]]
 name = "launcher"
-version = "1.8.1"
+version = "1.8.2"
 dependencies = [
  "eframe",
  "egui_extras",

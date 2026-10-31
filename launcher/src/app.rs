@@ -1410,6 +1410,55 @@ impl eframe::App for LauncherApp {
 
                     let hw = &self.config.cached_hardware;
 
+                    // CPU Rating & Badge
+                    let cpu_grade = crate::system::evaluate_cpu(&hw.cpu_name, hw.cpu_cores, hw.cpu_threads);
+                    let cpu_badge = cpu_grade.badge_text(&self.config.language);
+                    let (cpu_r, cpu_g, cpu_b) = cpu_grade.rgb();
+                    let cpu_color = egui::Color32::from_rgb(cpu_r, cpu_g, cpu_b);
+
+                    // GPU Rating & Badge
+                    let (gpu_color, gpu_badge) = if hw.vram_mb >= 8192 {
+                        (
+                            egui::Color32::from_rgb(0, 230, 118),
+                            match self.config.language.as_str() {
+                                "tr" => "• Üst Seviye (Yüksek FPS)",
+                                "de" => "• Spitzenklasse (Hohe FPS)",
+                                "es" => "• Gama Alta (Altos FPS)",
+                                _ => "• High-End (High FPS)",
+                            }.to_string(),
+                        )
+                    } else if hw.vram_mb >= 6144 {
+                        (
+                            egui::Color32::from_rgb(102, 225, 106),
+                            match self.config.language.as_str() {
+                                "tr" => "• Güçlü (Akıcı Deneyim)",
+                                "de" => "• Stark (Flüssiges Erlebnis)",
+                                "es" => "• Potente (Fluido)",
+                                _ => "• Strong (Smooth Experience)",
+                            }.to_string(),
+                        )
+                    } else if hw.vram_mb >= 4096 {
+                        (
+                            egui::Color32::from_rgb(255, 213, 79),
+                            match self.config.language.as_str() {
+                                "tr" => "• Orta Seviye (Standart)",
+                                "de" => "• Mittelstufe (Standard)",
+                                "es" => "• Nivel Medio (Estándar)",
+                                _ => "• Mid-Range (Standard)",
+                            }.to_string(),
+                        )
+                    } else {
+                        (
+                            egui::Color32::from_rgb(239, 83, 80),
+                            match self.config.language.as_str() {
+                                "tr" => "• Giriş Seviye / Düşük VRAM",
+                                "de" => "• Einstiegsklasse / Wenig VRAM",
+                                "es" => "• Gama Baja / Poca VRAM",
+                                _ => "• Entry-Level / Low VRAM",
+                            }.to_string(),
+                        )
+                    };
+
                     let (vram_color, vram_badge) = if hw.vram_mb >= 6144 {
                         (egui::Color32::from_rgb(102, 225, 106), format!("• {}", self.t("vram_safe")))
                     } else if hw.vram_mb >= 4096 {
@@ -1424,23 +1473,151 @@ impl eframe::App for LauncherApp {
                         (egui::Color32::from_rgb(255, 180, 50), format!("• {}", self.t("ram_warning")))
                     };
 
-                    ui.columns(4, |cols| {
+                    let (hz_color, hz_badge) = if hw.refresh_rate_hz >= 120 {
+                        (
+                            egui::Color32::from_rgb(102, 225, 106),
+                            match self.config.language.as_str() {
+                                "tr" => "• Yüksek Tazeleme (Ultra Akıcı)",
+                                "de" => "• Hohe Bildrate (Ultraflüssig)",
+                                "es" => "• Alta Frecuencia (Ultra Fluido)",
+                                _ => "• High Refresh (Ultra Smooth)",
+                            },
+                        )
+                    } else {
+                        (
+                            egui::Color32::from_rgb(130, 215, 140),
+                            match self.config.language.as_str() {
+                                "tr" => "• Akıcı Ekran (Standart 60Hz)",
+                                "de" => "• Flüssig (Standard 60Hz)",
+                                "es" => "• Fluido (Estándar 60Hz)",
+                                _ => "• Smooth Display (Standard 60Hz)",
+                            },
+                        )
+                    };
+
+                    // Row 1: CPU & GPU (Compute Units)
+                    ui.columns(2, |cols| {
                         cols[0].vertical(|ui| {
-                            render_stat_tile(ui, "GPU", egui::Color32::from_rgb(0, 230, 118), self.t("gpu"), &hw.gpu_name, None);
+                            let clean_cpu = crate::system::clean_cpu_name(&hw.cpu_name);
+                            let cpu_val = if hw.cpu_threads > 0 && hw.cpu_cores > 0 {
+                                format!("{} ({}C / {}T)", clean_cpu, hw.cpu_cores, hw.cpu_threads)
+                            } else {
+                                clean_cpu
+                            };
+                            render_stat_tile(
+                                ui,
+                                "CPU",
+                                egui::Color32::from_rgb(70, 175, 255),
+                                self.t("cpu"),
+                                &cpu_val,
+                                Some((cpu_badge, cpu_color)),
+                            );
                         });
                         cols[1].vertical(|ui| {
-                            let vram_val = format!("{} MB (~{} GB)", hw.vram_mb, hw.vram_mb / 1024);
-                            render_stat_tile(ui, "VRAM", egui::Color32::from_rgb(255, 215, 0), self.t("vram"), &vram_val, Some((&vram_badge, vram_color)));
-                        });
-                        cols[2].vertical(|ui| {
-                            let ram_val = format!("{} MB (~{} GB)", hw.ram_mb, (hw.ram_mb as f32 / 1024.0).round());
-                            render_stat_tile(ui, "RAM", egui::Color32::from_rgb(100, 200, 255), self.t("ram"), &ram_val, Some((&ram_badge, ram_color)));
-                        });
-                        cols[3].vertical(|ui| {
-                            let hz_val = format!("{} Hz", hw.refresh_rate_hz);
-                            render_stat_tile(ui, "HZ", egui::Color32::from_rgb(200, 140, 255), self.t("refresh_rate"), &hz_val, Some(("• Akıcı Ekran", egui::Color32::from_rgb(130, 215, 140))));
+                            render_stat_tile(
+                                ui,
+                                "GPU",
+                                egui::Color32::from_rgb(0, 230, 118),
+                                self.t("gpu"),
+                                &hw.gpu_name,
+                                Some((&gpu_badge, gpu_color)),
+                            );
                         });
                     });
+
+                    ui.add_space(6.0);
+
+                    // Row 2: VRAM, RAM & Display Refresh Rate
+                    ui.columns(3, |cols| {
+                        cols[0].vertical(|ui| {
+                            let vram_val = format!("{} MB (~{} GB)", hw.vram_mb, hw.vram_mb / 1024);
+                            render_stat_tile(
+                                ui,
+                                "VRAM",
+                                egui::Color32::from_rgb(255, 215, 0),
+                                self.t("vram"),
+                                &vram_val,
+                                Some((&vram_badge, vram_color)),
+                            );
+                        });
+                        cols[1].vertical(|ui| {
+                            let ram_val = format!("{} MB (~{} GB)", hw.ram_mb, (hw.ram_mb as f32 / 1024.0).round());
+                            render_stat_tile(
+                                ui,
+                                "RAM",
+                                egui::Color32::from_rgb(100, 200, 255),
+                                self.t("ram"),
+                                &ram_val,
+                                Some((&ram_badge, ram_color)),
+                            );
+                        });
+                        cols[2].vertical(|ui| {
+                            let hz_val = format!("{} Hz", hw.refresh_rate_hz);
+                            render_stat_tile(
+                                ui,
+                                "HZ",
+                                egui::Color32::from_rgb(200, 140, 255),
+                                self.t("refresh_rate"),
+                                &hz_val,
+                                Some((hz_badge, hz_color)),
+                            );
+                        });
+                    });
+
+                    // CPU Bottleneck Warning Banner:
+                    if cpu_grade == crate::system::CpuGrade::Weak || (cpu_grade == crate::system::CpuGrade::Medium && hw.vram_mb >= 8192) {
+                        ui.add_space(8.0);
+                        egui::Frame::new()
+                            .fill(egui::Color32::from_rgba_unmultiplied(220, 100, 30, 25))
+                            .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(255, 140, 50, 100)))
+                            .corner_radius(egui::CornerRadius::same(6))
+                            .inner_margin(egui::Margin::symmetric(10, 8))
+                            .show(ui, |ui| {
+                                ui.horizontal(|ui| {
+                                    ui.label(egui::RichText::new("⚠️").size(15.0));
+                                    let warn_text = if cpu_grade == crate::system::CpuGrade::Weak {
+                                        match self.config.language.as_str() {
+                                            "tr" => format!(
+                                                "İşlemci Darboğaz Riski: Ekran kartınız iyi olsa bile, mevcut işlemciniz ({} çekirdek / {} izlek) emülasyon için sınırda. Takılma ve FPS düşüşlerini önlemek için Grafik sekmesinden '30 FPS' veya '40 FPS' kilidi ve 'Asenkron Geri Okuma' kullanmanız önerilir.",
+                                                hw.cpu_cores, hw.cpu_threads
+                                            ),
+                                            "de" => format!(
+                                                "CPU-Bottleneck-Risiko: Auch mit einer guten GPU ist deine CPU ({} Kerne / {} Threads) am Limit. Um Ruckler zu vermeiden, werden '30/40 FPS Lock' und 'Asynchrone Rücklesung' empfohlen.",
+                                                hw.cpu_cores, hw.cpu_threads
+                                            ),
+                                            "es" => format!(
+                                                "Riesgo de Cuello de Botella CPU: Aunque tu GPU sea buena, tu CPU ({} núcleos / {} hilos) está al límite. Se recomienda bloquear a 30/40 FPS y activar Lectura Asíncrona para evitar tirones.",
+                                                hw.cpu_cores, hw.cpu_threads
+                                            ),
+                                            _ => format!(
+                                                "CPU Bottleneck Risk: Even with a capable GPU, your CPU ({} cores / {} threads) is at the threshold for heavy emulation. Locking to 30 or 40 FPS with 'Async Readbacks' enabled is recommended to prevent stutter.",
+                                                hw.cpu_cores, hw.cpu_threads
+                                            ),
+                                        }
+                                    } else {
+                                        match self.config.language.as_str() {
+                                            "tr" => format!(
+                                                "Dengeli Performans Notu: Çok güçlü bir ekran kartınız var ({} GB VRAM); işlemciniz ({} çekirdek / {} izlek) 40-60 FPS için uygundur, 120+ FPS hedeflerde işlemci sınırına takılabilir.",
+                                                hw.vram_mb / 1024, hw.cpu_cores, hw.cpu_threads
+                                            ),
+                                            "de" => format!(
+                                                "Leistungs-Hinweis: Du hast eine sehr starke GPU ({} GB VRAM); deine CPU ({} Kerne / {} Threads) ist optimal für 40-60 FPS, könnte aber bei 120+ FPS limitieren.",
+                                                hw.vram_mb / 1024, hw.cpu_cores, hw.cpu_threads
+                                            ),
+                                            "es" => format!(
+                                                "Nota de Rendimiento: Tienes una GPU muy potente ({} GB VRAM); tu CPU ({} núcleos / {} hilos) es ideal para 40-60 FPS, pero podría limitar objetivos de 120+ FPS.",
+                                                hw.vram_mb / 1024, hw.cpu_cores, hw.cpu_threads
+                                            ),
+                                            _ => format!(
+                                                "Performance Note: You have a high-end GPU ({} GB VRAM); your CPU ({} cores / {} threads) is well-suited for 40-60 FPS, but may limit 120+ FPS targets.",
+                                                hw.vram_mb / 1024, hw.cpu_cores, hw.cpu_threads
+                                            ),
+                                        }
+                                    };
+                                    ui.label(egui::RichText::new(warn_text).color(egui::Color32::from_rgb(255, 195, 90)).size(11.5));
+                                });
+                            });
+                    }
 
                     ui.add_space(8.0);
                     ui.separator();

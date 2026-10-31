@@ -164,6 +164,24 @@ pub struct CachedHardware {
     pub vram_mb: u64,
     pub ram_mb: u64,
     pub refresh_rate_hz: u32,
+    #[serde(default = "default_cpu_name")]
+    pub cpu_name: String,
+    #[serde(default = "default_cpu_cores")]
+    pub cpu_cores: usize,
+    #[serde(default = "default_cpu_threads")]
+    pub cpu_threads: usize,
+}
+
+fn default_cpu_name() -> String {
+    "Bilinmeyen CPU".to_string()
+}
+
+fn default_cpu_cores() -> usize {
+    4
+}
+
+fn default_cpu_threads() -> usize {
+    4
 }
 
 impl Default for CachedHardware {
@@ -173,6 +191,9 @@ impl Default for CachedHardware {
             vram_mb: 4096,
             ram_mb: 8192,
             refresh_rate_hz: 60,
+            cpu_name: "Bilinmeyen CPU".to_string(),
+            cpu_cores: 4,
+            cpu_threads: 4,
         }
     }
 }

@@ -130,7 +130,11 @@ fn update_run_sh(base_dir: &Path, config: &LauncherConfig) -> Result<(), String>
     replace_or_insert_env(&mut content, "GOW3_DEFERRED_READBACK", if config.async_readbacks { "1" } else { "0" });
     replace_or_insert_env(&mut content, "GOW3_STALE_READBACK", if config.async_readbacks { "1" } else { "0" });
 
-    let cpu_threads = crate::system::detect_cpu_threads();
+    let cpu_threads = if config.cached_hardware.cpu_threads > 0 {
+        config.cached_hardware.cpu_threads
+    } else {
+        crate::system::detect_cpu_threads()
+    };
     let (prep_workers, copy_threads) = if cpu_threads <= 4 {
         (2, 1)
     } else if cpu_threads <= 8 {

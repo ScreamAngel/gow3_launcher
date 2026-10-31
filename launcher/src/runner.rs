@@ -859,7 +859,11 @@ pub fn launch_gow3(
 
     // CPU Thread Tuning:
     // Scale draw preparation workers and copy threads to CPU topology to prevent thread contention.
-    let cpu_threads = crate::system::detect_cpu_threads();
+    let cpu_threads = if config.cached_hardware.cpu_threads > 0 {
+        config.cached_hardware.cpu_threads
+    } else {
+        crate::system::detect_cpu_threads()
+    };
     let (prep_workers, copy_threads) = if cpu_threads <= 4 {
         (2, 1)
     } else if cpu_threads <= 8 {

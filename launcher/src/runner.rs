@@ -210,6 +210,44 @@ pub fn find_game_engine(base_dir: &Path) -> Option<PathBuf> {
     probe_candidates.into_iter().find(|p| p.is_file())
 }
 
+/// Resolves a safe, space-free path for libgow3input.so.
+/// Linux glibc ld.so cannot parse spaces in LD_PRELOAD, so if the workspace path
+/// contains spaces (e.g. 'GOW3 Emu Linux'), we mirror the library into a space-free directory.
+pub fn ensure_safe_preload_lib(base_dir: &Path) -> Option<PathBuf> {
+    let input_lib = base_dir.join("bin/lib/libgow3input.so");
+    if !input_lib.is_file() {
+        return None;
+    }
+
+    let orig_str = input_lib.to_string_lossy();
+    if !orig_str.contains(' ') {
+        return Some(input_lib);
+    }
+
+    let candidate_dirs = [
+        std::env::var_os("XDG_RUNTIME_DIR").map(PathBuf::from),
+        Some(PathBuf::from("/tmp")),
+        std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local/share/gow3")),
+    ];
+
+    for dir in candidate_dirs.into_iter().flatten() {
+        if !dir.to_string_lossy().contains(' ') {
+            let _ = fs::create_dir_all(&dir);
+            let safe_target = dir.join("gow3_libinput.so");
+            let _ = fs::remove_file(&safe_target);
+            if fs::copy(&input_lib, &safe_target).is_ok() {
+                return Some(safe_target);
+            }
+            #[cfg(unix)]
+            if std::os::unix::fs::symlink(&input_lib, &safe_target).is_ok() {
+                return Some(safe_target);
+            }
+        }
+    }
+
+    Some(input_lib)
+}
+
 #[allow(dead_code)]
 pub fn download_windows_engine(base_dir: &Path) -> Result<String, String> {
     let dest_bin = base_dir.join("bin");
@@ -912,9 +950,9 @@ pub fn launch_gow3(
     cmd.env("GOW3_HIDE_CURSOR", if config.hide_mouse_cursor { "1" } else { "0" });
 
     // Preload custom input bridge on Linux (intercepts mouse buttons & manages cursor focus)
-    let input_lib = base_dir.join("bin/lib/libgow3input.so");
-    if input_lib.is_file() {
-        let mut preload = input_lib.to_string_lossy().to_string();
+    #[cfg(not(target_os = "windows"))]
+    if let Some(safe_lib) = ensure_safe_preload_lib(base_dir) {
+        let mut preload = safe_lib.to_string_lossy().to_string();
         if let Ok(existing) = std::env::var("LD_PRELOAD") {
             if !existing.is_empty() {
                 preload = format!("{}:{}", preload, existing);

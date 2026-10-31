@@ -178,7 +178,8 @@ fn update_run_sh(base_dir: &Path, config: &LauncherConfig) -> Result<(), String>
     );
     let input_lib = base_dir.join("bin/lib/libgow3input.so");
     if input_lib.is_file() {
-        replace_or_insert_env(&mut content, "LD_PRELOAD", &input_lib.to_string_lossy());
+        let safe_lib = crate::runner::ensure_safe_preload_lib(base_dir).unwrap_or(input_lib);
+        replace_or_insert_env(&mut content, "LD_PRELOAD", &safe_lib.to_string_lossy());
     }
     replace_or_insert_env(
         &mut content,

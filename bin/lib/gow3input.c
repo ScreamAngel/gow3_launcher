@@ -49,6 +49,7 @@ static RealSDL_GetScancodeFromName real_GetScancodeFromName = NULL;
 
 static int hide_cursor_enabled = -1;
 static volatile uint32_t tracked_mouse_buttons = 0;
+static volatile uint32_t latched_mouse_buttons = 0;
 static volatile int is_window_focused = 1;
 static volatile int wheel_up_ticks = 0;
 static volatile int wheel_dn_ticks = 0;
@@ -104,6 +105,9 @@ static void init_symbols(void) {
     if (hide_cursor_enabled == -1) {
         const char *env = getenv("GOW3_HIDE_CURSOR");
         hide_cursor_enabled = (env && (env[0] == '1' || env[0] == 't' || env[0] == 'T')) ? 1 : 0;
+        if (hide_cursor_enabled && real_HideCursor) {
+            real_HideCursor();
+        }
     }
 }
 
@@ -163,15 +167,10 @@ const bool* SDL_GetKeyboardState(int *numkeys) {
 
     bool* state = (bool*)orig_state;
 
-    // Check window focus
-    void* kbd_focus = real_GetKeyboardFocus ? real_GetKeyboardFocus() : NULL;
-    void* mouse_focus = real_GetMouseFocus ? real_GetMouseFocus() : NULL;
-    bool has_focus = (kbd_focus != NULL || mouse_focus != NULL || is_window_focused);
-
     // Automatic mouse cursor management:
     // Hidden when the game window is focused, visible when focus is lost (Alt-Tab, etc.)
     if (hide_cursor_enabled && real_CursorVisible && real_HideCursor && real_ShowCursor) {
-        if (has_focus) {
+        if (is_window_focused) {
             if (real_CursorVisible()) {
                 real_HideCursor();
             }
@@ -183,12 +182,16 @@ const bool* SDL_GetKeyboardState(int *numkeys) {
     }
 
     // Query mouse buttons & inject into keyboard scancode array
-    uint32_t buttons = tracked_mouse_buttons;
+    // tracked_mouse_buttons: continuously held buttons
+    // latched_mouse_buttons: quick clicks between poll frames, guaranteed not to be lost
+    uint32_t buttons = tracked_mouse_buttons | latched_mouse_buttons;
+    latched_mouse_buttons = 0; // consumed by this frame
+
     if (real_GetMouseState) {
         float mx = 0.0f, my = 0.0f;
         buttons |= real_GetMouseState(&mx, &my);
     }
-    if (!buttons && real_GetGlobalMouseState && has_focus) {
+    if (!buttons && real_GetGlobalMouseState && is_window_focused) {
         float mx = 0.0f, my = 0.0f;
         buttons |= real_GetGlobalMouseState(&mx, &my);
     }
@@ -223,23 +226,34 @@ bool SDL_PollEvent(SDL_Event *event) {
         uint32_t event_type = event->type;
 
         // Window focus gained / lost
-        if (event_type == SDL_EVENT_WINDOW_FOCUS_GAINED || event_type == SDL_EVENT_WINDOW_MOUSE_ENTER) {
+        if (event_type == SDL_EVENT_WINDOW_FOCUS_GAINED) {
             is_window_focused = 1;
-            if (hide_cursor_enabled && real_CursorVisible && real_HideCursor && real_CursorVisible()) {
+            if (hide_cursor_enabled && real_HideCursor) {
                 real_HideCursor();
             }
-        } else if (event_type == SDL_EVENT_WINDOW_FOCUS_LOST || event_type == SDL_EVENT_WINDOW_MOUSE_LEAVE) {
+        } else if (event_type == SDL_EVENT_WINDOW_FOCUS_LOST) {
             is_window_focused = 0;
             tracked_mouse_buttons = 0;
-            if (hide_cursor_enabled && real_CursorVisible && real_ShowCursor && !real_CursorVisible()) {
+            latched_mouse_buttons = 0;
+            if (hide_cursor_enabled && real_ShowCursor) {
                 real_ShowCursor();
+            }
+        } else if (event_type == 514 /* SDL_EVENT_WINDOW_SHOWN */ || event_type == 516 /* SDL_EVENT_WINDOW_EXPOSED */) {
+            if (hide_cursor_enabled && is_window_focused && real_HideCursor) {
+                real_HideCursor();
             }
         }
         // Mouse button press / release
         else if (event_type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
+            is_window_focused = 1;
+            if (hide_cursor_enabled && real_HideCursor && real_CursorVisible && real_CursorVisible()) {
+                real_HideCursor();
+            }
             uint8_t btn = event->button.button;
             if (btn >= 1 && btn <= 5) {
-                tracked_mouse_buttons |= (1u << (btn - 1));
+                uint32_t mask = (1u << (btn - 1));
+                tracked_mouse_buttons |= mask;
+                latched_mouse_buttons |= mask;
             }
         } else if (event_type == SDL_EVENT_MOUSE_BUTTON_UP) {
             uint8_t btn = event->button.button;

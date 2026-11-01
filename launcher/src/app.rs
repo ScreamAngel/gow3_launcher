@@ -1416,6 +1416,22 @@ impl eframe::App for LauncherApp {
         visuals.selection.stroke = egui::Stroke::new(1.0, egui::Color32::from_rgb(239, 68, 68));
         ctx.set_visuals(visuals);
 
+        // Slide bar (scrollbar) kalınlaştırma ve görünürlük optimizasyonu
+        ctx.style_mut_of(egui::Theme::Dark, |s| {
+            s.spacing.scroll.bar_width = 12.0;
+            s.spacing.scroll.floating_width = 8.0;
+            s.spacing.scroll.handle_min_length = 32.0;
+            s.spacing.scroll.dormant_handle_opacity = 0.60;
+            s.spacing.scroll.active_handle_opacity = 0.85;
+            s.spacing.scroll.interact_handle_opacity = 1.0;
+            s.spacing.scroll.dormant_background_opacity = 0.25;
+            s.spacing.scroll.active_background_opacity = 0.45;
+            s.spacing.scroll.interact_background_opacity = 0.65;
+            s.spacing.scroll.bar_inner_margin = 2.0;
+            s.spacing.scroll.bar_outer_margin = 2.0;
+            s.spacing.scroll.foreground_color = true;
+        });
+
         egui::ScrollArea::vertical().show(ui, |ui| {
             ui.spacing_mut().item_spacing = egui::vec2(12.0, 12.0);
 

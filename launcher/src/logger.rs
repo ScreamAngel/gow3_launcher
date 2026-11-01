@@ -43,7 +43,7 @@ pub fn init_logger(base_dir: &Path) {
     write_log(
         "INFO",
         &format!(
-            "God of War III Launcher Log started (v1.8.2) | OS: {} | Arch: {}",
+            "God of War III Launcher Log started (v1.8.4) | OS: {} | Arch: {}",
             std::env::consts::OS,
             std::env::consts::ARCH
         ),

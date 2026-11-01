@@ -1,6 +1,6 @@
 [package]
 name = "launcher"
-version = "1.8.2"
+version = "1.8.4"
 edition = "2024"
 
 [dependencies]

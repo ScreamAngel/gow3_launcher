@@ -1060,7 +1060,22 @@ pub fn launch_gow3(
     let patches_bin = out_dir.join("patches.bin");
     let user_dir = base_dir.join("user");
 
-    let mut cmd = if use_gamemode {
+    let has_gamemode = use_gamemode && {
+        #[cfg(not(target_os = "windows"))]
+        {
+            Command::new("gamemoderun")
+                .arg("--version")
+                .output()
+                .map(|o| o.status.success())
+                .unwrap_or(false)
+        }
+        #[cfg(target_os = "windows")]
+        {
+            false
+        }
+    };
+
+    let mut cmd = if has_gamemode {
         let mut c = Command::new("gamemoderun");
         c.arg(&probe_bin);
         c
@@ -1164,6 +1179,8 @@ pub fn launch_gow3(
 
     // CPU Thread Tuning:
     // Scale draw preparation workers and copy threads to CPU topology to prevent thread contention.
+    // For hybrid CPUs (Intel 12th/13th/14th Gen P-cores + E-cores), cap at 4 prep workers and 2 copy threads
+    // to prevent draw threads from being scheduled onto slower E-cores, eliminating frame-time spikes.
     let cpu_threads = if config.cached_hardware.cpu_threads > 0 {
         config.cached_hardware.cpu_threads
     } else {
@@ -1172,9 +1189,9 @@ pub fn launch_gow3(
     let (prep_workers, copy_threads) = if cpu_threads <= 4 {
         (2, 1)
     } else if cpu_threads <= 8 {
-        (4, 2)
+        (3, 2)
     } else {
-        (6, 4)
+        (4, 2)
     };
     cmd.env("GOW3_PREP_WORKERS", prep_workers.to_string());
     cmd.env("GOW3_COPY_THREADS", copy_threads.to_string());
@@ -1182,8 +1199,22 @@ pub fn launch_gow3(
     cmd.env("GOW3_INTERP_INT_FIX", "1");
     cmd.env("GOW3_DIRECT_MEMORY_ACCESS", "1");
     cmd.env("GOW3_PIPELINE_CACHE", "1");
+    cmd.env("GOW3_PIPELINE_BINARIES", "1");
     cmd.env("GOW3_PARALLEL_WARMUP", "1");
     cmd.env("GOW3_BACKGROUND_WARMUP", "1");
+
+    // Staging Memory Pool: 256 MB reusable pool prevents VkBuffer/VkDeviceMemory allocation hitches during scene streaming
+    cmd.env("GOW3_STAGING_KEEP_MB", "256");
+
+    // Copy Merging Threshold: Merges small host-to-GPU copies up to 1024 KB to reduce Vulkan draw/copy batch count
+    cmd.env("GOW3_COPY_MERGE_KB", "1024");
+
+    // Hot Pages Optimization: Tracks dirty guest memory pages in VideoCore BufferCache, eliminating full-buffer synchronization stalls
+    cmd.env("GOW3_HOT_PAGES", "1");
+
+    // Frame Ahead & Presentation Queue Pacing
+    cmd.env("GOW3_FRAMES_AHEAD", "2");
+
     // Vulkan Recording Synchronization:
     // GOW3_VK_RECORD_THREAD=1 uses an asynchronous worker thread to record Vulkan command buffers.
     // On NVIDIA drivers, during compute dispatch barrier flushes (Runtime::FlushBarriers -> Scheduler::EndRendering),
@@ -1195,6 +1226,19 @@ pub fn launch_gow3(
     cmd.env("GOW3_ASYNC_FENCES", "1");
     cmd.env("GOW3_ASYNC_SHADERS", "1");
     cmd.env("GOW3_FPS_LIMIT", config.target_fps.to_string());
+
+    // Linux GPU Driver Performance & Shader Stutter Elimination:
+    #[cfg(not(target_os = "windows"))]
+    {
+        // 10 GB persistent shader disk cache: prevents driver shader eviction and mid-game shader compilation stutters
+        cmd.env("__GL_SHADER_DISK_CACHE", "1");
+        cmd.env("__GL_SHADER_DISK_CACHE_SIZE", "10737418240");
+        cmd.env("__GL_SHADER_DISK_CACHE_SKIP_CLEANUP", "1");
+        cmd.env("__GL_THREADED_OPTIMIZATIONS", "1");
+        cmd.env("__GL_VRR_ALLOWED", "1");
+        cmd.env("MESA_SHADER_CACHE_MAX_SIZE", "10G");
+        cmd.env("radv_zero_vram", "false");
+    }
 
     let effective_budget = config.get_effective_vram_budget();
     cmd.env("GOW3_GC_BUDGET_MB", effective_budget.to_string());

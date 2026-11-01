@@ -125,6 +125,9 @@ fn update_run_sh(base_dir: &Path, config: &LauncherConfig) -> Result<(), String>
     replace_or_insert_env(&mut content, "GOW3_DMEM_POOL_MB", &config.dmem_mb.to_string());
     replace_or_insert_env(&mut content, "GOW3_DMEM_MB", &config.dmem_mb.to_string());
     replace_or_insert_env(&mut content, "GOW3_DEFAULT_ENGINE_FPS", &config.target_fps.to_string());
+    replace_or_insert_env(&mut content, "GOW3_FORCE_READBACK", if config.patch_readbacks { "1" } else { "0" });
+    replace_or_insert_env(&mut content, "GOW3_READBACKS", if config.patch_readbacks { "1" } else { "0" });
+    replace_or_insert_env(&mut content, "GOW3_READBACK_LINEAR", if config.patch_readbacks { "1" } else { "0" });
     replace_or_insert_env(&mut content, "GOW3_DEFERRED_READBACK", if config.async_readbacks { "1" } else { "0" });
     replace_or_insert_env(&mut content, "GOW3_STALE_READBACK", if config.async_readbacks { "1" } else { "0" });
 
@@ -147,8 +150,7 @@ fn update_run_sh(base_dir: &Path, config: &LauncherConfig) -> Result<(), String>
     replace_or_insert_env(&mut content, "GOW3_PIPELINE_CACHE", "1");
     replace_or_insert_env(&mut content, "GOW3_PARALLEL_WARMUP", "1");
     replace_or_insert_env(&mut content, "GOW3_BACKGROUND_WARMUP", "1");
-    // Force synchronous command recording (avoids dynamic rendering FlushBarriers race in NVIDIA libnvidia-glcore)
-    replace_or_insert_env(&mut content, "GOW3_VK_RECORD_THREAD", "0");
+    replace_or_insert_env(&mut content, "GOW3_VK_RECORD_THREAD", "1");
     replace_or_insert_env(&mut content, "GOW3_PRESENT_THREAD", "1");
     replace_or_insert_env(&mut content, "GOW3_ASYNC_FENCES", "1");
     replace_or_insert_env(&mut content, "GOW3_ASYNC_SHADERS", "1");
@@ -185,15 +187,14 @@ fn update_run_sh(base_dir: &Path, config: &LauncherConfig) -> Result<(), String>
     let pad_map = config.build_gow3_pad_map();
     replace_or_insert_env(&mut content, "GOW3_KEY_MAP", &key_map);
     replace_or_insert_env(&mut content, "GOW3_PAD_MAP", pad_map);
-    replace_or_insert_env(
-        &mut content,
-        "GOW3_HIDE_CURSOR",
-        if config.hide_mouse_cursor { "1" } else { "0" },
-    );
-    let input_lib = base_dir.join("bin/lib/libgow3input.so");
-    if input_lib.is_file() {
-        let safe_lib = crate::runner::ensure_safe_preload_lib(base_dir).unwrap_or(input_lib);
-        replace_or_insert_env(&mut content, "LD_PRELOAD", &safe_lib.to_string_lossy());
+    remove_env_if_present(&mut content, "GOW3_HIDE_CURSOR");
+    remove_env_if_present(&mut content, "LD_PRELOAD");
+    if config.is_mouse_button_bound() {
+        let input_lib = base_dir.join("bin/lib/libgow3input.so");
+        if input_lib.is_file() {
+            let safe_lib = crate::runner::ensure_safe_preload_lib(base_dir).unwrap_or(input_lib);
+            replace_or_insert_env(&mut content, "LD_PRELOAD", &safe_lib.to_string_lossy());
+        }
     }
     replace_or_insert_env(
         &mut content,
@@ -275,7 +276,7 @@ fn update_gow3_ini(base_dir: &Path, config: &LauncherConfig) -> Result<(), Strin
         replace_ini_key(&mut content, "render_resolution", "native");
         replace_ini_key(&mut content, "internal_width", "1920");
         replace_ini_key(&mut content, "internal_height", "1080");
-        replace_ini_key(&mut content, "upscaler", "none");
+        replace_ini_key(&mut content, "upscaler", "off");
         replace_ini_key(&mut content, "fsr1", "0");
         replace_ini_key(&mut content, "rcas", "0");
         replace_ini_key(&mut content, "sharpen", "0");
@@ -392,6 +393,13 @@ fn update_user_config_toml(base_dir: &Path, config: &LauncherConfig) -> Result<(
             let suffix = &content[idx + end..];
             let effective_budget = config.get_effective_vram_budget();
             content = format!("{}vulkan_gc_budget = {}{}", prefix, effective_budget, suffix);
+        }
+    }
+
+    // Ensure presentMode is removed so Vulkan uses default FIFO swapchain pacing (eliminating logo black screen blinks)
+    if let Some(idx) = content.find("presentMode =") {
+        if let Some(end) = content[idx..].find('\n') {
+            content.replace_range(idx..=idx + end, "");
         }
     }
 

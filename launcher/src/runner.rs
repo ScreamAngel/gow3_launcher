@@ -1201,12 +1201,9 @@ pub fn launch_gow3(
     cmd.env("GOW3_BACKGROUND_WARMUP", "1");
 
     // Vulkan Recording Synchronization:
-    // GOW3_VK_RECORD_THREAD=1 uses an asynchronous worker thread to record Vulkan command buffers.
-    // On NVIDIA drivers, during compute dispatch barrier flushes (Runtime::FlushBarriers -> Scheduler::EndRendering),
-    // this causes vkCmdEndRendering to race with the worker thread, dereferencing null dynamic rendering state
-    // and triggering "Host fault (signal 11) in libnvidia-glcore.so at address 0x108".
-    // Setting GOW3_VK_RECORD_THREAD=0 forces synchronous in-order recording, completely eliminating this crash.
-    cmd.env("GOW3_VK_RECORD_THREAD", "0");
+    // Asynchronous recording worker thread matches v1.8.2. Ensures smooth command buffer dispatch
+    // without stalling the main thread, eliminating video intro flickers and save-load deadlocks.
+    cmd.env("GOW3_VK_RECORD_THREAD", "1");
 
     // Presentation Thread: Dedicated Vulkan present thread ensures smooth swapchain pacing, eliminates video intro flashing,
     // and prevents save-load window freezing.
@@ -1239,40 +1236,18 @@ pub fn launch_gow3(
     let pad_map = config.build_gow3_pad_map();
     cmd.env("GOW3_KEY_MAP", &key_map);
     cmd.env("GOW3_PAD_MAP", pad_map);
-    cmd.env("GOW3_HIDE_CURSOR", if config.hide_mouse_cursor { "1" } else { "0" });
 
-    // Preload custom input bridge on Linux (intercepts mouse buttons & manages cursor focus)
+    // Preload custom input bridge on Linux ONLY if mouse buttons are explicitly bound
     #[cfg(not(target_os = "windows"))]
-    if let Some(safe_lib) = ensure_safe_preload_lib(base_dir) {
-        let mut preload = safe_lib.to_string_lossy().to_string();
-        if let Ok(existing) = std::env::var("LD_PRELOAD") {
-            if !existing.is_empty() {
-                preload = format!("{}:{}", preload, existing);
+    if config.is_mouse_button_bound() {
+        if let Some(safe_lib) = ensure_safe_preload_lib(base_dir) {
+            let mut preload = safe_lib.to_string_lossy().to_string();
+            if let Ok(existing) = std::env::var("LD_PRELOAD") {
+                if !existing.is_empty() {
+                    preload = format!("{}:{}", preload, existing);
+                }
             }
-        }
-        cmd.env("LD_PRELOAD", preload);
-    }
-
-    #[cfg(not(target_os = "windows"))]
-    {
-        let bin_dir = base_dir.join("bin");
-        let lib_dir = bin_dir.join("lib");
-        let gpu_dir = bin_dir.join("gpu");
-        let mut ld_paths = Vec::new();
-        if lib_dir.is_dir() {
-            ld_paths.push(lib_dir);
-        }
-        if gpu_dir.is_dir() {
-            ld_paths.push(gpu_dir);
-        }
-        if bin_dir.is_dir() {
-            ld_paths.push(bin_dir);
-        }
-        if let Some(existing_ld) = std::env::var_os("LD_LIBRARY_PATH") {
-            ld_paths.extend(std::env::split_paths(&existing_ld));
-        }
-        if let Ok(new_ld) = std::env::join_paths(ld_paths) {
-            cmd.env("LD_LIBRARY_PATH", new_ld);
+            cmd.env("LD_PRELOAD", preload);
         }
     }
     cmd.env(

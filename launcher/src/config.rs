@@ -236,7 +236,7 @@ pub struct LauncherConfig {
     pub patch_delta_time: bool,
     #[serde(default = "default_true")]
     pub patch_readbacks: bool,
-    #[serde(default = "default_false")]
+    #[serde(default = "default_true")]
     pub async_readbacks: bool,
     #[serde(default = "default_true")]
     pub skip_cinematics: bool,
@@ -297,6 +297,7 @@ fn default_target_fps() -> u32 {
 fn default_true() -> bool {
     true
 }
+#[allow(dead_code)]
 fn default_false() -> bool {
     false
 }
@@ -329,7 +330,7 @@ impl Default for LauncherConfig {
             target_fps: default_target_fps(),
             patch_delta_time: true,
             patch_readbacks: true,
-            async_readbacks: false,
+            async_readbacks: true,
             skip_cinematics: true,
             use_gamemode: true,
             vram_gc_budget_mb: default_vram_budget(),
@@ -446,7 +447,7 @@ impl LauncherConfig {
             // Guard against PCIe memory thrashing / swapping to system RAM over slow bus:
             // Desktop environment, window compositor (Wayland/X11) and GPU drivers consume ~600-1200MB of VRAM.
             // Game framebuffers, guest DMA buffers, swapchains and staging memory consume another ~1-1.5GB.
-            // Texture GC budget must leave sufficient headroom to avoid driver memory exhaustion (address 0x108 SIGSEGV).
+            // Texture GC budget must leave sufficient headroom while preventing premature texture purging (matches v1.8.2).
             let safe_ceiling = if vram <= 2048 {
                 1280
             } else if vram <= 3072 {
@@ -456,16 +457,51 @@ impl LauncherConfig {
             } else if vram <= 6144 {
                 4608
             } else if vram <= 8192 {
-                5120
+                6144
             } else if vram <= 12288 {
                 8192
             } else {
-                vram.saturating_sub(2048)
+                vram.saturating_sub(1024)
             };
             self.vram_gc_budget_mb.min(safe_ceiling)
         } else {
             self.vram_gc_budget_mb
         }
+    }
+
+    pub fn is_mouse_button_bound(&self) -> bool {
+        let is_mouse = |s: &str| {
+            let s_low = s.trim().to_lowercase();
+            matches!(
+                s_low.as_str(),
+                "leftbutton" | "rightbutton" | "middlebutton" | "sidebuttonback" | "sidebuttonforward" | "mouse1" | "mouse2" | "mouse3" | "mouse4" | "mouse5" | "mousewheelup" | "mousewheeldown"
+            )
+        };
+        let b = &self.keyboard_bindings;
+        is_mouse(&b.triangle)
+            || is_mouse(&b.circle)
+            || is_mouse(&b.cross)
+            || is_mouse(&b.square)
+            || is_mouse(&b.l1)
+            || is_mouse(&b.r1)
+            || is_mouse(&b.l2)
+            || is_mouse(&b.r2)
+            || is_mouse(&b.l3)
+            || is_mouse(&b.r3)
+            || is_mouse(&b.options)
+            || is_mouse(&b.touchpad_center)
+            || is_mouse(&b.pad_up)
+            || is_mouse(&b.pad_down)
+            || is_mouse(&b.pad_left)
+            || is_mouse(&b.pad_right)
+            || is_mouse(&b.axis_left_x_minus)
+            || is_mouse(&b.axis_left_x_plus)
+            || is_mouse(&b.axis_left_y_minus)
+            || is_mouse(&b.axis_left_y_plus)
+            || is_mouse(&b.axis_right_x_minus)
+            || is_mouse(&b.axis_right_x_plus)
+            || is_mouse(&b.axis_right_y_minus)
+            || is_mouse(&b.axis_right_y_plus)
     }
     pub fn config_path(base_dir: &Path) -> PathBuf {
         base_dir.join("launcher_config.json")
@@ -729,7 +765,7 @@ mod tests {
     fn test_launcher_version_is_v185() {
         assert_eq!(default_launcher_version(), "v1.8.5");
         let def = LauncherConfig::default();
-        assert!(!def.async_readbacks);
+        assert!(def.async_readbacks);
         assert!(def.patch_readbacks);
     }
 

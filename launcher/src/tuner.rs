@@ -145,11 +145,11 @@ fn update_run_sh(base_dir: &Path, config: &LauncherConfig) -> Result<(), String>
     replace_or_insert_env(&mut content, "GOW3_DIRECT_MEMORY_ACCESS", "1");
     replace_or_insert_env(&mut content, "GOW3_PIPELINE_CACHE", "1");
     replace_or_insert_env(&mut content, "GOW3_PARALLEL_WARMUP", "1");
-    replace_or_insert_env(&mut content, "GOW3_BACKGROUND_WARMUP", "0");
+    replace_or_insert_env(&mut content, "GOW3_BACKGROUND_WARMUP", "1");
     // Force synchronous command recording (avoids dynamic rendering FlushBarriers race in NVIDIA libnvidia-glcore)
     replace_or_insert_env(&mut content, "GOW3_VK_RECORD_THREAD", "0");
-    replace_or_insert_env(&mut content, "GOW3_PRESENT_THREAD", "1");
-    replace_or_insert_env(&mut content, "GOW3_ASYNC_FENCES", "1");
+    replace_or_insert_env(&mut content, "GOW3_PRESENT_THREAD", "0");
+    replace_or_insert_env(&mut content, "GOW3_ASYNC_FENCES", "0");
     replace_or_insert_env(&mut content, "GOW3_ASYNC_SHADERS", "1");
     replace_or_insert_env(&mut content, "GOW3_FPS_LIMIT", &config.target_fps.to_string());
 

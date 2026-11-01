@@ -1014,6 +1014,9 @@ pub fn launch_gow3(
 
     if let Some(p) = res_patch {
         patch_list.push(p.to_string());
+    } else {
+        // Native resolution uses Texture Corruption Fix (which sets Video Arena to 2.25 GiB)
+        patch_list.push("Bug Fix - Texture Corruption Fix".to_string());
     }
 
     patch_list.push("Bug Fix - Startup Black Screen".to_string());
@@ -1195,9 +1198,7 @@ pub fn launch_gow3(
     cmd.env("GOW3_DIRECT_MEMORY_ACCESS", "1");
     cmd.env("GOW3_PIPELINE_CACHE", "1");
     cmd.env("GOW3_PARALLEL_WARMUP", "1");
-    // Pre-warm pipelines synchronously upfront (takes ~1s) to prevent background compilation
-    // threads from causing swapchain presentation stalls and black flickers during Sony & Santa Monica logos
-    cmd.env("GOW3_BACKGROUND_WARMUP", "0");
+    cmd.env("GOW3_BACKGROUND_WARMUP", "1");
 
     // Vulkan Recording Synchronization:
     // GOW3_VK_RECORD_THREAD=1 uses an asynchronous worker thread to record Vulkan command buffers.
@@ -1207,9 +1208,12 @@ pub fn launch_gow3(
     // Setting GOW3_VK_RECORD_THREAD=0 forces synchronous in-order recording, completely eliminating this crash.
     cmd.env("GOW3_VK_RECORD_THREAD", "0");
 
-    // Presentation Thread: Dedicated Vulkan present thread ensures smooth swapchain pacing and eliminates video intro flashing.
-    cmd.env("GOW3_PRESENT_THREAD", "1");
-    cmd.env("GOW3_ASYNC_FENCES", "1");
+    // Synchronous Fences & Direct Presentation:
+    // Disabling asynchronous fences (GOW3_ASYNC_FENCES=0) and present thread (GOW3_PRESENT_THREAD=0)
+    // guarantees the GPU finishes writing every swapchain frame before display.
+    // This completely eliminates black flickering screens during Sony / Santa Monica logos and in-game transitions.
+    cmd.env("GOW3_ASYNC_FENCES", "0");
+    cmd.env("GOW3_PRESENT_THREAD", "0");
     cmd.env("GOW3_ASYNC_SHADERS", "1");
     cmd.env("GOW3_FPS_LIMIT", config.target_fps.to_string());
 

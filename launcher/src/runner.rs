@@ -1207,43 +1207,32 @@ pub fn launch_gow3(
     cmd.env("GOW3_INTERP_INT_FIX", "1");
     cmd.env("GOW3_DIRECT_MEMORY_ACCESS", "1");
     cmd.env("GOW3_PIPELINE_CACHE", "1");
-    cmd.env("GOW3_PIPELINE_BINARIES", "1");
     cmd.env("GOW3_PARALLEL_WARMUP", "1");
     cmd.env("GOW3_BACKGROUND_WARMUP", "1");
 
     // Staging Memory Pool: 256 MB reusable pool prevents VkBuffer/VkDeviceMemory allocation hitches during scene streaming
     cmd.env("GOW3_STAGING_KEEP_MB", "256");
 
-    // Copy Merging Threshold: Merges small host-to-GPU copies up to 1024 KB to reduce Vulkan draw/copy batch count
-    cmd.env("GOW3_COPY_MERGE_KB", "1024");
-
-    // Hot Pages Optimization: Tracks dirty guest memory pages in VideoCore BufferCache, eliminating full-buffer synchronization stalls
-    cmd.env("GOW3_HOT_PAGES", "1");
-
-    // Frame Ahead & Presentation Queue Pacing
-    cmd.env("GOW3_FRAMES_AHEAD", "2");
-
-    // Vulkan Recording Synchronization:
-    // GOW3_VK_RECORD_THREAD=1 uses an asynchronous worker thread to record Vulkan command buffers.
-    // On NVIDIA drivers, during compute dispatch barrier flushes (Runtime::FlushBarriers -> Scheduler::EndRendering),
-    // this causes vkCmdEndRendering to race with the worker thread, dereferencing null dynamic rendering state
-    // and triggering "Host fault (signal 11) in libnvidia-glcore.so at address 0x108".
-    // Setting GOW3_VK_RECORD_THREAD=0 forces synchronous in-order recording, completely eliminating this crash.
+    // Synchronous Presentation & Host Copy Fences:
+    // Disabling asynchronous fences (GOW3_ASYNC_FENCES=0) ensures WaitHostCopies, WaitDeferredSignals,
+    // and DrainDrawPipe are fully completed before presenting each frame. This completely prevents black-screen
+    // flashing during video playback (Sony & Santa Monica intros), eliminates in-game black flickers,
+    // and ensures all floor texture tiles in Poseidon arena are fully copied and rendered.
+    cmd.env("GOW3_ASYNC_FENCES", "0");
+    cmd.env("GOW3_PRESENT_THREAD", "0");
     cmd.env("GOW3_VK_RECORD_THREAD", "0");
-    cmd.env("GOW3_PRESENT_THREAD", "1");
-    cmd.env("GOW3_ASYNC_FENCES", "1");
+    cmd.env("GOW3_HOT_PAGES", "0");
+    cmd.env("GOW3_FRAMES_AHEAD", "0");
     cmd.env("GOW3_ASYNC_SHADERS", "1");
     cmd.env("GOW3_FPS_LIMIT", config.target_fps.to_string());
 
-    // Linux GPU Driver Performance & Shader Stutter Elimination:
+    // Linux GPU Driver Performance & Persistent Shader Disk Cache:
     #[cfg(not(target_os = "windows"))]
     {
         // 10 GB persistent shader disk cache: prevents driver shader eviction and mid-game shader compilation stutters
         cmd.env("__GL_SHADER_DISK_CACHE", "1");
         cmd.env("__GL_SHADER_DISK_CACHE_SIZE", "10737418240");
         cmd.env("__GL_SHADER_DISK_CACHE_SKIP_CLEANUP", "1");
-        cmd.env("__GL_THREADED_OPTIMIZATIONS", "1");
-        cmd.env("__GL_VRR_ALLOWED", "1");
         cmd.env("MESA_SHADER_CACHE_MAX_SIZE", "10G");
         cmd.env("radv_zero_vram", "false");
     }

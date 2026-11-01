@@ -123,6 +123,7 @@ fn update_run_sh(base_dir: &Path, config: &LauncherConfig) -> Result<(), String>
     let effective_budget = config.get_effective_vram_budget();
     replace_or_insert_env(&mut content, "GOW3_GC_BUDGET_MB", &effective_budget.to_string());
     replace_or_insert_env(&mut content, "GOW3_DMEM_POOL_MB", &config.dmem_mb.to_string());
+    replace_or_insert_env(&mut content, "GOW3_DMEM_MB", &config.dmem_mb.to_string());
     replace_or_insert_env(&mut content, "GOW3_DEFAULT_ENGINE_FPS", &config.target_fps.to_string());
     replace_or_insert_env(&mut content, "GOW3_DEFERRED_READBACK", if config.async_readbacks { "1" } else { "0" });
     replace_or_insert_env(&mut content, "GOW3_STALE_READBACK", if config.async_readbacks { "1" } else { "0" });
@@ -135,9 +136,9 @@ fn update_run_sh(base_dir: &Path, config: &LauncherConfig) -> Result<(), String>
     let (prep_workers, copy_threads) = if cpu_threads <= 4 {
         (2, 1)
     } else if cpu_threads <= 8 {
-        (3, 2)
-    } else {
         (4, 2)
+    } else {
+        (6, 4)
     };
     replace_or_insert_env(&mut content, "GOW3_PREP_WORKERS", &prep_workers.to_string());
     replace_or_insert_env(&mut content, "GOW3_COPY_THREADS", &copy_threads.to_string());
@@ -148,8 +149,8 @@ fn update_run_sh(base_dir: &Path, config: &LauncherConfig) -> Result<(), String>
     replace_or_insert_env(&mut content, "GOW3_BACKGROUND_WARMUP", "1");
     // Force synchronous command recording (avoids dynamic rendering FlushBarriers race in NVIDIA libnvidia-glcore)
     replace_or_insert_env(&mut content, "GOW3_VK_RECORD_THREAD", "0");
-    replace_or_insert_env(&mut content, "GOW3_PRESENT_THREAD", "0");
-    replace_or_insert_env(&mut content, "GOW3_ASYNC_FENCES", "0");
+    replace_or_insert_env(&mut content, "GOW3_PRESENT_THREAD", "1");
+    replace_or_insert_env(&mut content, "GOW3_ASYNC_FENCES", "1");
     replace_or_insert_env(&mut content, "GOW3_ASYNC_SHADERS", "1");
     replace_or_insert_env(&mut content, "GOW3_FPS_LIMIT", &config.target_fps.to_string());
 

@@ -5,7 +5,7 @@
   "target_fps": 144,
   "patch_delta_time": true,
   "patch_readbacks": true,
-  "async_readbacks": true,
+  "async_readbacks": false,
   "skip_cinematics": true,
   "use_gamemode": true,
   "vram_gc_budget_mb": 5120,

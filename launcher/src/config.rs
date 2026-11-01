@@ -236,7 +236,7 @@ pub struct LauncherConfig {
     pub patch_delta_time: bool,
     #[serde(default = "default_true")]
     pub patch_readbacks: bool,
-    #[serde(default = "default_true")]
+    #[serde(default = "default_false")]
     pub async_readbacks: bool,
     #[serde(default = "default_true")]
     pub skip_cinematics: bool,
@@ -297,6 +297,9 @@ fn default_target_fps() -> u32 {
 fn default_true() -> bool {
     true
 }
+fn default_false() -> bool {
+    false
+}
 fn default_deadzone() -> u32 {
     2
 }
@@ -326,7 +329,7 @@ impl Default for LauncherConfig {
             target_fps: default_target_fps(),
             patch_delta_time: true,
             patch_readbacks: true,
-            async_readbacks: true,
+            async_readbacks: false,
             skip_cinematics: true,
             use_gamemode: true,
             vram_gc_budget_mb: default_vram_budget(),
@@ -475,9 +478,10 @@ impl LauncherConfig {
                 if let Ok(mut cfg) = serde_json::from_str::<LauncherConfig>(&content) {
                     let mut changed = false;
                     // Migrate from older versions: ensure v1.8.5 version string and disable async_readbacks
-                    // to fix yellow Poseidon water blocks, black flickering screens, and Gaia heart mesh glitches.
-                    if cfg.launcher_version != "v1.8.5" {
+                    // to fix black flickering screens, logo transitions, and save-loading freezes.
+                    if cfg.launcher_version != "v1.8.5" || cfg.async_readbacks {
                         cfg.launcher_version = "v1.8.5".to_string();
+                        cfg.async_readbacks = false;
                         changed = true;
                     }
                     // If the user's config still has old default bindings,
@@ -725,7 +729,7 @@ mod tests {
     fn test_launcher_version_is_v185() {
         assert_eq!(default_launcher_version(), "v1.8.5");
         let def = LauncherConfig::default();
-        assert!(def.async_readbacks);
+        assert!(!def.async_readbacks);
         assert!(def.patch_readbacks);
     }
 

@@ -1187,9 +1187,9 @@ pub fn launch_gow3(
     let (prep_workers, copy_threads) = if cpu_threads <= 4 {
         (2, 1)
     } else if cpu_threads <= 8 {
-        (3, 2)
-    } else {
         (4, 2)
+    } else {
+        (6, 4)
     };
     cmd.env("GOW3_PREP_WORKERS", prep_workers.to_string());
     cmd.env("GOW3_COPY_THREADS", copy_threads.to_string());
@@ -1208,12 +1208,10 @@ pub fn launch_gow3(
     // Setting GOW3_VK_RECORD_THREAD=0 forces synchronous in-order recording, completely eliminating this crash.
     cmd.env("GOW3_VK_RECORD_THREAD", "0");
 
-    // Synchronous Fences & Direct Presentation:
-    // Disabling asynchronous fences (GOW3_ASYNC_FENCES=0) and present thread (GOW3_PRESENT_THREAD=0)
-    // guarantees the GPU finishes writing every swapchain frame before display.
-    // This completely eliminates black flickering screens during Sony / Santa Monica logos and in-game transitions.
-    cmd.env("GOW3_ASYNC_FENCES", "0");
-    cmd.env("GOW3_PRESENT_THREAD", "0");
+    // Presentation Thread: Dedicated Vulkan present thread ensures smooth swapchain pacing, eliminates video intro flashing,
+    // and prevents save-load window freezing.
+    cmd.env("GOW3_PRESENT_THREAD", "1");
+    cmd.env("GOW3_ASYNC_FENCES", "1");
     cmd.env("GOW3_ASYNC_SHADERS", "1");
     cmd.env("GOW3_FPS_LIMIT", config.target_fps.to_string());
 

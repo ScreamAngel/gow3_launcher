@@ -1014,9 +1014,6 @@ pub fn launch_gow3(
 
     if let Some(p) = res_patch {
         patch_list.push(p.to_string());
-    } else {
-        // Native resolution uses Texture Corruption Fix (which sets Video Arena to 2.25 GiB)
-        patch_list.push("Bug Fix - Texture Corruption Fix".to_string());
     }
 
     patch_list.push("Bug Fix - Startup Black Screen".to_string());

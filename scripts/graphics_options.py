@@ -94,8 +94,7 @@ def patch_names(names, options, texture_fix_available=True):
     resolution = options['render_resolution']
     if resolution != 'native':
         names = [n for n in names if n != TEXTURE_FIX] + [f'{RESOLUTION_PREFIX} - {resolution}']
-    elif texture_fix_available and TEXTURE_FIX not in names:
-        names.insert(0, TEXTURE_FIX)
+    # Texture Corruption Fix omitted (prevented string corruption at 0x7cd918)
     fps = options.get('engine_fps', '60')
     names.append(f'{FPS_PREFIX} - {fps} FPS')
     return names

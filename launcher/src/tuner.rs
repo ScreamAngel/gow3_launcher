@@ -187,9 +187,13 @@ fn update_run_sh(base_dir: &Path, config: &LauncherConfig) -> Result<(), String>
     let pad_map = config.build_gow3_pad_map();
     replace_or_insert_env(&mut content, "GOW3_KEY_MAP", &key_map);
     replace_or_insert_env(&mut content, "GOW3_PAD_MAP", pad_map);
-    remove_env_if_present(&mut content, "GOW3_HIDE_CURSOR");
+    replace_or_insert_env(
+        &mut content,
+        "GOW3_HIDE_CURSOR",
+        if config.hide_mouse_cursor { "1" } else { "0" },
+    );
     remove_env_if_present(&mut content, "LD_PRELOAD");
-    if config.is_mouse_button_bound() {
+    if config.hide_mouse_cursor || config.is_mouse_button_bound() {
         let input_lib = base_dir.join("bin/lib/libgow3input.so");
         if input_lib.is_file() {
             let safe_lib = crate::runner::ensure_safe_preload_lib(base_dir).unwrap_or(input_lib);

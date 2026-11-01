@@ -35,6 +35,12 @@ typedef bool (*RealSDL_HideCursor)(void);
 typedef bool (*RealSDL_ShowCursor)(void);
 typedef bool (*RealSDL_PollEvent)(SDL_Event *event);
 typedef SDL_Scancode (*RealSDL_GetScancodeFromName)(const char *name);
+typedef SDL_Surface* (*RealSDL_CreateSurface)(int width, int height, SDL_PixelFormat format);
+typedef void (*RealSDL_DestroySurface)(SDL_Surface *surface);
+typedef SDL_Cursor* (*RealSDL_CreateColorCursor)(SDL_Surface *surface, int hot_x, int hot_y);
+typedef bool (*RealSDL_SetCursor)(SDL_Cursor *cursor);
+typedef SDL_Window* (*RealSDL_CreateWindowWithProperties)(SDL_PropertiesID props);
+typedef SDL_Window* (*RealSDL_CreateWindow)(const char *title, int w, int h, SDL_WindowFlags flags);
 
 static RealSDL_GetKeyboardState real_GetKeyboardState = NULL;
 static RealSDL_GetMouseState real_GetMouseState = NULL;
@@ -46,6 +52,12 @@ static RealSDL_HideCursor real_HideCursor = NULL;
 static RealSDL_ShowCursor real_ShowCursor = NULL;
 static RealSDL_PollEvent real_PollEvent = NULL;
 static RealSDL_GetScancodeFromName real_GetScancodeFromName = NULL;
+static RealSDL_CreateSurface real_CreateSurface = NULL;
+static RealSDL_DestroySurface real_DestroySurface = NULL;
+static RealSDL_CreateColorCursor real_CreateColorCursor = NULL;
+static RealSDL_SetCursor real_SetCursor = NULL;
+static RealSDL_CreateWindowWithProperties real_CreateWindowWithProperties = NULL;
+static RealSDL_CreateWindow real_CreateWindow = NULL;
 
 static int hide_cursor_enabled = -1;
 static volatile uint32_t tracked_mouse_buttons = 0;
@@ -53,6 +65,30 @@ static volatile uint32_t latched_mouse_buttons = 0;
 static volatile int is_window_focused = 1;
 static volatile int wheel_up_ticks = 0;
 static volatile int wheel_dn_ticks = 0;
+static SDL_Cursor* transparent_cursor = NULL;
+static volatile bool cursor_is_hidden = false;
+
+static void apply_cursor_hidden(void) {
+    if (!hide_cursor_enabled) return;
+
+    if (!transparent_cursor && real_CreateSurface && real_CreateColorCursor && real_DestroySurface) {
+        SDL_Surface* s = real_CreateSurface(1, 1, SDL_PIXELFORMAT_RGBA32);
+        if (s) {
+            uint32_t* pix = (uint32_t*)s->pixels;
+            if (pix) *pix = 0; // 100% transparent pixel
+            transparent_cursor = real_CreateColorCursor(s, 0, 0);
+            real_DestroySurface(s);
+        }
+    }
+
+    if (transparent_cursor && real_SetCursor) {
+        real_SetCursor(transparent_cursor);
+    }
+    if (real_HideCursor) {
+        real_HideCursor();
+    }
+    cursor_is_hidden = true;
+}
 
 static void init_symbols(void) {
     if (!real_GetKeyboardState) {
@@ -70,6 +106,12 @@ static void init_symbols(void) {
             real_ShowCursor = (RealSDL_ShowCursor)GetProcAddress(h, "SDL_ShowCursor");
             real_PollEvent = (RealSDL_PollEvent)GetProcAddress(h, "SDL_PollEvent");
             real_GetScancodeFromName = (RealSDL_GetScancodeFromName)GetProcAddress(h, "SDL_GetScancodeFromName");
+            real_CreateSurface = (RealSDL_CreateSurface)GetProcAddress(h, "SDL_CreateSurface");
+            real_DestroySurface = (RealSDL_DestroySurface)GetProcAddress(h, "SDL_DestroySurface");
+            real_CreateColorCursor = (RealSDL_CreateColorCursor)GetProcAddress(h, "SDL_CreateColorCursor");
+            real_SetCursor = (RealSDL_SetCursor)GetProcAddress(h, "SDL_SetCursor");
+            real_CreateWindowWithProperties = (RealSDL_CreateWindowWithProperties)GetProcAddress(h, "SDL_CreateWindowWithProperties");
+            real_CreateWindow = (RealSDL_CreateWindow)GetProcAddress(h, "SDL_CreateWindow");
         }
 #else
         real_GetKeyboardState = (RealSDL_GetKeyboardState)dlsym(RTLD_NEXT, "SDL_GetKeyboardState");
@@ -87,6 +129,12 @@ static void init_symbols(void) {
                 real_ShowCursor = (RealSDL_ShowCursor)dlsym(h, "SDL_ShowCursor");
                 real_PollEvent = (RealSDL_PollEvent)dlsym(h, "SDL_PollEvent");
                 real_GetScancodeFromName = (RealSDL_GetScancodeFromName)dlsym(h, "SDL_GetScancodeFromName");
+                real_CreateSurface = (RealSDL_CreateSurface)dlsym(h, "SDL_CreateSurface");
+                real_DestroySurface = (RealSDL_DestroySurface)dlsym(h, "SDL_DestroySurface");
+                real_CreateColorCursor = (RealSDL_CreateColorCursor)dlsym(h, "SDL_CreateColorCursor");
+                real_SetCursor = (RealSDL_SetCursor)dlsym(h, "SDL_SetCursor");
+                real_CreateWindowWithProperties = (RealSDL_CreateWindowWithProperties)dlsym(h, "SDL_CreateWindowWithProperties");
+                real_CreateWindow = (RealSDL_CreateWindow)dlsym(h, "SDL_CreateWindow");
             }
         } else {
             real_GetMouseState = (RealSDL_GetMouseState)dlsym(RTLD_NEXT, "SDL_GetMouseState");
@@ -98,6 +146,12 @@ static void init_symbols(void) {
             real_ShowCursor = (RealSDL_ShowCursor)dlsym(RTLD_NEXT, "SDL_ShowCursor");
             real_PollEvent = (RealSDL_PollEvent)dlsym(RTLD_NEXT, "SDL_PollEvent");
             real_GetScancodeFromName = (RealSDL_GetScancodeFromName)dlsym(RTLD_NEXT, "SDL_GetScancodeFromName");
+            real_CreateSurface = (RealSDL_CreateSurface)dlsym(RTLD_NEXT, "SDL_CreateSurface");
+            real_DestroySurface = (RealSDL_DestroySurface)dlsym(RTLD_NEXT, "SDL_DestroySurface");
+            real_CreateColorCursor = (RealSDL_CreateColorCursor)dlsym(RTLD_NEXT, "SDL_CreateColorCursor");
+            real_SetCursor = (RealSDL_SetCursor)dlsym(RTLD_NEXT, "SDL_SetCursor");
+            real_CreateWindowWithProperties = (RealSDL_CreateWindowWithProperties)dlsym(RTLD_NEXT, "SDL_CreateWindowWithProperties");
+            real_CreateWindow = (RealSDL_CreateWindow)dlsym(RTLD_NEXT, "SDL_CreateWindow");
         }
 #endif
     }
@@ -105,10 +159,37 @@ static void init_symbols(void) {
     if (hide_cursor_enabled == -1) {
         const char *env = getenv("GOW3_HIDE_CURSOR");
         hide_cursor_enabled = (env && (env[0] == '1' || env[0] == 't' || env[0] == 'T')) ? 1 : 0;
-        if (hide_cursor_enabled && real_HideCursor) {
-            real_HideCursor();
-        }
     }
+}
+
+#ifdef _WIN32
+__declspec(dllexport)
+#endif
+SDL_Window* SDL_CreateWindowWithProperties(SDL_PropertiesID props) {
+    init_symbols();
+    SDL_Window* win = NULL;
+    if (real_CreateWindowWithProperties) {
+        win = real_CreateWindowWithProperties(props);
+    }
+    if (win) {
+        apply_cursor_hidden();
+    }
+    return win;
+}
+
+#ifdef _WIN32
+__declspec(dllexport)
+#endif
+SDL_Window* SDL_CreateWindow(const char *title, int w, int h, SDL_WindowFlags flags) {
+    init_symbols();
+    SDL_Window* win = NULL;
+    if (real_CreateWindow) {
+        win = real_CreateWindow(title, w, h, flags);
+    }
+    if (win) {
+        apply_cursor_hidden();
+    }
+    return win;
 }
 
 #ifdef _WIN32
@@ -167,20 +248,6 @@ const bool* SDL_GetKeyboardState(int *numkeys) {
 
     bool* state = (bool*)orig_state;
 
-    // Automatic mouse cursor management:
-    // Hidden when the game window is focused, visible when focus is lost (Alt-Tab, etc.)
-    if (hide_cursor_enabled && real_CursorVisible && real_HideCursor && real_ShowCursor) {
-        if (is_window_focused) {
-            if (real_CursorVisible()) {
-                real_HideCursor();
-            }
-        } else {
-            if (!real_CursorVisible()) {
-                real_ShowCursor();
-            }
-        }
-    }
-
     // Query mouse buttons & inject into keyboard scancode array
     // tracked_mouse_buttons: continuously held buttons
     // latched_mouse_buttons: quick clicks between poll frames, guaranteed not to be lost
@@ -219,36 +286,27 @@ __declspec(dllexport)
 #endif
 bool SDL_PollEvent(SDL_Event *event) {
     init_symbols();
+    if (!cursor_is_hidden) {
+        apply_cursor_hidden();
+    }
     if (!real_PollEvent) return false;
 
     bool result = real_PollEvent(event);
     if (result && event) {
         uint32_t event_type = event->type;
 
-        // Window focus gained / lost
-        if (event_type == SDL_EVENT_WINDOW_FOCUS_GAINED) {
+        // Window focus gained / shown
+        if (event_type == SDL_EVENT_WINDOW_FOCUS_GAINED || event_type == 514 /* SDL_EVENT_WINDOW_SHOWN */) {
             is_window_focused = 1;
-            if (hide_cursor_enabled && real_HideCursor) {
-                real_HideCursor();
-            }
+            apply_cursor_hidden();
         } else if (event_type == SDL_EVENT_WINDOW_FOCUS_LOST) {
             is_window_focused = 0;
             tracked_mouse_buttons = 0;
             latched_mouse_buttons = 0;
-            if (hide_cursor_enabled && real_ShowCursor) {
-                real_ShowCursor();
-            }
-        } else if (event_type == 514 /* SDL_EVENT_WINDOW_SHOWN */ || event_type == 516 /* SDL_EVENT_WINDOW_EXPOSED */) {
-            if (hide_cursor_enabled && is_window_focused && real_HideCursor) {
-                real_HideCursor();
-            }
         }
         // Mouse button press / release
         else if (event_type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
             is_window_focused = 1;
-            if (hide_cursor_enabled && real_HideCursor && real_CursorVisible && real_CursorVisible()) {
-                real_HideCursor();
-            }
             uint8_t btn = event->button.button;
             if (btn >= 1 && btn <= 5) {
                 uint32_t mask = (1u << (btn - 1));

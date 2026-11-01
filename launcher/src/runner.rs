@@ -1236,10 +1236,11 @@ pub fn launch_gow3(
     let pad_map = config.build_gow3_pad_map();
     cmd.env("GOW3_KEY_MAP", &key_map);
     cmd.env("GOW3_PAD_MAP", pad_map);
+    cmd.env("GOW3_HIDE_CURSOR", if config.hide_mouse_cursor { "1" } else { "0" });
 
-    // Preload custom input bridge on Linux ONLY if mouse buttons are explicitly bound
+    // Preload custom input bridge on Linux if mouse cursor hiding is enabled OR if mouse buttons are bound
     #[cfg(not(target_os = "windows"))]
-    if config.is_mouse_button_bound() {
+    if config.hide_mouse_cursor || config.is_mouse_button_bound() {
         if let Some(safe_lib) = ensure_safe_preload_lib(base_dir) {
             let mut preload = safe_lib.to_string_lossy().to_string();
             if let Ok(existing) = std::env::var("LD_PRELOAD") {

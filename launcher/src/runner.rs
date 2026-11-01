@@ -1184,9 +1184,9 @@ pub fn launch_gow3(
     let (prep_workers, copy_threads) = if cpu_threads <= 4 {
         (2, 1)
     } else if cpu_threads <= 8 {
-        (4, 2)
+        (3, 2)
     } else {
-        (6, 4)
+        (4, 2)
     };
     cmd.env("GOW3_PREP_WORKERS", prep_workers.to_string());
     cmd.env("GOW3_COPY_THREADS", copy_threads.to_string());
@@ -1195,7 +1195,9 @@ pub fn launch_gow3(
     cmd.env("GOW3_DIRECT_MEMORY_ACCESS", "1");
     cmd.env("GOW3_PIPELINE_CACHE", "1");
     cmd.env("GOW3_PARALLEL_WARMUP", "1");
-    cmd.env("GOW3_BACKGROUND_WARMUP", "1");
+    // Pre-warm pipelines synchronously upfront (takes ~1s) to prevent background compilation
+    // threads from causing swapchain presentation stalls and black flickers during Sony & Santa Monica logos
+    cmd.env("GOW3_BACKGROUND_WARMUP", "0");
 
     // Vulkan Recording Synchronization:
     // GOW3_VK_RECORD_THREAD=1 uses an asynchronous worker thread to record Vulkan command buffers.

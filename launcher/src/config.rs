@@ -453,7 +453,7 @@ impl LauncherConfig {
             } else if vram <= 6144 {
                 4608
             } else if vram <= 8192 {
-                6144
+                5120
             } else if vram <= 12288 {
                 8192
             } else {

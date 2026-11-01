@@ -135,9 +135,9 @@ fn update_run_sh(base_dir: &Path, config: &LauncherConfig) -> Result<(), String>
     let (prep_workers, copy_threads) = if cpu_threads <= 4 {
         (2, 1)
     } else if cpu_threads <= 8 {
-        (4, 2)
+        (3, 2)
     } else {
-        (6, 4)
+        (4, 2)
     };
     replace_or_insert_env(&mut content, "GOW3_PREP_WORKERS", &prep_workers.to_string());
     replace_or_insert_env(&mut content, "GOW3_COPY_THREADS", &copy_threads.to_string());
@@ -145,7 +145,7 @@ fn update_run_sh(base_dir: &Path, config: &LauncherConfig) -> Result<(), String>
     replace_or_insert_env(&mut content, "GOW3_DIRECT_MEMORY_ACCESS", "1");
     replace_or_insert_env(&mut content, "GOW3_PIPELINE_CACHE", "1");
     replace_or_insert_env(&mut content, "GOW3_PARALLEL_WARMUP", "1");
-    replace_or_insert_env(&mut content, "GOW3_BACKGROUND_WARMUP", "1");
+    replace_or_insert_env(&mut content, "GOW3_BACKGROUND_WARMUP", "0");
     // Force synchronous command recording (avoids dynamic rendering FlushBarriers race in NVIDIA libnvidia-glcore)
     replace_or_insert_env(&mut content, "GOW3_VK_RECORD_THREAD", "0");
     replace_or_insert_env(&mut content, "GOW3_PRESENT_THREAD", "1");

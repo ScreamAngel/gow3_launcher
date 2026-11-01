@@ -140,14 +140,17 @@ fn update_run_sh(base_dir: &Path, config: &LauncherConfig) -> Result<(), String>
         (2, 1)
     } else if cpu_threads <= 8 {
         (4, 2)
-    } else {
+    } else if cpu_threads <= 12 {
         (6, 4)
+    } else {
+        (8, 4)
     };
     replace_or_insert_env(&mut content, "GOW3_PREP_WORKERS", &prep_workers.to_string());
     replace_or_insert_env(&mut content, "GOW3_COPY_THREADS", &copy_threads.to_string());
     replace_or_insert_env(&mut content, "GOW3_INTERP_INT_FIX", "1");
     replace_or_insert_env(&mut content, "GOW3_DIRECT_MEMORY_ACCESS", "1");
     replace_or_insert_env(&mut content, "GOW3_PIPELINE_CACHE", "1");
+    replace_or_insert_env(&mut content, "GOW3_PIPELINE_BINARIES", "1");
     replace_or_insert_env(&mut content, "GOW3_PARALLEL_WARMUP", "1");
     replace_or_insert_env(&mut content, "GOW3_BACKGROUND_WARMUP", "1");
     replace_or_insert_env(&mut content, "GOW3_VK_RECORD_THREAD", "1");
@@ -161,13 +164,15 @@ fn update_run_sh(base_dir: &Path, config: &LauncherConfig) -> Result<(), String>
     remove_env_if_present(&mut content, "GOW3_COPY_MERGE_KB");
     remove_env_if_present(&mut content, "GOW3_HOT_PAGES");
     remove_env_if_present(&mut content, "GOW3_FRAMES_AHEAD");
-    remove_env_if_present(&mut content, "__GL_SHADER_DISK_CACHE");
-    remove_env_if_present(&mut content, "__GL_SHADER_DISK_CACHE_SIZE");
-    remove_env_if_present(&mut content, "__GL_SHADER_DISK_CACHE_SKIP_CLEANUP");
-    remove_env_if_present(&mut content, "__GL_THREADED_OPTIMIZATIONS");
-    remove_env_if_present(&mut content, "__GL_VRR_ALLOWED");
-    remove_env_if_present(&mut content, "MESA_SHADER_CACHE_MAX_SIZE");
     remove_env_if_present(&mut content, "radv_zero_vram");
+
+    // Driver Shader Disk Cache & Multithreaded Optimizations (10GB disk cache)
+    replace_or_insert_env(&mut content, "__GL_SHADER_DISK_CACHE", "1");
+    replace_or_insert_env(&mut content, "__GL_SHADER_DISK_CACHE_SIZE", "10737418240");
+    replace_or_insert_env(&mut content, "__GL_SHADER_DISK_CACHE_SKIP_CLEANUP", "1");
+    replace_or_insert_env(&mut content, "__GL_THREADED_OPTIMIZATIONS", "1");
+    replace_or_insert_env(&mut content, "__GL_VRR_ALLOWED", "1");
+    replace_or_insert_env(&mut content, "MESA_SHADER_CACHE_MAX_SIZE", "10G");
     replace_or_insert_env(&mut content, "GOW3_ASYNC_SHADERS", "1");
     replace_or_insert_env(&mut content, "GOW3_FPS_LIMIT", &config.target_fps.to_string());
     replace_or_insert_env(&mut content, "GOW3_FULL_BARRIERS", "1");
@@ -264,7 +269,7 @@ fn update_gow3_ini(base_dir: &Path, config: &LauncherConfig) -> Result<(), Strin
          deferred_readback=0\n\
          stale_readback=0\n\
          async_shaders=1\n\
-         frames_queued=1\n\
+         frames_queued=2\n\
          readbacks=true\n\
          readbackLinearImages=true\n\
          budget=6144\n".to_string()
@@ -303,7 +308,7 @@ fn update_gow3_ini(base_dir: &Path, config: &LauncherConfig) -> Result<(), Strin
     replace_ini_key(&mut content, "budget", &effective_budget.to_string());
     replace_ini_key(&mut content, "engine_fps", &config.target_fps.to_string());
     replace_ini_key(&mut content, "fps_limit", &config.target_fps.to_string());
-    replace_ini_key(&mut content, "frames_queued", "1");
+    replace_ini_key(&mut content, "frames_queued", "2");
     replace_ini_key(&mut content, "vsync", if config.vsync { "1" } else { "0" });
     replace_ini_key(&mut content, "display_mode", config.display_mode.as_str());
 

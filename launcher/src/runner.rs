@@ -1130,6 +1130,27 @@ pub fn launch_gow3(
                 cmd.env("DRI_PRIME", "1");
             }
         }
+
+        // NVIDIA & Mesa Driver Shader Disk Cache & Threading Optimization:
+        // Maximize disk cache size and enable multithreaded command submission to prevent driver shader purge stutter.
+        if std::env::var("__GL_SHADER_DISK_CACHE").is_err() {
+            cmd.env("__GL_SHADER_DISK_CACHE", "1");
+        }
+        if std::env::var("__GL_SHADER_DISK_CACHE_SIZE").is_err() {
+            cmd.env("__GL_SHADER_DISK_CACHE_SIZE", "10737418240");
+        }
+        if std::env::var("__GL_SHADER_DISK_CACHE_SKIP_CLEANUP").is_err() {
+            cmd.env("__GL_SHADER_DISK_CACHE_SKIP_CLEANUP", "1");
+        }
+        if std::env::var("__GL_THREADED_OPTIMIZATIONS").is_err() {
+            cmd.env("__GL_THREADED_OPTIMIZATIONS", "1");
+        }
+        if std::env::var("__GL_VRR_ALLOWED").is_err() {
+            cmd.env("__GL_VRR_ALLOWED", "1");
+        }
+        if std::env::var("MESA_SHADER_CACHE_MAX_SIZE").is_err() {
+            cmd.env("MESA_SHADER_CACHE_MAX_SIZE", "10G");
+        }
     }
 
     // Apply launcher optimization overrides
@@ -1188,8 +1209,10 @@ pub fn launch_gow3(
         (2, 1)
     } else if cpu_threads <= 8 {
         (4, 2)
-    } else {
+    } else if cpu_threads <= 12 {
         (6, 4)
+    } else {
+        (8, 4)
     };
     cmd.env("GOW3_PREP_WORKERS", prep_workers.to_string());
     cmd.env("GOW3_COPY_THREADS", copy_threads.to_string());
@@ -1197,6 +1220,7 @@ pub fn launch_gow3(
     cmd.env("GOW3_INTERP_INT_FIX", "1");
     cmd.env("GOW3_DIRECT_MEMORY_ACCESS", "1");
     cmd.env("GOW3_PIPELINE_CACHE", "1");
+    cmd.env("GOW3_PIPELINE_BINARIES", "1");
     cmd.env("GOW3_PARALLEL_WARMUP", "1");
     cmd.env("GOW3_BACKGROUND_WARMUP", "1");
 

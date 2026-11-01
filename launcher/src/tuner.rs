@@ -124,18 +124,8 @@ fn update_run_sh(base_dir: &Path, config: &LauncherConfig) -> Result<(), String>
     replace_or_insert_env(&mut content, "GOW3_GC_BUDGET_MB", &effective_budget.to_string());
     replace_or_insert_env(&mut content, "GOW3_DMEM_POOL_MB", &config.dmem_mb.to_string());
     replace_or_insert_env(&mut content, "GOW3_DEFAULT_ENGINE_FPS", &config.target_fps.to_string());
-    let (deferred, stale) = if config.patch_readbacks && !config.async_readbacks {
-        ("0", "0")
-    } else if config.async_readbacks {
-        ("1", "1")
-    } else {
-        ("0", "0")
-    };
-    replace_or_insert_env(&mut content, "GOW3_FORCE_READBACK", if config.patch_readbacks { "1" } else { "0" });
-    replace_or_insert_env(&mut content, "GOW3_READBACKS", if config.patch_readbacks { "1" } else { "0" });
-    replace_or_insert_env(&mut content, "GOW3_READBACK_LINEAR", if config.patch_readbacks { "1" } else { "0" });
-    replace_or_insert_env(&mut content, "GOW3_DEFERRED_READBACK", deferred);
-    replace_or_insert_env(&mut content, "GOW3_STALE_READBACK", stale);
+    replace_or_insert_env(&mut content, "GOW3_DEFERRED_READBACK", if config.async_readbacks { "1" } else { "0" });
+    replace_or_insert_env(&mut content, "GOW3_STALE_READBACK", if config.async_readbacks { "1" } else { "0" });
 
     let cpu_threads = if config.cached_hardware.cpu_threads > 0 {
         config.cached_hardware.cpu_threads
@@ -145,9 +135,9 @@ fn update_run_sh(base_dir: &Path, config: &LauncherConfig) -> Result<(), String>
     let (prep_workers, copy_threads) = if cpu_threads <= 4 {
         (2, 1)
     } else if cpu_threads <= 8 {
-        (3, 2)
-    } else {
         (4, 2)
+    } else {
+        (6, 4)
     };
     replace_or_insert_env(&mut content, "GOW3_PREP_WORKERS", &prep_workers.to_string());
     replace_or_insert_env(&mut content, "GOW3_COPY_THREADS", &copy_threads.to_string());
@@ -156,19 +146,25 @@ fn update_run_sh(base_dir: &Path, config: &LauncherConfig) -> Result<(), String>
     replace_or_insert_env(&mut content, "GOW3_PIPELINE_CACHE", "1");
     replace_or_insert_env(&mut content, "GOW3_PARALLEL_WARMUP", "1");
     replace_or_insert_env(&mut content, "GOW3_BACKGROUND_WARMUP", "1");
-    replace_or_insert_env(&mut content, "GOW3_STAGING_KEEP_MB", "256");
-    replace_or_insert_env(&mut content, "GOW3_ASYNC_FENCES", "0");
-    replace_or_insert_env(&mut content, "GOW3_PRESENT_THREAD", "0");
+    // Force synchronous command recording (avoids dynamic rendering FlushBarriers race in NVIDIA libnvidia-glcore)
     replace_or_insert_env(&mut content, "GOW3_VK_RECORD_THREAD", "0");
-    replace_or_insert_env(&mut content, "GOW3_HOT_PAGES", "0");
-    replace_or_insert_env(&mut content, "GOW3_FRAMES_AHEAD", "0");
+    replace_or_insert_env(&mut content, "GOW3_PRESENT_THREAD", "1");
+    replace_or_insert_env(&mut content, "GOW3_ASYNC_FENCES", "1");
     replace_or_insert_env(&mut content, "GOW3_ASYNC_SHADERS", "1");
     replace_or_insert_env(&mut content, "GOW3_FPS_LIMIT", &config.target_fps.to_string());
-    replace_or_insert_env(&mut content, "__GL_SHADER_DISK_CACHE", "1");
-    replace_or_insert_env(&mut content, "__GL_SHADER_DISK_CACHE_SIZE", "10737418240");
-    replace_or_insert_env(&mut content, "__GL_SHADER_DISK_CACHE_SKIP_CLEANUP", "1");
-    replace_or_insert_env(&mut content, "MESA_SHADER_CACHE_MAX_SIZE", "10G");
-    replace_or_insert_env(&mut content, "radv_zero_vram", "false");
+
+    // Clean up any deprecated experimental env vars from earlier launches
+    remove_env_if_present(&mut content, "GOW3_STAGING_KEEP_MB");
+    remove_env_if_present(&mut content, "GOW3_COPY_MERGE_KB");
+    remove_env_if_present(&mut content, "GOW3_HOT_PAGES");
+    remove_env_if_present(&mut content, "GOW3_FRAMES_AHEAD");
+    remove_env_if_present(&mut content, "__GL_SHADER_DISK_CACHE");
+    remove_env_if_present(&mut content, "__GL_SHADER_DISK_CACHE_SIZE");
+    remove_env_if_present(&mut content, "__GL_SHADER_DISK_CACHE_SKIP_CLEANUP");
+    remove_env_if_present(&mut content, "__GL_THREADED_OPTIMIZATIONS");
+    remove_env_if_present(&mut content, "__GL_VRR_ALLOWED");
+    remove_env_if_present(&mut content, "MESA_SHADER_CACHE_MAX_SIZE");
+    remove_env_if_present(&mut content, "radv_zero_vram");
     replace_or_insert_env(&mut content, "GOW3_ASYNC_SHADERS", "1");
     replace_or_insert_env(&mut content, "GOW3_FPS_LIMIT", &config.target_fps.to_string());
     replace_or_insert_env(&mut content, "GOW3_FULL_BARRIERS", "1");
@@ -265,21 +261,14 @@ fn update_gow3_ini(base_dir: &Path, config: &LauncherConfig) -> Result<(), Strin
          frames_queued=1\n\
          readbacks=true\n\
          readbackLinearImages=true\n\
-         budget=5120\n".to_string()
+         budget=6144\n".to_string()
     };
 
-    let (deferred, stale) = if config.patch_readbacks && !config.async_readbacks {
-        ("0", "0")
-    } else if config.async_readbacks {
-        ("1", "1")
-    } else {
-        ("0", "0")
-    };
     let readbacks_val = if config.patch_readbacks { "true" } else { "false" };
     replace_ini_key(&mut content, "readbacks", readbacks_val);
     replace_ini_key(&mut content, "readbackLinearImages", readbacks_val);
-    replace_ini_key(&mut content, "deferred_readback", deferred);
-    replace_ini_key(&mut content, "stale_readback", stale);
+    replace_ini_key(&mut content, "deferred_readback", if config.async_readbacks { "1" } else { "0" });
+    replace_ini_key(&mut content, "stale_readback", if config.async_readbacks { "1" } else { "0" });
     replace_ini_key(&mut content, "async_shaders", "1");
     if config.render_resolution == "native" {
         replace_ini_key(&mut content, "render_resolution", "native");

@@ -236,7 +236,7 @@ pub struct LauncherConfig {
     pub patch_delta_time: bool,
     #[serde(default = "default_true")]
     pub patch_readbacks: bool,
-    #[serde(default = "default_false")]
+    #[serde(default = "default_true")]
     pub async_readbacks: bool,
     #[serde(default = "default_true")]
     pub skip_cinematics: bool,
@@ -297,14 +297,11 @@ fn default_target_fps() -> u32 {
 fn default_true() -> bool {
     true
 }
-fn default_false() -> bool {
-    false
-}
 fn default_deadzone() -> u32 {
     2
 }
 fn default_vram_budget() -> u64 {
-    5120
+    6144
 }
 fn default_dmem() -> u64 {
     9216
@@ -329,7 +326,7 @@ impl Default for LauncherConfig {
             target_fps: default_target_fps(),
             patch_delta_time: true,
             patch_readbacks: true,
-            async_readbacks: false,
+            async_readbacks: true,
             skip_cinematics: true,
             use_gamemode: true,
             vram_gc_budget_mb: default_vram_budget(),
@@ -386,7 +383,7 @@ impl LauncherConfig {
                 self.fsr_enabled = false;
                 self.disable_motion_blur = false;
                 self.disable_dof = false;
-                self.vram_gc_budget_mb = 5120;
+                self.vram_gc_budget_mb = 6144;
                 self.target_fps = 60;
             }
             GraphicPreset::Ultra => {
@@ -454,9 +451,9 @@ impl LauncherConfig {
             } else if vram <= 4096 {
                 3072
             } else if vram <= 6144 {
-                4096
+                4608
             } else if vram <= 8192 {
-                5120
+                6144
             } else if vram <= 12288 {
                 8192
             } else {
@@ -481,9 +478,6 @@ impl LauncherConfig {
                     // to fix yellow Poseidon water blocks, black flickering screens, and Gaia heart mesh glitches.
                     if cfg.launcher_version != "v1.8.5" {
                         cfg.launcher_version = "v1.8.5".to_string();
-                        if cfg.async_readbacks {
-                            cfg.async_readbacks = false;
-                        }
                         changed = true;
                     }
                     // If the user's config still has old default bindings,
@@ -731,7 +725,7 @@ mod tests {
     fn test_launcher_version_is_v185() {
         assert_eq!(default_launcher_version(), "v1.8.5");
         let def = LauncherConfig::default();
-        assert!(!def.async_readbacks);
+        assert!(def.async_readbacks);
         assert!(def.patch_readbacks);
     }
 

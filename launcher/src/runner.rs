@@ -1063,10 +1063,10 @@ pub fn launch_gow3(
     let has_gamemode = use_gamemode && {
         #[cfg(not(target_os = "windows"))]
         {
-            Command::new("gamemoderun")
-                .arg("--version")
-                .output()
-                .map(|o| o.status.success())
+            Command::new("which")
+                .arg("gamemoderun")
+                .status()
+                .map(|s| s.success())
                 .unwrap_or(false)
         }
         #[cfg(target_os = "windows")]
@@ -1171,24 +1171,14 @@ pub fn launch_gow3(
     cmd.env("GOW3_READBACK_LINEAR", if config.patch_readbacks { "1" } else { "0" });
     cmd.env("GOW3_FORCE_READBACK", if config.patch_readbacks { "1" } else { "0" });
 
-    // Readback Synchronization:
-    // When patch_readbacks is enabled and async_readbacks is false (default), force immediate linear readbacks.
-    // Disabling deferred/stale readbacks resolves yellow water blocks (Poseidon arena), black screen exposure dips,
-    // and vertex/morph tearing (Heart of Gaia).
-    let (deferred, stale) = if config.patch_readbacks && !config.async_readbacks {
-        ("0", "0")
-    } else if config.async_readbacks {
-        ("1", "1")
-    } else {
-        ("0", "0")
-    };
-    cmd.env("GOW3_DEFERRED_READBACK", deferred);
-    cmd.env("GOW3_STALE_READBACK", stale);
+    // Asynchronous & Stale Readbacks:
+    // Decouples CPU from GPU fences. CPU reads use the previous frame's copy and CPU writes proceed
+    // without stalling the render thread.
+    cmd.env("GOW3_DEFERRED_READBACK", if config.async_readbacks { "1" } else { "0" });
+    cmd.env("GOW3_STALE_READBACK", if config.async_readbacks { "1" } else { "0" });
 
     // CPU Thread Tuning:
     // Scale draw preparation workers and copy threads to CPU topology to prevent thread contention.
-    // For hybrid CPUs (Intel 12th/13th/14th Gen P-cores + E-cores), cap at 4 prep workers and 2 copy threads
-    // to prevent draw threads from being scheduled onto slower E-cores, eliminating frame-time spikes.
     let cpu_threads = if config.cached_hardware.cpu_threads > 0 {
         config.cached_hardware.cpu_threads
     } else {
@@ -1197,9 +1187,9 @@ pub fn launch_gow3(
     let (prep_workers, copy_threads) = if cpu_threads <= 4 {
         (2, 1)
     } else if cpu_threads <= 8 {
-        (3, 2)
-    } else {
         (4, 2)
+    } else {
+        (6, 4)
     };
     cmd.env("GOW3_PREP_WORKERS", prep_workers.to_string());
     cmd.env("GOW3_COPY_THREADS", copy_threads.to_string());
@@ -1210,32 +1200,19 @@ pub fn launch_gow3(
     cmd.env("GOW3_PARALLEL_WARMUP", "1");
     cmd.env("GOW3_BACKGROUND_WARMUP", "1");
 
-    // Staging Memory Pool: 256 MB reusable pool prevents VkBuffer/VkDeviceMemory allocation hitches during scene streaming
-    cmd.env("GOW3_STAGING_KEEP_MB", "256");
-
-    // Synchronous Presentation & Host Copy Fences:
-    // Disabling asynchronous fences (GOW3_ASYNC_FENCES=0) ensures WaitHostCopies, WaitDeferredSignals,
-    // and DrainDrawPipe are fully completed before presenting each frame. This completely prevents black-screen
-    // flashing during video playback (Sony & Santa Monica intros), eliminates in-game black flickers,
-    // and ensures all floor texture tiles in Poseidon arena are fully copied and rendered.
-    cmd.env("GOW3_ASYNC_FENCES", "0");
-    cmd.env("GOW3_PRESENT_THREAD", "0");
+    // Vulkan Recording Synchronization:
+    // GOW3_VK_RECORD_THREAD=1 uses an asynchronous worker thread to record Vulkan command buffers.
+    // On NVIDIA drivers, during compute dispatch barrier flushes (Runtime::FlushBarriers -> Scheduler::EndRendering),
+    // this causes vkCmdEndRendering to race with the worker thread, dereferencing null dynamic rendering state
+    // and triggering "Host fault (signal 11) in libnvidia-glcore.so at address 0x108".
+    // Setting GOW3_VK_RECORD_THREAD=0 forces synchronous in-order recording, completely eliminating this crash.
     cmd.env("GOW3_VK_RECORD_THREAD", "0");
-    cmd.env("GOW3_HOT_PAGES", "0");
-    cmd.env("GOW3_FRAMES_AHEAD", "0");
+
+    // Presentation Thread: Dedicated Vulkan present thread ensures smooth swapchain pacing and eliminates video intro flashing.
+    cmd.env("GOW3_PRESENT_THREAD", "1");
+    cmd.env("GOW3_ASYNC_FENCES", "1");
     cmd.env("GOW3_ASYNC_SHADERS", "1");
     cmd.env("GOW3_FPS_LIMIT", config.target_fps.to_string());
-
-    // Linux GPU Driver Performance & Persistent Shader Disk Cache:
-    #[cfg(not(target_os = "windows"))]
-    {
-        // 10 GB persistent shader disk cache: prevents driver shader eviction and mid-game shader compilation stutters
-        cmd.env("__GL_SHADER_DISK_CACHE", "1");
-        cmd.env("__GL_SHADER_DISK_CACHE_SIZE", "10737418240");
-        cmd.env("__GL_SHADER_DISK_CACHE_SKIP_CLEANUP", "1");
-        cmd.env("MESA_SHADER_CACHE_MAX_SIZE", "10G");
-        cmd.env("radv_zero_vram", "false");
-    }
 
     let effective_budget = config.get_effective_vram_budget();
     cmd.env("GOW3_GC_BUDGET_MB", effective_budget.to_string());

@@ -124,11 +124,18 @@ fn update_run_sh(base_dir: &Path, config: &LauncherConfig) -> Result<(), String>
     replace_or_insert_env(&mut content, "GOW3_GC_BUDGET_MB", &effective_budget.to_string());
     replace_or_insert_env(&mut content, "GOW3_DMEM_POOL_MB", &config.dmem_mb.to_string());
     replace_or_insert_env(&mut content, "GOW3_DEFAULT_ENGINE_FPS", &config.target_fps.to_string());
+    let (deferred, stale) = if config.patch_readbacks && !config.async_readbacks {
+        ("0", "0")
+    } else if config.async_readbacks {
+        ("1", "1")
+    } else {
+        ("0", "0")
+    };
     replace_or_insert_env(&mut content, "GOW3_FORCE_READBACK", if config.patch_readbacks { "1" } else { "0" });
     replace_or_insert_env(&mut content, "GOW3_READBACKS", if config.patch_readbacks { "1" } else { "0" });
     replace_or_insert_env(&mut content, "GOW3_READBACK_LINEAR", if config.patch_readbacks { "1" } else { "0" });
-    replace_or_insert_env(&mut content, "GOW3_DEFERRED_READBACK", if config.async_readbacks { "1" } else { "0" });
-    replace_or_insert_env(&mut content, "GOW3_STALE_READBACK", if config.async_readbacks { "1" } else { "0" });
+    replace_or_insert_env(&mut content, "GOW3_DEFERRED_READBACK", deferred);
+    replace_or_insert_env(&mut content, "GOW3_STALE_READBACK", stale);
 
     let cpu_threads = if config.cached_hardware.cpu_threads > 0 {
         config.cached_hardware.cpu_threads
@@ -264,11 +271,18 @@ fn update_gow3_ini(base_dir: &Path, config: &LauncherConfig) -> Result<(), Strin
          budget=5120\n".to_string()
     };
 
+    let (deferred, stale) = if config.patch_readbacks && !config.async_readbacks {
+        ("0", "0")
+    } else if config.async_readbacks {
+        ("1", "1")
+    } else {
+        ("0", "0")
+    };
     let readbacks_val = if config.patch_readbacks { "true" } else { "false" };
     replace_ini_key(&mut content, "readbacks", readbacks_val);
     replace_ini_key(&mut content, "readbackLinearImages", readbacks_val);
-    replace_ini_key(&mut content, "deferred_readback", if config.async_readbacks { "1" } else { "0" });
-    replace_ini_key(&mut content, "stale_readback", if config.async_readbacks { "1" } else { "0" });
+    replace_ini_key(&mut content, "deferred_readback", deferred);
+    replace_ini_key(&mut content, "stale_readback", stale);
     replace_ini_key(&mut content, "async_shaders", "1");
     if config.render_resolution == "native" {
         replace_ini_key(&mut content, "render_resolution", "native");

@@ -1171,11 +1171,19 @@ pub fn launch_gow3(
     cmd.env("GOW3_READBACK_LINEAR", if config.patch_readbacks { "1" } else { "0" });
     cmd.env("GOW3_FORCE_READBACK", if config.patch_readbacks { "1" } else { "0" });
 
-    // Asynchronous & Stale Readbacks:
-    // Decouples CPU from GPU fences. CPU reads use the previous frame's copy and CPU writes proceed
-    // without stalling the render thread. Completely prevents sudden FPS drops and micro-stutters.
-    cmd.env("GOW3_DEFERRED_READBACK", if config.async_readbacks { "1" } else { "0" });
-    cmd.env("GOW3_STALE_READBACK", if config.async_readbacks { "1" } else { "0" });
+    // Readback Synchronization:
+    // When patch_readbacks is enabled and async_readbacks is false (default), force immediate linear readbacks.
+    // Disabling deferred/stale readbacks resolves yellow water blocks (Poseidon arena), black screen exposure dips,
+    // and vertex/morph tearing (Heart of Gaia).
+    let (deferred, stale) = if config.patch_readbacks && !config.async_readbacks {
+        ("0", "0")
+    } else if config.async_readbacks {
+        ("1", "1")
+    } else {
+        ("0", "0")
+    };
+    cmd.env("GOW3_DEFERRED_READBACK", deferred);
+    cmd.env("GOW3_STALE_READBACK", stale);
 
     // CPU Thread Tuning:
     // Scale draw preparation workers and copy threads to CPU topology to prevent thread contention.

@@ -5,7 +5,7 @@ use std::process::Command;
 use crate::config::LauncherConfig;
 use crate::tuner::apply_settings;
 
-pub const BUILTIN_VERSION: &str = "v1.8.4";
+pub const BUILTIN_VERSION: &str = "v1.8.5";
 pub const GITHUB_REPO: &str = "ScreamAngel/gow3_launcher";
 pub const GITHUB_REPO_URL: &str = "https://github.com/ScreamAngel/gow3_launcher.git";
 
@@ -426,10 +426,10 @@ mod tests {
             assert!(info.is_new);
         }
 
-        // Test with current version v1.8.4: should NOT report as an update
-        let res_current = check_github_update(Path::new(".."), "test_dummy_sha", "v1.8.4");
+        // Test with current version v1.8.5: should NOT report as an update
+        let res_current = check_github_update(Path::new(".."), "test_dummy_sha", "v1.8.5");
         if let Ok(info) = res_current {
-            // Because remote release on GitHub is <= v1.8.4, and current is v1.8.4, and files are present, is_new must be false!
+            // Because remote release on GitHub is <= v1.8.5, and current is v1.8.5, and files are present, is_new must be false!
             assert!(!info.is_new);
         }
     }

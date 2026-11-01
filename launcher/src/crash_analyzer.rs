@@ -116,7 +116,7 @@ pub fn analyze_post_game(base_dir: &Path, exit_code: Option<i32>) -> Option<Cras
         return Some(CrashDiagnosis {
             title: "⚠️ Doku (Texture) Okuma Hatası Algılandı".to_string(),
             description: "GPU'dan sistem belleğine doku transferi sırasında gecikme veya veri bozulması yaşandı (Altın sarısı doku hatası belirtisi).".to_string(),
-            recommendation: "Launcher üzerinde 'Sarı Doku Hatası Önleme (Instant Readbacks)' seçeneğinin AÇIK olduğundan emin olun.".to_string(),
+            recommendation: "Launcher üzerinde 'Doku Bozulması ve Sararma Önleme (Instant Readbacks)' seçeneğinin AÇIK ve 'Asenkron Geri Okuma' seçeneğinin KAPALI olduğundan emin olun.".to_string(),
             log_snippet: extract_relevant_snippet(&tail_str, "readback"),
         });
     }
@@ -128,7 +128,7 @@ pub fn analyze_post_game(base_dir: &Path, exit_code: Option<i32>) -> Option<Cras
         return Some(CrashDiagnosis {
             title: "💥 NVIDIA Vulkan Sürücü Çökmesi (Dynamic Rendering / VRAM Sınırı)".to_string(),
             description: "NVIDIA Vulkan sürücüsü (libnvidia-glcore), sahne bariyerleri boşaltılırken (FlushBarriers -> EndRendering) VRAM yetersizliği veya komut senkronizasyonu hatası nedeniyle çöktü (Hata adresi: 0x108). Bu durum özellikle 8 GB ekran kartlarında doku temizleme bütçesi aşırı yüksek seçildiğinde veya çoklu iş parçacığı çakışmasında meydana gelir.".to_string(),
-            recommendation: "1. Launcher üzerinden 'Doku Havuzu (VRAM GC)' ayarını 5120 MB veya 4096 MB olarak seçin (8 GB kartlar için güvenli sınır).\n2. Launcher v1.8.4 güncellemesiyle Vulkan komut kayıt senkronizasyonu düzeltilmiş ve otomatik taşma koruması eklenmiştir. Oyunu tekrar başlatabilirsiniz.".to_string(),
+            recommendation: "1. Launcher üzerinden 'Doku Havuzu (VRAM GC)' ayarını 5120 MB veya 4096 MB olarak seçin (8 GB kartlar için güvenli sınır).\n2. Launcher v1.8.5 güncellemesiyle anlık geri okuma senkronizasyonu ve otomatik taşma koruması devrededir. Oyunu tekrar başlatabilirsiniz.".to_string(),
             log_snippet: extract_relevant_snippet(&tail_str, "libnvidia-glcore"),
         });
     }

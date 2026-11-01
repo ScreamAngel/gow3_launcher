@@ -236,7 +236,7 @@ pub struct LauncherConfig {
     pub patch_delta_time: bool,
     #[serde(default = "default_true")]
     pub patch_readbacks: bool,
-    #[serde(default = "default_true")]
+    #[serde(default = "default_false")]
     pub async_readbacks: bool,
     #[serde(default = "default_true")]
     pub skip_cinematics: bool,
@@ -297,6 +297,9 @@ fn default_target_fps() -> u32 {
 fn default_true() -> bool {
     true
 }
+fn default_false() -> bool {
+    false
+}
 fn default_deadzone() -> u32 {
     2
 }
@@ -310,7 +313,7 @@ fn default_last_commit() -> String {
     "c5638d9956002b8a9f09a240028f6793ddf7b2f8".to_string()
 }
 fn default_launcher_version() -> String {
-    "v1.8.4".to_string()
+    "v1.8.5".to_string()
 }
 fn default_render_resolution() -> String {
     "native".to_string()
@@ -326,7 +329,7 @@ impl Default for LauncherConfig {
             target_fps: default_target_fps(),
             patch_delta_time: true,
             patch_readbacks: true,
-            async_readbacks: true,
+            async_readbacks: false,
             skip_cinematics: true,
             use_gamemode: true,
             vram_gc_budget_mb: default_vram_budget(),
@@ -473,6 +476,16 @@ impl LauncherConfig {
         if path.exists() {
             if let Ok(content) = fs::read_to_string(&path) {
                 if let Ok(mut cfg) = serde_json::from_str::<LauncherConfig>(&content) {
+                    let mut changed = false;
+                    // Migrate from older versions: ensure v1.8.5 version string and disable async_readbacks
+                    // to fix yellow Poseidon water blocks, black flickering screens, and Gaia heart mesh glitches.
+                    if cfg.launcher_version != "v1.8.5" {
+                        cfg.launcher_version = "v1.8.5".to_string();
+                        if cfg.async_readbacks {
+                            cfg.async_readbacks = false;
+                        }
+                        changed = true;
+                    }
                     // If the user's config still has old default bindings,
                     // automatically update to the new recommended preset.
                     if (cfg.keyboard_bindings.triangle == "c" && cfg.keyboard_bindings.square == "v")
@@ -481,6 +494,9 @@ impl LauncherConfig {
                         || (cfg.keyboard_bindings.triangle == "rightbutton" && cfg.keyboard_bindings.r1 == "r")
                     {
                         cfg.keyboard_bindings = KeyboardBindings::recommended();
+                        changed = true;
+                    }
+                    if changed {
                         let _ = cfg.save(base_dir);
                     }
                     return cfg;
@@ -712,8 +728,11 @@ mod tests {
     }
 
     #[test]
-    fn test_launcher_version_is_v184() {
-        assert_eq!(default_launcher_version(), "v1.8.4");
+    fn test_launcher_version_is_v185() {
+        assert_eq!(default_launcher_version(), "v1.8.5");
+        let def = LauncherConfig::default();
+        assert!(!def.async_readbacks);
+        assert!(def.patch_readbacks);
     }
 
     #[test]

@@ -1151,6 +1151,9 @@ pub fn launch_gow3(
         if std::env::var("MESA_SHADER_CACHE_MAX_SIZE").is_err() {
             cmd.env("MESA_SHADER_CACHE_MAX_SIZE", "10G");
         }
+        if std::env::var("__GL_YIELD").is_err() {
+            cmd.env("__GL_YIELD", "NOTHING");
+        }
     }
 
     // Apply launcher optimization overrides
@@ -1223,6 +1226,18 @@ pub fn launch_gow3(
     cmd.env("GOW3_PIPELINE_BINARIES", "1");
     cmd.env("GOW3_PARALLEL_WARMUP", "1");
     cmd.env("GOW3_BACKGROUND_WARMUP", "1");
+
+    // Dynamic Region Streaming & Texture Upload Acceleration:
+    // 256 MB reusable staging pool prevents VkBuffer/VkDeviceMemory allocation hitches during scene streaming
+    cmd.env("GOW3_STAGING_KEEP_MB", "256");
+    // Coalesce tiny buffer copies into 1MB chunks to minimize Vulkan command submission overhead
+    cmd.env("GOW3_COPY_MERGE_KB", "1024");
+    // Fast memory page tracking for active memory regions
+    cmd.env("GOW3_HOT_PAGES", "1");
+    // Asynchronous texture descriptor binding helper
+    cmd.env("GOW3_TEXTURE_HELPER", "1");
+    // Multi-threaded draw pipeline processing
+    cmd.env("GOW3_DRAW_PIPE", "1");
 
     // Vulkan Recording Synchronization:
     // Asynchronous recording worker thread matches v1.8.2. Ensures smooth command buffer dispatch

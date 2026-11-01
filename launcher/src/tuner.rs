@@ -159,19 +159,24 @@ fn update_run_sh(base_dir: &Path, config: &LauncherConfig) -> Result<(), String>
     replace_or_insert_env(&mut content, "GOW3_ASYNC_SHADERS", "1");
     replace_or_insert_env(&mut content, "GOW3_FPS_LIMIT", &config.target_fps.to_string());
 
+    // Dynamic Region Streaming & Texture Upload Acceleration:
+    replace_or_insert_env(&mut content, "GOW3_STAGING_KEEP_MB", "256");
+    replace_or_insert_env(&mut content, "GOW3_COPY_MERGE_KB", "1024");
+    replace_or_insert_env(&mut content, "GOW3_HOT_PAGES", "1");
+    replace_or_insert_env(&mut content, "GOW3_TEXTURE_HELPER", "1");
+    replace_or_insert_env(&mut content, "GOW3_DRAW_PIPE", "1");
+
     // Clean up any deprecated experimental env vars from earlier launches
-    remove_env_if_present(&mut content, "GOW3_STAGING_KEEP_MB");
-    remove_env_if_present(&mut content, "GOW3_COPY_MERGE_KB");
-    remove_env_if_present(&mut content, "GOW3_HOT_PAGES");
     remove_env_if_present(&mut content, "GOW3_FRAMES_AHEAD");
     remove_env_if_present(&mut content, "radv_zero_vram");
 
-    // Driver Shader Disk Cache & Multithreaded Optimizations (10GB disk cache)
+    // Driver Shader Disk Cache & Multithreaded Optimizations (10GB disk cache & zero-yield)
     replace_or_insert_env(&mut content, "__GL_SHADER_DISK_CACHE", "1");
     replace_or_insert_env(&mut content, "__GL_SHADER_DISK_CACHE_SIZE", "10737418240");
     replace_or_insert_env(&mut content, "__GL_SHADER_DISK_CACHE_SKIP_CLEANUP", "1");
     replace_or_insert_env(&mut content, "__GL_THREADED_OPTIMIZATIONS", "1");
     replace_or_insert_env(&mut content, "__GL_VRR_ALLOWED", "1");
+    replace_or_insert_env(&mut content, "__GL_YIELD", "NOTHING");
     replace_or_insert_env(&mut content, "MESA_SHADER_CACHE_MAX_SIZE", "10G");
     replace_or_insert_env(&mut content, "GOW3_ASYNC_SHADERS", "1");
     replace_or_insert_env(&mut content, "GOW3_FPS_LIMIT", &config.target_fps.to_string());

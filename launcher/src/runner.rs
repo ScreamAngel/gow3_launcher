@@ -313,6 +313,23 @@ fn find_file_recursive(dir: &Path, filename: &str) -> Option<PathBuf> {
     None
 }
 
+fn collect_xml_files(dir: &Path, xml_paths: &mut Vec<PathBuf>) {
+    if let Ok(entries) = fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_file() {
+                if let Some(ext) = path.extension() {
+                    if ext.eq_ignore_ascii_case("xml") {
+                        xml_paths.push(path);
+                    }
+                }
+            } else if path.is_dir() {
+                collect_xml_files(&path, xml_paths);
+            }
+        }
+    }
+}
+
 #[allow(dead_code)]
 pub fn download_windows_engine(base_dir: &Path, is_alternative: bool) -> Result<String, String> {
     let dest_bin = base_dir.join("bin");
@@ -1070,6 +1087,54 @@ pub fn launch_gow3(
     }
     let patches_str = patch_list.join(";");
 
+    // Prepare active patches directory: copy built-in patch XML + XML patches from enabled mods
+    let active_patches_dir = out_dir.join("active_patches");
+    let _ = fs::remove_dir_all(&active_patches_dir);
+    let _ = fs::create_dir_all(&active_patches_dir);
+
+    // Copy built-in XML
+    let builtin_xml = patches_path.join("God_of_War_III_Remastered.xml");
+    if builtin_xml.is_file() {
+        let _ = fs::copy(&builtin_xml, active_patches_dir.join("God_of_War_III_Remastered.xml"));
+    }
+
+    // Collect and copy all XML patches from enabled mods
+    if mods_dir.is_dir() {
+        if let Ok(entries) = fs::read_dir(&mods_dir) {
+            for entry in entries.flatten() {
+                let mod_path = entry.path();
+                if !mod_path.is_dir() {
+                    continue;
+                }
+                let mod_name = entry.file_name().to_string_lossy().to_string();
+                if mod_name.starts_with('.')
+                    || mod_name.eq_ignore_ascii_case("gow3-windows")
+                    || mod_name.eq_ignore_ascii_case("gow3-linux")
+                    || mod_path.join("run.py").is_file()
+                {
+                    continue;
+                }
+                if config.disabled_mods.contains(&mod_name) {
+                    continue;
+                }
+
+                let mut xml_files = Vec::new();
+                collect_xml_files(&mod_path, &mut xml_files);
+                for xml_file in xml_files {
+                    let file_name = xml_file.file_name().unwrap_or_default().to_string_lossy();
+                    let safe_mod: String = mod_name
+                        .chars()
+                        .map(|c| if c.is_alphanumeric() { c } else { '_' })
+                        .collect();
+                    let dest = active_patches_dir.join(format!("{}_{}", safe_mod, file_name));
+                    if fs::copy(&xml_file, &dest).is_ok() {
+                        crate::log_info!("Mod XML patch applied: {:?}", xml_file);
+                    }
+                }
+            }
+        }
+    }
+
     let _ = Command::new(&python)
         .arg(scripts_path.join("patches.py"))
         .arg("--out")
@@ -1079,7 +1144,7 @@ pub fn launch_gow3(
         .arg("--game-dir")
         .arg(game_dir)
         .arg("--patches-dir")
-        .arg(&patches_path)
+        .arg(&active_patches_dir)
         .env("PYTHONPATH", &scripts_path)
         .env("GOW3_FORCE_PATCHES", "1")
         .env("GOW3_PATCHES_ONLY", "1")
@@ -1417,6 +1482,23 @@ mod tests {
         assert!(scripts_dir.join("link_modules.py").is_file());
         assert!(scripts_dir.join("patches.py").is_file());
         assert!(patches_dir.join("God_of_War_III_Remastered.xml").is_file());
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_collect_xml_files() {
+        let temp_dir = std::env::temp_dir().join("gow3_test_collect_xml");
+        let _ = fs::remove_dir_all(&temp_dir);
+        let sub = temp_dir.join("subdir/nested");
+        fs::create_dir_all(&sub).unwrap();
+        fs::write(sub.join("patch1.xml"), "<Patch/>").unwrap();
+        fs::write(temp_dir.join("patch2.XML"), "<Patch/>").unwrap();
+        fs::write(temp_dir.join("readme.txt"), "info").unwrap();
+
+        let mut collected = Vec::new();
+        collect_xml_files(&temp_dir, &mut collected);
+        assert_eq!(collected.len(), 2);
 
         let _ = fs::remove_dir_all(&temp_dir);
     }

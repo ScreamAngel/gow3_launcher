@@ -1204,21 +1204,30 @@ pub struct LauncherApp {
     installed_mods: Vec<crate::mods_manager::InstalledMod>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ShaderLoadingPhase {
+    Compiling,
+    WaitingForGameWindow,
+}
+
 #[derive(Debug, Clone)]
 pub struct ShaderProgressMsg {
     pub current: u32,
     pub total: u32,
     pub progress: f32,
     pub is_complete: bool,
+    pub game_window_ready: bool,
 }
 
 pub struct ShaderLoadingState {
+    pub phase: ShaderLoadingPhase,
     pub progress: f32,
     pub target_progress: f32,
     pub current_shaders: u32,
     pub total_shaders: u32,
     pub is_complete: bool,
     pub completed_at: Option<std::time::Instant>,
+    pub phase_changed_at: Option<std::time::Instant>,
     pub start_time: std::time::Instant,
     pub rx: Receiver<ShaderProgressMsg>,
 }
@@ -1677,17 +1686,19 @@ impl LauncherApp {
             // Initialize God of War III Shader Loading Screen
             let (progress_tx, progress_rx) = channel();
             self.shader_loading = Some(ShaderLoadingState {
+                phase: ShaderLoadingPhase::Compiling,
                 progress: 0.0,
                 target_progress: 0.06,
                 current_shaders: 0,
                 total_shaders: initial_total,
                 is_complete: false,
                 completed_at: None,
+                phase_changed_at: None,
                 start_time: std::time::Instant::now(),
                 rx: progress_rx,
             });
 
-            // Spawn background log monitor to track shader warm-up progress in real time
+            // Spawn background log monitor to track shader warm-up progress and window presentation in real time
             let base_dir_monitor = self.base_dir.clone();
             let running_pid_monitor = self.running_pid.clone();
             thread::spawn(move || {
@@ -1696,8 +1707,9 @@ impl LauncherApp {
                 let start = std::time::Instant::now();
                 let detected_total = initial_total;
                 let mut pid_seen = false;
+                let mut warmup_done = false;
 
-                while start.elapsed().as_secs() < 35 {
+                while start.elapsed().as_secs() < 40 {
                     let pid = running_pid_monitor.load(Ordering::SeqCst);
                     if pid > 0 {
                         pid_seen = true;
@@ -1717,48 +1729,61 @@ impl LauncherApp {
                             let reader = BufReader::new(f);
                             for line in reader.lines().flatten() {
                                 // 1. Match "Pipeline warm-up: 2301 of 2302 pipelines in 1.60 s"
-                                if line.contains("Pipeline warm-up:") {
+                                if !warmup_done && line.contains("Pipeline warm-up:") {
+                                    warmup_done = true;
+                                    let mut cur = detected_total;
+                                    let mut tot = detected_total;
                                     if let Some(pos) = line.find("Pipeline warm-up:") {
                                         let sub = line[pos + 17..].trim();
                                         let parts: Vec<&str> = sub.split_whitespace().collect();
                                         if parts.len() >= 3 && parts[1] == "of" {
-                                            if let (Ok(cur), Ok(tot)) = (parts[0].parse::<u32>(), parts[2].parse::<u32>()) {
-                                                if tot > 0 {
-                                                    let _ = progress_tx.send(ShaderProgressMsg {
-                                                        current: cur,
-                                                        total: tot,
-                                                        progress: 1.0,
-                                                        is_complete: true,
-                                                    });
-                                                    return;
+                                            if let (Ok(c), Ok(t)) = (parts[0].parse::<u32>(), parts[2].parse::<u32>()) {
+                                                if t > 0 {
+                                                    cur = c;
+                                                    tot = t;
                                                 }
                                             }
                                         }
                                     }
                                     let _ = progress_tx.send(ShaderProgressMsg {
+                                        current: cur,
+                                        total: tot,
+                                        progress: 1.0,
+                                        is_complete: true,
+                                        game_window_ready: false,
+                                    });
+                                } else if !warmup_done
+                                    && (line.contains("pipelines in")
+                                        || line.contains("Preloaded")
+                                        || line.contains("Pipeline binary cache:")
+                                        || line.contains("Swapchain: VSync")
+                                        || line.contains("Vulkan presenter ready")
+                                        || line.contains("vblank")
+                                        || line.contains("Overlay: menu ready"))
+                                {
+                                    warmup_done = true;
+                                    let _ = progress_tx.send(ShaderProgressMsg {
                                         current: detected_total,
                                         total: detected_total,
                                         progress: 1.0,
                                         is_complete: true,
+                                        game_window_ready: false,
                                     });
-                                    return;
                                 }
 
-                                // 2. Match general warm-up / preload completion markers
-                                if line.contains("pipelines in")
-                                    || line.contains("Preloaded")
-                                    || line.contains("Pipeline binary cache:")
-                                    || line.contains("Swapchain: VSync")
-                                    || line.contains("Vulkan presenter ready")
-                                    || line.contains("vblank")
-                                    || line.contains("USERDATA' mounted")
-                                    || line.contains("Overlay: menu ready")
+                                // 2. Game is completely open: guest x86-64 code entered or WAD stats / _init_env
+                                if warmup_done
+                                    && (line.contains("Entering original x86-64 code")
+                                        || line.contains("_init_env returned")
+                                        || line.contains("WAD_STATS:")
+                                        || line.contains("Runtime: direct allocation"))
                                 {
                                     let _ = progress_tx.send(ShaderProgressMsg {
                                         current: detected_total,
                                         total: detected_total,
                                         progress: 1.0,
                                         is_complete: true,
+                                        game_window_ready: true,
                                     });
                                     return;
                                 }
@@ -1797,8 +1822,8 @@ impl LauncherApp {
     }
 
     fn render_shader_loading_screen(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
-        let (progress, current_shaders, total_shaders) = if let Some(ref sl) = self.shader_loading {
-            (sl.progress.clamp(0.0, 1.0), sl.current_shaders, sl.total_shaders)
+        let (progress, current_shaders, total_shaders, phase) = if let Some(ref sl) = self.shader_loading {
+            (sl.progress.clamp(0.0, 1.0), sl.current_shaders, sl.total_shaders, sl.phase)
         } else {
             return;
         };
@@ -1806,6 +1831,77 @@ impl LauncherApp {
         let screen_rect = ui.max_rect();
         let painter = ui.painter();
         let time = ctx.input(|i| i.time);
+
+        // --- MODE B: PS4 SPLASH MODE (pic1.png animation until game window opens) ---
+        if !self.config.show_shader_compile_rage_meter {
+            painter.rect_filled(screen_rect, 0.0, egui::Color32::from_rgb(5, 5, 8));
+
+            if let Some(ref bg_tex) = self.bg_texture {
+                let elapsed = if let Some(ref sl) = self.shader_loading {
+                    sl.start_time.elapsed().as_secs_f32()
+                } else {
+                    1.0
+                };
+                let alpha = (elapsed * 2.2).min(1.0);
+                let pulse = ((time * 0.9).sin() * 0.006) as f32; // subtle breathing
+                let center = screen_rect.center();
+                let zoomed_size = screen_rect.size() * (1.0 + pulse);
+                let draw_rect = egui::Rect::from_center_size(center, zoomed_size);
+
+                painter.image(
+                    bg_tex.id(),
+                    draw_rect,
+                    egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)),
+                    egui::Color32::from_white_alpha((alpha * 255.0) as u8),
+                );
+            }
+
+            // Subtle dark vignette at edges
+            painter.rect_filled(
+                screen_rect,
+                0.0,
+                egui::Color32::from_rgba_unmultiplied(0, 0, 0, 30),
+            );
+
+            // Force quit button at bottom in PS4 mode as well (unobtrusive)
+            let scale = if screen_rect.height() > 800.0 {
+                (screen_rect.height() / 720.0).clamp(1.0, 1.8)
+            } else {
+                1.0
+            };
+            let center = screen_rect.center();
+            let quit_rect = egui::Rect::from_center_size(
+                egui::pos2(center.x, screen_rect.max.y - 45.0 * scale.min(1.2)),
+                egui::vec2(160.0 * scale.min(1.2), 36.0 * scale.min(1.2)),
+            );
+            let quit_response = ui.put(
+                quit_rect,
+                egui::Button::new(
+                    egui::RichText::new(self.t("force_quit_btn"))
+                        .size(13.0 * scale.min(1.1))
+                        .color(egui::Color32::from_rgb(220, 195, 195)),
+                )
+                .fill(egui::Color32::from_rgba_unmultiplied(30, 16, 18, 200))
+                .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(160, 45, 45, 140)))
+                .corner_radius(egui::CornerRadius::same(6)),
+            );
+            if quit_response.hovered() {
+                ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+            }
+            if quit_response.clicked() {
+                self.force_quit_game(Some(ctx));
+            }
+            return;
+        }
+
+        // --- MODE A: SPARTAN RAGE COMPILATION BAR ---
+
+        // If compilation is complete and we are waiting for the game window:
+        // Hold pure black screen (as requested: "derleme bittikten sonra siyah ekranda beklesin")!
+        if phase == ShaderLoadingPhase::WaitingForGameWindow {
+            painter.rect_filled(screen_rect, 0.0, egui::Color32::BLACK);
+            return;
+        }
 
         // 1. Cinematic dark background with subtle vignette
         painter.rect_filled(screen_rect, 0.0, egui::Color32::from_rgb(12, 10, 15));
@@ -3744,8 +3840,20 @@ impl LauncherApp {
             });
             ui.label(egui::RichText::new(self.t("launch_while_compiling_shaders_desc")).color(egui::Color32::LIGHT_GRAY).size(11.0));
 
+            ui.add_space(10.0);
+
+            // 4. SHOW SHADER COMPILE RAGE METER TOGGLE
+            ui.horizontal(|ui| {
+                toggle_switch(ui, &mut self.config.show_shader_compile_rage_meter);
+                let lbl = self.t("show_shader_rage_meter");
+                if ui.add(egui::Label::new(egui::RichText::new(lbl).strong()).sense(egui::Sense::click())).clicked() {
+                    self.config.show_shader_compile_rage_meter = !self.config.show_shader_compile_rage_meter;
+                }
+            });
+            ui.label(egui::RichText::new(self.t("show_shader_rage_meter_desc")).color(egui::Color32::LIGHT_GRAY).size(11.0));
+
             ui.add_space(14.0);
-            // SPARTAN RAGE LOADING SCREEN PREVIEW INFO
+            // SHADER SCREEN PREVIEW INFO
             egui::Frame::new()
                 .fill(egui::Color32::from_rgba_unmultiplied(20, 22, 32, 200))
                 .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(235, 175, 75, 80)))
@@ -3753,23 +3861,43 @@ impl LauncherApp {
                 .inner_margin(egui::Margin::symmetric(12, 10))
                 .show(ui, |ui| {
                     ui.horizontal(|ui| {
-                        if let Some(ref rage_icon) = self.rage_full_texture {
-                            ui.add(egui::Image::new(rage_icon).max_height(48.0));
-                            ui.add_space(10.0);
+                        if self.config.show_shader_compile_rage_meter {
+                            if let Some(ref rage_icon) = self.rage_full_texture {
+                                ui.add(egui::Image::new(rage_icon).max_height(48.0));
+                                ui.add_space(10.0);
+                            }
+                            ui.vertical(|ui| {
+                                ui.label(
+                                    egui::RichText::new("⚔️ Spartan Rage Shader Yükleme Ekranı (Aktif)")
+                                        .size(13.0)
+                                        .color(egui::Color32::from_rgb(255, 215, 120))
+                                        .strong(),
+                                );
+                                ui.label(
+                                    egui::RichText::new("Oyun başlatılırken shader'lar önceden derlenir ve God of War III Spartan Rage barı yukarı doğru dolar. Derleme %100 bittiğinde oyun penceresi açılana kadar siyah ekranda bekler.")
+                                        .size(11.0)
+                                        .color(egui::Color32::from_rgb(200, 205, 220)),
+                                );
+                            });
+                        } else {
+                            if let Some(ref bg_icon) = self.bg_texture {
+                                ui.add(egui::Image::new(bg_icon).max_height(48.0));
+                                ui.add_space(10.0);
+                            }
+                            ui.vertical(|ui| {
+                                ui.label(
+                                    egui::RichText::new("🎮 PS4 Konsol Tarzı Açılış Ekranı (pic1.png)")
+                                        .size(13.0)
+                                        .color(egui::Color32::from_rgb(130, 205, 255))
+                                        .strong(),
+                                );
+                                ui.label(
+                                    egui::RichText::new("Shader derleme barları ve sayaçlar gizlenir. Oyun penceresi açılana kadar ekranda tam ekran nefes alan animasyonlu PS4 resmi (pic1.png) görüntülenir.")
+                                        .size(11.0)
+                                        .color(egui::Color32::from_rgb(200, 205, 220)),
+                                );
+                            });
                         }
-                        ui.vertical(|ui| {
-                            ui.label(
-                                egui::RichText::new("⚔️ Spartan Rage Shader Yükleme Ekranı")
-                                    .size(13.0)
-                                    .color(egui::Color32::from_rgb(255, 215, 120))
-                                    .strong(),
-                            );
-                            ui.label(
-                                egui::RichText::new("Oyun başlatılırken shader'lar önceden derlenir ve God of War III Spartan Rage barı yukarı doğru dolarak %100 olduğunda oyun başlar.")
-                                    .size(11.0)
-                                    .color(egui::Color32::from_rgb(200, 205, 220)),
-                            );
-                        });
                     });
                 });
 
@@ -4020,6 +4148,8 @@ impl eframe::App for LauncherApp {
         if let Some(ref mut sl) = self.shader_loading {
             ctx.request_repaint();
 
+            let mut game_ready = false;
+
             // Poll progress updates from monitor thread
             while let Ok(msg) = sl.rx.try_recv() {
                 if msg.total > 0 {
@@ -4037,6 +4167,9 @@ impl eframe::App for LauncherApp {
                     if sl.completed_at.is_none() {
                         sl.completed_at = Some(std::time::Instant::now());
                     }
+                }
+                if msg.game_window_ready {
+                    game_ready = true;
                 }
             }
 
@@ -4071,18 +4204,27 @@ impl eframe::App for LauncherApp {
                 sl.current_shaders = sl.current_shaders.max(cur_count).min(sl.total_shaders);
             }
 
-            if sl.progress >= 0.995 {
+            // Transition from Compiling to WaitingForGameWindow
+            if sl.phase == ShaderLoadingPhase::Compiling && (sl.progress >= 0.995 || sl.is_complete) {
                 sl.progress = 1.0;
                 sl.current_shaders = sl.total_shaders;
+                sl.phase = ShaderLoadingPhase::WaitingForGameWindow;
+                sl.phase_changed_at = Some(std::time::Instant::now());
                 if sl.completed_at.is_none() {
                     sl.completed_at = Some(std::time::Instant::now());
                 }
-                if let Some(done_time) = sl.completed_at {
-                    if done_time.elapsed().as_millis() > 500 {
-                        ctx.send_viewport_cmd(egui::ViewportCommand::WindowLevel(egui::WindowLevel::Normal));
-                        ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(false));
-                        self.shader_loading = None;
-                    }
+                // Drop AlwaysOnTop to Normal so the SDL2 game window can focus in front
+                ctx.send_viewport_cmd(egui::ViewportCommand::WindowLevel(egui::WindowLevel::Normal));
+            }
+
+            // Check if game window is ready to dismiss loading screen
+            if sl.phase == ShaderLoadingPhase::WaitingForGameWindow {
+                let time_in_wait = sl.phase_changed_at.map(|t| t.elapsed().as_millis()).unwrap_or(0);
+                // Minimum wait 400ms to avoid any blink, dismiss if game reported ready or after 2.8s fallback
+                if (game_ready && time_in_wait >= 400) || time_in_wait >= 2800 {
+                    ctx.send_viewport_cmd(egui::ViewportCommand::WindowLevel(egui::WindowLevel::Normal));
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(false));
+                    self.shader_loading = None;
                 }
             }
 

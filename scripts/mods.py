@@ -29,25 +29,30 @@ def content_root(folder):
     """(root, prefix): where a mod's files are and the game path they go to, or None.
 
     Accepted layouts: <mod>/dvdroot_ps4, <mod>/app0/dvdroot_ps4, <mod>/EXEC,
-    <mod>/app0/EXEC and one wrapper folder around either."""
+    <mod>/Game/EXEC, XML patches, and wrapper folders around them."""
     folder = Path(folder)
     if not folder.is_dir():
         return None
-    for wrapper in ('', 'app0'):
-        base = child(folder, wrapper) if wrapper else folder
-        if not base.is_dir():
-            continue
-        dvdroot = child(base, 'dvdroot_ps4')
-        if dvdroot.is_dir():
-            return base, ''
-        for d in KNOWN_GOW3_DIRS:
-            if child(base, d).is_dir():
-                return base, ''
-    entries = [e for e in folder.iterdir() if not e.name.startswith('.')]
-    folders = [e for e in entries if e.is_dir()]
-    if len(folders) == 1 and not [e for e in entries if e.is_file() and
-                                  e.suffix.casefold() not in ('.txt', '.md', '.jpg', '.png', '.ini', '.json')]:
-        return content_root(folders[0])
+    if folder.name.casefold() in ('gow3-windows', 'gow3-linux') or (folder / 'run.py').is_file():
+        return None
+
+    candidates = [folder]
+    for _ in range(3):
+        next_candidates = []
+        for cand in candidates:
+            if not cand.is_dir():
+                continue
+            if child(cand, 'dvdroot_ps4').is_dir():
+                return cand, ''
+            for d in KNOWN_GOW3_DIRS:
+                if child(cand, d).is_dir():
+                    return cand, ''
+            if list(cand.glob('*.xml')) or child(cand, 'patches').is_dir():
+                return cand, ''
+            for sub in cand.iterdir():
+                if sub.is_dir() and not sub.name.startswith('.'):
+                    next_candidates.append(sub)
+        candidates = next_candidates
     return None
 
 
@@ -81,6 +86,8 @@ def mod_files(folder):
     """(game path, source) of every file a mod replaces or adds under the game root."""
     layout = content_root(folder)
     if not layout:
+        if list(Path(folder).rglob('*.xml')):
+            return
         raise ValueError(f'{folder}: expected EXEC/ or dvdroot_ps4/ inside the mod folder')
     root, prefix = layout
     root = root.resolve()
@@ -96,9 +103,13 @@ def mod_files(folder):
             if len(relative.parts) == 1:
                 if source.suffix.casefold() in ('.txt', '.md', '.json', '.jpg', '.png', '.ini'):
                     continue
-            # Strip packaging wrapper prefixes (app0, dvdroot_ps4) so files align with the game root
-            while len(relative.parts) > 1 and relative.parts[0].casefold() in ('app0', 'dvdroot_ps4'):
+            # Strip packaging wrapper prefixes (app0, dvdroot_ps4, game) so files align with the game root
+            while len(relative.parts) > 1 and relative.parts[0].casefold() in ('app0', 'dvdroot_ps4', 'game'):
                 relative = Path(*relative.parts[1:])
+
+            # Skip patch XML files in mod folder (handled by patches.py)
+            if source.suffix.casefold() == '.xml':
+                continue
 
             if relative.parts[0].casefold() in ('eboot.bin', 'sce_module', 'sce_sys'):
                 if relative.parts[0].casefold() in ('eboot.bin', 'sce_module'):

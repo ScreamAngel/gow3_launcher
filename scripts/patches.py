@@ -134,7 +134,7 @@ def external_patches(directory, app_version, exclude, ids):
     key is "<file name>/<patch name>" (the launcher's selection, patches.json)."""
     found=[]
     directory=Path(directory)
-    for path in sorted(directory.glob('*.xml')) if directory.is_dir() else []:
+    for path in sorted(directory.rglob('*.xml')) if directory.is_dir() else []:
         if path.resolve()==Path(exclude).resolve(): continue  # the built-in file (patches/ in a checkout)
         try:
             root=ET.parse(path).getroot()
@@ -144,7 +144,7 @@ def external_patches(directory, app_version, exclude, ids):
         file_ids={e.text.strip() for e in root.iter('ID') if e.text}
         if file_ids and not file_ids&ids: continue
         for meta in root.iter('Metadata'):
-            if meta.get('AppVer')==app_version and meta.get('AppElf','eboot.bin')=='eboot.bin':
+            if (meta.get('AppVer')==app_version or meta.get('AppVer') in ('01.00', '01.02')) and meta.get('AppElf','eboot.bin')=='eboot.bin':
                 found.append((f'{path.name}/{meta.get("Name")}',path,meta))
     return found
 

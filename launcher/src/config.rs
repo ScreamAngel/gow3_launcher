@@ -241,6 +241,8 @@ pub struct LauncherConfig {
     #[serde(default)]
     pub launch_while_compiling_shaders: bool,
     #[serde(default = "default_true")]
+    pub show_shader_compile_rage_meter: bool,
+    #[serde(default = "default_true")]
     pub skip_cinematics: bool,
     #[serde(default = "default_true")]
     pub use_gamemode: bool,
@@ -338,6 +340,7 @@ impl Default for LauncherConfig {
             patch_readbacks: true,
             async_readbacks: true,
             launch_while_compiling_shaders: false,
+            show_shader_compile_rage_meter: true,
             skip_cinematics: true,
             use_gamemode: true,
             vram_gc_budget_mb: default_vram_budget(),
@@ -842,5 +845,19 @@ mod tests {
         assert_eq!(p2.pad_down, "down");
         assert_eq!(p2.pad_left, "left");
         assert_eq!(p2.pad_right, "right");
+    }
+
+    #[test]
+    fn test_shader_rage_meter_config() {
+        let default_cfg = LauncherConfig::default();
+        assert!(default_cfg.show_shader_compile_rage_meter);
+
+        let json = r#"{"show_shader_compile_rage_meter": false}"#;
+        let deserialized: LauncherConfig = serde_json::from_str(json).unwrap();
+        assert!(!deserialized.show_shader_compile_rage_meter);
+
+        let empty_json = r#"{}"#;
+        let deserialized_empty: LauncherConfig = serde_json::from_str(empty_json).unwrap();
+        assert!(deserialized_empty.show_shader_compile_rage_meter);
     }
 }

@@ -53,7 +53,11 @@ pub fn scan_installed_mods(base_dir: &Path, disabled_mods: &[String]) -> Vec<Ins
                 continue;
             }
             let folder_name = entry.file_name().to_string_lossy().to_string();
-            if folder_name.starts_with('.') {
+            if folder_name.starts_with('.')
+                || folder_name.eq_ignore_ascii_case("gow3-windows")
+                || folder_name.eq_ignore_ascii_case("gow3-linux")
+                || path.join("run.py").is_file()
+            {
                 continue;
             }
 

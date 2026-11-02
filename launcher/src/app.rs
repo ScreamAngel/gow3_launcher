@@ -1216,6 +1216,7 @@ pub struct ShaderProgressMsg {
     pub total: u32,
     pub progress: f32,
     pub is_complete: bool,
+    #[allow(dead_code)]
     pub game_window_ready: bool,
 }
 
@@ -1228,6 +1229,7 @@ pub struct ShaderLoadingState {
     pub is_complete: bool,
     pub completed_at: Option<std::time::Instant>,
     pub phase_changed_at: Option<std::time::Instant>,
+    #[allow(dead_code)]
     pub game_ready_at: Option<std::time::Instant>,
     pub start_time: std::time::Instant,
     pub rx: Receiver<ShaderProgressMsg>,
@@ -4191,9 +4193,11 @@ impl eframe::App for LauncherApp {
 
         // --- 7. SHADER LOADING SCREEN PROGRESS & ANIMATION ---
         if let Some(ref mut sl) = self.shader_loading {
-            ctx.request_repaint();
-
-            let mut game_ready = false;
+            if sl.phase == ShaderLoadingPhase::Compiling {
+                ctx.request_repaint();
+            } else {
+                ctx.request_repaint_after(std::time::Duration::from_millis(500));
+            }
 
             // Poll progress updates from monitor thread
             while let Ok(msg) = sl.rx.try_recv() {
@@ -4211,12 +4215,6 @@ impl eframe::App for LauncherApp {
                     sl.target_progress = 1.0;
                     if sl.completed_at.is_none() {
                         sl.completed_at = Some(std::time::Instant::now());
-                    }
-                }
-                if msg.game_window_ready {
-                    game_ready = true;
-                    if sl.game_ready_at.is_none() {
-                        sl.game_ready_at = Some(std::time::Instant::now());
                     }
                 }
             }
@@ -4265,30 +4263,9 @@ impl eframe::App for LauncherApp {
                 ctx.send_viewport_cmd(egui::ViewportCommand::WindowLevel(egui::WindowLevel::Normal));
             }
 
-            // Check if game window is ready to dismiss loading screen
-            if sl.phase == ShaderLoadingPhase::WaitingForGameWindow {
-                if game_ready && sl.game_ready_at.is_none() {
-                    sl.game_ready_at = Some(std::time::Instant::now());
-                }
-
-                let time_in_wait = sl.phase_changed_at.map(|t| t.elapsed().as_millis()).unwrap_or(0);
-                let ready_elapsed = sl.game_ready_at.map(|t| t.elapsed().as_millis());
-
-                // Hold screen until the Sony intro video is visibly rendering on screen!
-                // Once game_ready is received (Sony intro starts), hold for 800ms so the Sony logo
-                // is visibly drawn and active on screen, then cleanly dismiss the loading overlay.
-                // Safety fallback timeout: 60 seconds (prevents hanging indefinitely if log is silenced).
-                let should_dismiss = match ready_elapsed {
-                    Some(ms) => ms >= 800,
-                    None => time_in_wait >= 60_000,
-                };
-
-                if should_dismiss {
-                    ctx.send_viewport_cmd(egui::ViewportCommand::WindowLevel(egui::WindowLevel::Normal));
-                    ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(false));
-                    self.shader_loading = None;
-                }
-            }
+            // Shader derleme ekranı kapanmaz, arkaplanda açık kalmaya devam eder (asla çökmüş gibi hissettirmez).
+            // Derleme bittiği için sistem zorlanmaz (500ms repaint).
+            // Oyun kapandığında veya çöktüğünde game_exit_rx otomatik olarak launcher ekranını normale döndürür.
 
             // Safety: allow user to press Escape to dismiss shader loading screen early
             if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {

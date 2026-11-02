@@ -1225,97 +1225,102 @@ impl LauncherApp {
         let (tx, rx) = channel();
         self.game_exit_rx = Some(rx);
 
-        // Switch to fullscreen & keep on top during shader compilation so it seamlessly covers the screen
-        ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(true));
-        ctx.send_viewport_cmd(egui::ViewportCommand::WindowLevel(egui::WindowLevel::AlwaysOnTop));
+        if self.config.launch_while_compiling_shaders {
+            // "Shader'lar derlenirken oyun açılsın": Fast launch immediately while compiling in the background
+            self.shader_loading = None;
+        } else {
+            // Pre-warm all shaders to 100% with the full Spartan Rage bar before game window is displayed
+            ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(true));
+            ctx.send_viewport_cmd(egui::ViewportCommand::WindowLevel(egui::WindowLevel::AlwaysOnTop));
 
-        // Initialize God of War III Shader Loading Screen
-        let (progress_tx, progress_rx) = channel();
-        self.shader_loading = Some(ShaderLoadingState {
-            progress: 0.0,
-            target_progress: 0.05,
-            current_shaders: 0,
-            total_shaders: 0,
-            is_complete: false,
-            completed_at: None,
-            start_time: std::time::Instant::now(),
-            rx: progress_rx,
-        });
+            // Initialize God of War III Shader Loading Screen
+            let (progress_tx, progress_rx) = channel();
+            self.shader_loading = Some(ShaderLoadingState {
+                progress: 0.0,
+                target_progress: 0.05,
+                current_shaders: 0,
+                total_shaders: 0,
+                is_complete: false,
+                completed_at: None,
+                start_time: std::time::Instant::now(),
+                rx: progress_rx,
+            });
 
-        // Spawn background log monitor to track shader warm-up progress in real time
-        let base_dir_monitor = self.base_dir.clone();
-        let running_pid_monitor = self.running_pid.clone();
-        thread::spawn(move || {
-            let log_path = base_dir_monitor.join("gow3_log.txt");
-            let mut last_pos: u64 = 0;
-            if let Ok(meta) = std::fs::metadata(&log_path) {
-                last_pos = meta.len();
-            }
-
-            let start = std::time::Instant::now();
-            let mut detected_total = 0u32;
-
-            while start.elapsed().as_secs() < 45 {
-                // If game process stopped, exit monitor
-                if start.elapsed().as_millis() > 2000 && running_pid_monitor.load(Ordering::SeqCst) == 0 {
-                    break;
+            // Spawn background log monitor to track shader warm-up progress in real time
+            let base_dir_monitor = self.base_dir.clone();
+            let running_pid_monitor = self.running_pid.clone();
+            thread::spawn(move || {
+                let log_path = base_dir_monitor.join("gow3_log.txt");
+                let mut last_pos: u64 = 0;
+                if let Ok(meta) = std::fs::metadata(&log_path) {
+                    last_pos = meta.len();
                 }
 
-                if let Ok(mut f) = std::fs::File::open(&log_path) {
-                    use std::io::{BufRead, BufReader, Seek, SeekFrom};
-                    if f.seek(SeekFrom::Start(last_pos)).is_ok() {
-                        let reader = BufReader::new(f);
-                        for line in reader.lines().flatten() {
-                            // Match "done 1478/2063" in warm-up progress
-                            if line.contains("Warm-up progress:") {
-                                if let Some(done_idx) = line.find("done ") {
-                                    let sub = &line[done_idx + 5..];
-                                    if let Some(slash_idx) = sub.find('/') {
-                                        let cur_str = &sub[..slash_idx];
-                                        let rest = &sub[slash_idx + 1..];
-                                        let end_idx = rest.find(|c: char| !c.is_ascii_digit()).unwrap_or(rest.len());
-                                        let tot_str = &rest[..end_idx];
+                let start = std::time::Instant::now();
+                let mut detected_total = 0u32;
 
-                                        if let (Ok(cur), Ok(tot)) = (cur_str.trim().parse::<u32>(), tot_str.trim().parse::<u32>()) {
-                                            if tot > 0 {
-                                                detected_total = tot;
-                                                let p = (cur as f32 / tot as f32).clamp(0.0, 1.0);
-                                                let _ = progress_tx.send(ShaderProgressMsg {
-                                                    current: cur,
-                                                    total: tot,
-                                                    progress: p,
-                                                    is_complete: cur >= tot,
-                                                });
+                while start.elapsed().as_secs() < 45 {
+                    // If game process stopped, exit monitor
+                    if start.elapsed().as_millis() > 2000 && running_pid_monitor.load(Ordering::SeqCst) == 0 {
+                        break;
+                    }
+
+                    if let Ok(mut f) = std::fs::File::open(&log_path) {
+                        use std::io::{BufRead, BufReader, Seek, SeekFrom};
+                        if f.seek(SeekFrom::Start(last_pos)).is_ok() {
+                            let reader = BufReader::new(f);
+                            for line in reader.lines().flatten() {
+                                // Match "done 1478/2063" in warm-up progress
+                                if line.contains("Warm-up progress:") {
+                                    if let Some(done_idx) = line.find("done ") {
+                                        let sub = &line[done_idx + 5..];
+                                        if let Some(slash_idx) = sub.find('/') {
+                                            let cur_str = &sub[..slash_idx];
+                                            let rest = &sub[slash_idx + 1..];
+                                            let end_idx = rest.find(|c: char| !c.is_ascii_digit()).unwrap_or(rest.len());
+                                            let tot_str = &rest[..end_idx];
+
+                                            if let (Ok(cur), Ok(tot)) = (cur_str.trim().parse::<u32>(), tot_str.trim().parse::<u32>()) {
+                                                if tot > 0 {
+                                                    detected_total = tot;
+                                                    let p = (cur as f32 / tot as f32).clamp(0.0, 1.0);
+                                                    let _ = progress_tx.send(ShaderProgressMsg {
+                                                        current: cur,
+                                                        total: tot,
+                                                        progress: p,
+                                                        is_complete: cur >= tot,
+                                                    });
+                                                }
                                             }
                                         }
                                     }
+                                } else if line.contains("Pipeline warm-up:") && (line.contains("pipelines in") || line.contains("Preloaded")) {
+                                    let _ = progress_tx.send(ShaderProgressMsg {
+                                        current: detected_total,
+                                        total: detected_total,
+                                        progress: 1.0,
+                                        is_complete: true,
+                                    });
+                                    return;
+                                } else if line.contains("Vulkan presenter ready") || line.contains("vblank") || line.contains("USERDATA' mounted") {
+                                    let _ = progress_tx.send(ShaderProgressMsg {
+                                        current: detected_total,
+                                        total: detected_total,
+                                        progress: 1.0,
+                                        is_complete: true,
+                                    });
+                                    return;
                                 }
-                            } else if line.contains("Pipeline warm-up:") && (line.contains("pipelines in") || line.contains("Preloaded")) {
-                                let _ = progress_tx.send(ShaderProgressMsg {
-                                    current: detected_total,
-                                    total: detected_total,
-                                    progress: 1.0,
-                                    is_complete: true,
-                                });
-                                return;
-                            } else if line.contains("Vulkan presenter ready") || line.contains("vblank") || line.contains("USERDATA' mounted") {
-                                let _ = progress_tx.send(ShaderProgressMsg {
-                                    current: detected_total,
-                                    total: detected_total,
-                                    progress: 1.0,
-                                    is_complete: true,
-                                });
-                                return;
+                            }
+                            if let Ok(new_meta) = std::fs::metadata(&log_path) {
+                                last_pos = new_meta.len();
                             }
                         }
-                        if let Ok(new_meta) = std::fs::metadata(&log_path) {
-                            last_pos = new_meta.len();
-                        }
                     }
+                    thread::sleep(std::time::Duration::from_millis(40));
                 }
-                thread::sleep(std::time::Duration::from_millis(40));
-            }
-        });
+            });
+        }
 
         let base_dir_clone = self.base_dir.clone();
         let config_clone = self.config.clone();
@@ -2836,6 +2841,19 @@ impl eframe::App for LauncherApp {
                         }
                     });
                     ui.label(egui::RichText::new(async_readback_desc).color(egui::Color32::LIGHT_GRAY).size(11.0));
+
+                    ui.add_space(8.0);
+
+                    // --- 7b. SHADER DERLEME & AÇILMA MODU ---
+                    let launch_shaders_label = self.t("launch_while_compiling_shaders");
+                    let launch_shaders_desc = self.t("launch_while_compiling_shaders_desc");
+                    ui.horizontal(|ui| {
+                        toggle_switch(ui, &mut self.config.launch_while_compiling_shaders);
+                        if ui.add(egui::Label::new(egui::RichText::new(launch_shaders_label).strong()).sense(egui::Sense::click())).clicked() {
+                            self.config.launch_while_compiling_shaders = !self.config.launch_while_compiling_shaders;
+                        }
+                    });
+                    ui.label(egui::RichText::new(launch_shaders_desc).color(egui::Color32::LIGHT_GRAY).size(11.0));
 
                     ui.add_space(8.0);
 

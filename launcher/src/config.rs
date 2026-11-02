@@ -238,6 +238,8 @@ pub struct LauncherConfig {
     pub patch_readbacks: bool,
     #[serde(default = "default_true")]
     pub async_readbacks: bool,
+    #[serde(default)]
+    pub launch_while_compiling_shaders: bool,
     #[serde(default = "default_true")]
     pub skip_cinematics: bool,
     #[serde(default = "default_true")]
@@ -331,6 +333,7 @@ impl Default for LauncherConfig {
             patch_delta_time: true,
             patch_readbacks: true,
             async_readbacks: true,
+            launch_while_compiling_shaders: false,
             skip_cinematics: true,
             use_gamemode: true,
             vram_gc_budget_mb: default_vram_budget(),

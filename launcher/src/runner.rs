@@ -1225,8 +1225,15 @@ pub fn launch_gow3(
     cmd.env("GOW3_PIPELINE_CACHE", "1");
     cmd.env("GOW3_PIPELINE_BINARIES", "1");
     cmd.env("GOW3_PARALLEL_WARMUP", "1");
-    // Pre-warm all Vulkan pipelines before gameplay starts to completely eliminate shader stutter
-    cmd.env("GOW3_BACKGROUND_WARMUP", "0");
+    if config.launch_while_compiling_shaders {
+        // Fast launch: Start game immediately, warm up shaders in background
+        cmd.env("GOW3_BACKGROUND_WARMUP", "1");
+        cmd.env("GOW3_WAIT_WARMUP", "0");
+    } else {
+        // Pre-warm all Vulkan pipelines before gameplay starts to completely eliminate shader stutter
+        cmd.env("GOW3_BACKGROUND_WARMUP", "0");
+        cmd.env("GOW3_WAIT_WARMUP", "1");
+    }
 
     // Clear experimental variables that cause shader corruption or texture explosions
     cmd.env_remove("GOW3_STAGING_KEEP_MB");

@@ -41,6 +41,9 @@ typedef SDL_Cursor* (*RealSDL_CreateColorCursor)(SDL_Surface *surface, int hot_x
 typedef bool (*RealSDL_SetCursor)(SDL_Cursor *cursor);
 typedef SDL_Window* (*RealSDL_CreateWindowWithProperties)(SDL_PropertiesID props);
 typedef SDL_Window* (*RealSDL_CreateWindow)(const char *title, int w, int h, SDL_WindowFlags flags);
+typedef bool (*RealSDL_ShowWindow)(SDL_Window *window);
+typedef bool (*RealSDL_HideWindow)(SDL_Window *window);
+typedef bool (*RealSDL_RaiseWindow)(SDL_Window *window);
 
 static RealSDL_GetKeyboardState real_GetKeyboardState = NULL;
 static RealSDL_GetMouseState real_GetMouseState = NULL;
@@ -58,8 +61,14 @@ static RealSDL_CreateColorCursor real_CreateColorCursor = NULL;
 static RealSDL_SetCursor real_SetCursor = NULL;
 static RealSDL_CreateWindowWithProperties real_CreateWindowWithProperties = NULL;
 static RealSDL_CreateWindow real_CreateWindow = NULL;
+static RealSDL_ShowWindow real_ShowWindow = NULL;
+static RealSDL_HideWindow real_HideWindow = NULL;
+static RealSDL_RaiseWindow real_RaiseWindow = NULL;
 
 static int hide_cursor_enabled = -1;
+static int wait_warmup_enabled = -1;
+static volatile bool warmup_done = false;
+static SDL_Window* tracked_game_window = NULL;
 static volatile uint32_t tracked_mouse_buttons = 0;
 static volatile uint32_t latched_mouse_buttons = 0;
 static volatile int is_window_focused = 1;
@@ -112,6 +121,9 @@ static void init_symbols(void) {
             real_SetCursor = (RealSDL_SetCursor)GetProcAddress(h, "SDL_SetCursor");
             real_CreateWindowWithProperties = (RealSDL_CreateWindowWithProperties)GetProcAddress(h, "SDL_CreateWindowWithProperties");
             real_CreateWindow = (RealSDL_CreateWindow)GetProcAddress(h, "SDL_CreateWindow");
+            real_ShowWindow = (RealSDL_ShowWindow)GetProcAddress(h, "SDL_ShowWindow");
+            real_HideWindow = (RealSDL_HideWindow)GetProcAddress(h, "SDL_HideWindow");
+            real_RaiseWindow = (RealSDL_RaiseWindow)GetProcAddress(h, "SDL_RaiseWindow");
         }
 #else
         real_GetKeyboardState = (RealSDL_GetKeyboardState)dlsym(RTLD_NEXT, "SDL_GetKeyboardState");
@@ -135,6 +147,9 @@ static void init_symbols(void) {
                 real_SetCursor = (RealSDL_SetCursor)dlsym(h, "SDL_SetCursor");
                 real_CreateWindowWithProperties = (RealSDL_CreateWindowWithProperties)dlsym(h, "SDL_CreateWindowWithProperties");
                 real_CreateWindow = (RealSDL_CreateWindow)dlsym(h, "SDL_CreateWindow");
+                real_ShowWindow = (RealSDL_ShowWindow)dlsym(h, "SDL_ShowWindow");
+                real_HideWindow = (RealSDL_HideWindow)dlsym(h, "SDL_HideWindow");
+                real_RaiseWindow = (RealSDL_RaiseWindow)dlsym(h, "SDL_RaiseWindow");
             }
         } else {
             real_GetMouseState = (RealSDL_GetMouseState)dlsym(RTLD_NEXT, "SDL_GetMouseState");
@@ -152,6 +167,9 @@ static void init_symbols(void) {
             real_SetCursor = (RealSDL_SetCursor)dlsym(RTLD_NEXT, "SDL_SetCursor");
             real_CreateWindowWithProperties = (RealSDL_CreateWindowWithProperties)dlsym(RTLD_NEXT, "SDL_CreateWindowWithProperties");
             real_CreateWindow = (RealSDL_CreateWindow)dlsym(RTLD_NEXT, "SDL_CreateWindow");
+            real_ShowWindow = (RealSDL_ShowWindow)dlsym(RTLD_NEXT, "SDL_ShowWindow");
+            real_HideWindow = (RealSDL_HideWindow)dlsym(RTLD_NEXT, "SDL_HideWindow");
+            real_RaiseWindow = (RealSDL_RaiseWindow)dlsym(RTLD_NEXT, "SDL_RaiseWindow");
         }
 #endif
     }
@@ -159,6 +177,11 @@ static void init_symbols(void) {
     if (hide_cursor_enabled == -1) {
         const char *env = getenv("GOW3_HIDE_CURSOR");
         hide_cursor_enabled = (env && (env[0] == '1' || env[0] == 't' || env[0] == 'T')) ? 1 : 0;
+    }
+
+    if (wait_warmup_enabled == -1) {
+        const char *w_env = getenv("GOW3_WAIT_WARMUP");
+        wait_warmup_enabled = (w_env && (w_env[0] == '1' || w_env[0] == 't' || w_env[0] == 'T')) ? 1 : 0;
     }
 }
 
@@ -172,7 +195,13 @@ SDL_Window* SDL_CreateWindowWithProperties(SDL_PropertiesID props) {
         win = real_CreateWindowWithProperties(props);
     }
     if (win) {
+        tracked_game_window = win;
         apply_cursor_hidden();
+        if (wait_warmup_enabled && !warmup_done) {
+            if (real_HideWindow) {
+                real_HideWindow(win);
+            }
+        }
     }
     return win;
 }
@@ -187,9 +216,36 @@ SDL_Window* SDL_CreateWindow(const char *title, int w, int h, SDL_WindowFlags fl
         win = real_CreateWindow(title, w, h, flags);
     }
     if (win) {
+        tracked_game_window = win;
         apply_cursor_hidden();
+        if (wait_warmup_enabled && !warmup_done) {
+            if (real_HideWindow) {
+                real_HideWindow(win);
+            }
+        }
     }
     return win;
+}
+
+#ifdef _WIN32
+__declspec(dllexport)
+#endif
+bool SDL_ShowWindow(SDL_Window *window) {
+    init_symbols();
+    if (window) {
+        tracked_game_window = window;
+    }
+    if (wait_warmup_enabled && !warmup_done) {
+        // Keep window hidden until shader warmup is 100% complete
+        if (real_HideWindow && window) {
+            real_HideWindow(window);
+        }
+        return true;
+    }
+    if (real_ShowWindow && window) {
+        return real_ShowWindow(window);
+    }
+    return true;
 }
 
 #ifdef _WIN32
@@ -330,14 +386,24 @@ bool SDL_PollEvent(SDL_Event *event) {
 }
 
 // Override Gow3Overlay::SetLoading and ImGui::ProgressBar to completely eliminate
-// the engine's plain generic loading bar in fullscreen mode
+// the engine's plain generic loading bar in fullscreen mode, and reveal the window
+// once shader warmup is 100% complete.
 #ifdef _WIN32
 __declspec(dllexport)
 #endif
 void _ZN11Gow3Overlay10SetLoadingEbjj(bool is_loading, unsigned int current, unsigned int total) {
-    (void)is_loading;
-    (void)current;
-    (void)total;
+    init_symbols();
+    if (!is_loading || (total > 0 && current >= total)) {
+        warmup_done = true;
+        if (wait_warmup_enabled && tracked_game_window) {
+            if (real_ShowWindow) {
+                real_ShowWindow(tracked_game_window);
+            }
+            if (real_RaiseWindow) {
+                real_RaiseWindow(tracked_game_window);
+            }
+        }
+    }
 }
 
 #ifdef _WIN32

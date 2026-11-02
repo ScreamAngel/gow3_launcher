@@ -37,6 +37,8 @@ fn update_xml_patches(base_dir: &Path, target_hz: u32) -> Result<(), String> {
                     if (line.contains("Delta-Time")
                         || line.contains("120 FPS")
                         || line.contains("144 FPS")
+                        || line.contains("165 FPS")
+                        || line.contains("240 FPS")
                         || line.contains("60 FPS"))
                         && line.contains("value=\"")
                     {

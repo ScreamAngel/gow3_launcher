@@ -24,6 +24,7 @@ pub enum ViewMode {
 pub enum SettingsTab {
     #[default]
     Graphics,
+    SystemSpecs,
     GameLocation,
     Controls,
     Shaders,
@@ -654,6 +655,42 @@ fn render_settings_tab_btn(
     resp.clicked()
 }
 
+fn paint_turkish_flag(painter: &egui::Painter, rect: egui::Rect) {
+    // Red field
+    painter.rect_filled(rect, 2.0, egui::Color32::from_rgb(227, 10, 23));
+
+    let h = rect.height();
+    let cy = rect.center().y;
+
+    // Crescent (Hilal)
+    // Outer white circle
+    let c1_x = rect.left() + rect.width() * 0.38;
+    let r1 = h * 0.30;
+    painter.circle_filled(egui::pos2(c1_x, cy), r1, egui::Color32::WHITE);
+
+    // Inner red circle cutting the crescent
+    let c2_x = rect.left() + rect.width() * 0.44;
+    let r2 = h * 0.24;
+    painter.circle_filled(egui::pos2(c2_x, cy), r2, egui::Color32::from_rgb(227, 10, 23));
+
+    // Star (Yıldız) - 5-pointed star
+    let star_cx = rect.left() + rect.width() * 0.68;
+    let star_r_outer = h * 0.16;
+    let star_r_inner = star_r_outer * 0.42;
+
+    let mut star_points = Vec::with_capacity(10);
+    for i in 0..10 {
+        let angle = std::f32::consts::PI * (i as f32) / 5.0 - std::f32::consts::PI / 2.0;
+        let r = if i % 2 == 0 { star_r_outer } else { star_r_inner };
+        star_points.push(egui::pos2(star_cx + r * angle.cos(), cy + r * angle.sin()));
+    }
+    painter.add(egui::Shape::convex_polygon(
+        star_points,
+        egui::Color32::WHITE,
+        egui::Stroke::NONE,
+    ));
+}
+
 fn render_button_feedback(
     ui: &mut egui::Ui,
     id_source: &str,
@@ -662,7 +699,10 @@ fn render_button_feedback(
     is_danger: bool,
 ) -> egui::Response {
     let id = ui.make_persistent_id(id_source);
-    let (rect, resp) = ui.allocate_exact_size(min_size, egui::Sense::click());
+    let font_id = egui::FontId::proportional(12.0);
+    let galley = ui.painter().layout_no_wrap(text.to_string(), font_id.clone(), egui::Color32::WHITE);
+    let needed_w = (galley.rect.width() + 28.0).max(min_size.x);
+    let (rect, resp) = ui.allocate_exact_size(egui::vec2(needed_w, min_size.y), egui::Sense::click());
     let is_hovered = resp.hovered();
     let hov_anim = ui.ctx().animate_bool(id.with("hov"), is_hovered);
     if is_hovered {
@@ -1032,6 +1072,11 @@ pub struct LauncherApp {
     update_rx: Option<Receiver<Result<UpdateInfo, String>>>,
     update_modal: Option<UpdateInfo>,
 
+    // GitHub Release Notes
+    github_release_notes: Option<Vec<crate::updater::GithubReleaseNote>>,
+    is_fetching_release_notes: bool,
+    release_notes_rx: Option<Receiver<Result<Vec<crate::updater::GithubReleaseNote>, String>>>,
+
     // Game Running & Monitoring State
     is_game_running: bool,
     game_exit_rx: Option<Receiver<Result<i32, String>>>,
@@ -1159,6 +1204,9 @@ impl LauncherApp {
             has_new_update: false,
             update_rx: None,
             update_modal: None,
+            github_release_notes: None,
+            is_fetching_release_notes: false,
+            release_notes_rx: None,
             is_game_running: false,
             game_exit_rx: None,
             running_pid: Arc::new(AtomicU32::new(0)),
@@ -1431,6 +1479,20 @@ impl LauncherApp {
         let current_ver = self.launcher_version.clone();
         thread::spawn(move || {
             let res = check_github_update(&base_dir_clone, &current_commit, &current_ver);
+            let _ = tx.send(res);
+        });
+    }
+
+    pub fn start_fetch_release_notes(&mut self) {
+        if self.is_fetching_release_notes || self.github_release_notes.is_some() {
+            return;
+        }
+        self.is_fetching_release_notes = true;
+        let (tx, rx) = channel();
+        self.release_notes_rx = Some(rx);
+
+        thread::spawn(move || {
+            let res = crate::updater::fetch_github_release_notes();
             let _ = tx.send(res);
         });
     }
@@ -1816,10 +1878,11 @@ impl LauncherApp {
     pub fn render_console_main_menu(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
         let screen_rect = ui.max_rect();
 
-        // 1. Fullscreen Wallpaper (pic1.png)
+        // 1. Fullscreen Wallpaper (pic1.png) - Dimmed slightly for comfort / less eye strain
         if let Some(ref bg) = self.bg_texture {
             let uv = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
-            ui.painter().image(bg.id(), screen_rect, uv, egui::Color32::WHITE);
+            ui.painter().image(bg.id(), screen_rect, uv, egui::Color32::from_rgb(180, 180, 192));
+            ui.painter().rect_filled(screen_rect, 0.0, egui::Color32::from_rgba_unmultiplied(6, 6, 10, 60));
         } else {
             ui.painter().rect_filled(screen_rect, 0.0, egui::Color32::from_rgb(15, 12, 18));
         }
@@ -1852,7 +1915,7 @@ impl LauncherApp {
                 ];
                 for (lang, label) in &langs {
                     let is_selected = self.current_lang == *lang;
-                    let (rect, resp) = ui.allocate_exact_size(egui::vec2(58.0, 28.0), egui::Sense::click());
+                    let (rect, resp) = ui.allocate_exact_size(egui::vec2(60.0, 28.0), egui::Sense::click());
                     let hov = resp.hovered();
                     let hov_anim = ctx.animate_bool(resp.id.with("hov"), hov);
                     let sel_anim = ctx.animate_bool(resp.id.with("sel"), is_selected);
@@ -1893,13 +1956,29 @@ impl LauncherApp {
                         egui::Color32::from_rgb(190, 195, 210)
                     };
 
-                    p.text(
-                        rect.center(),
-                        egui::Align2::CENTER_CENTER,
-                        *label,
-                        egui::FontId::proportional(12.0),
-                        text_color,
-                    );
+                    if *lang == Language::Turkish {
+                        let flag_size = egui::vec2(16.0, 11.0);
+                        let flag_rect = egui::Rect::from_min_size(
+                            egui::pos2(rect.left() + 9.0, rect.center().y - flag_size.y / 2.0),
+                            flag_size,
+                        );
+                        paint_turkish_flag(&p, flag_rect);
+                        p.text(
+                            egui::pos2(rect.left() + 32.0, rect.center().y),
+                            egui::Align2::LEFT_CENTER,
+                            "TR",
+                            egui::FontId::proportional(12.0),
+                            text_color,
+                        );
+                    } else {
+                        p.text(
+                            rect.center(),
+                            egui::Align2::CENTER_CENTER,
+                            *label,
+                            egui::FontId::proportional(12.0),
+                            text_color,
+                        );
+                    }
 
                     if resp.clicked() {
                         self.current_lang = *lang;
@@ -2096,6 +2175,7 @@ impl LauncherApp {
                     14.5,
                     true,
                 ) {
+                    self.start_fetch_release_notes();
                     self.show_release_notes_modal = true;
                 }
 
@@ -2198,7 +2278,20 @@ impl LauncherApp {
                     }
                     ui.add_space(8.0);
 
-                    // 2. 📁 OYUN KONUMU
+                    // 2. ⚡ SİSTEM ÖZELLİKLERİ
+                    if render_settings_tab_btn(
+                        ui,
+                        "tab_sys",
+                        "⚡",
+                        self.t("system_specs_title"),
+                        self.settings_tab == SettingsTab::SystemSpecs,
+                    ) {
+                        self.settings_tab = SettingsTab::SystemSpecs;
+                        self.view_transition_start = std::time::Instant::now();
+                    }
+                    ui.add_space(8.0);
+
+                    // 3. 📁 OYUN KONUMU
                     if render_settings_tab_btn(
                         ui,
                         "tab_loc",
@@ -2211,7 +2304,7 @@ impl LauncherApp {
                     }
                     ui.add_space(8.0);
 
-                    // 3. 🎮 KONTROLLER
+                    // 4. 🎮 KONTROLLER
                     if render_settings_tab_btn(
                         ui,
                         "tab_ctrl",
@@ -2224,11 +2317,11 @@ impl LauncherApp {
                     }
                     ui.add_space(8.0);
 
-                    // 4. ⚡ SHADER AYARI
+                    // 5. 🧪 SHADER AYARI
                     if render_settings_tab_btn(
                         ui,
                         "tab_shd",
-                        "⚡",
+                        "🧪",
                         self.t("nav_shaders"),
                         self.settings_tab == SettingsTab::Shaders,
                     ) {
@@ -2265,6 +2358,9 @@ impl LauncherApp {
                                     ui.add_space(14.0);
                                     self.render_mods_screen(ui, ctx);
                                 }
+                                SettingsTab::SystemSpecs => {
+                                    self.render_system_specs_screen(ui, ctx);
+                                }
                                 SettingsTab::GameLocation => {
                                     self.render_game_location_screen(ui, ctx);
                                 }
@@ -2300,7 +2396,7 @@ impl LauncherApp {
                     ui.add_space(16.0);
 
                     // 💾 KAYDET VE UYGULA
-                    if render_button_feedback(ui, "btn_settings_save", &format!("💾 {}", self.t("save_apply")), egui::vec2(190.0, 34.0), false).clicked() {
+                    if render_button_feedback(ui, "btn_settings_save", &format!("💾 {}", self.t("save_apply")), egui::vec2(220.0, 34.0), false).clicked() {
                         self.apply_all_optimizations();
                     }
 
@@ -2332,35 +2428,35 @@ impl LauncherApp {
     }
 
     // ==========================================
-    // SCREEN 1: ANASAYFA (HOME)
+    // SCREEN: SİSTEM ÖZELLİKLERİ (SYSTEM SPECS)
     // ==========================================
-    #[allow(dead_code)]
-    pub fn render_home_screen(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
+    pub fn render_system_specs_screen(&mut self, ui: &mut egui::Ui, _ctx: &egui::Context) {
         let card_frame = egui::Frame::new()
             .fill(egui::Color32::from_rgba_unmultiplied(14, 15, 23, 235))
             .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(220, 38, 38, 65)))
             .inner_margin(egui::Margin::symmetric(14, 12))
             .corner_radius(egui::CornerRadius::same(10));
 
-        // 1. GOW3 REMASTERED LOGO (Centered at top)
-        ui.vertical_centered(|ui| {
-            ui.add_space(4.0);
-            if let Some(ref logo) = self.logo_texture {
-                ui.add(egui::Image::new(logo).max_height(86.0));
-            }
-            ui.add_space(6.0);
-        });
-
-        // 2. SİSTEM ÖZELLİKLERİ = CPU, GPU, VRAM, RAM, EKRAN HZ CARD
-        render_section_tag(ui, &format!("{} = CPU, GPU, VRAM, RAM, EKRAN HZ", self.t("system_specs_title")));
+        render_section_tag(ui, &format!("{} (CPU, GPU, VRAM, RAM, EKRAN HZ)", self.t("system_specs_title")));
         card_frame.show(ui, |ui| {
             ui.horizontal(|ui| {
                 ui.heading(
                     egui::RichText::new(format!("⚡ {}", self.t("system_specs_title")))
-                        .size(15.0)
-                        .color(egui::Color32::from_rgb(150, 205, 255)),
+                        .size(16.0)
+                        .color(egui::Color32::from_rgb(150, 205, 255))
+                        .strong(),
                 );
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if ui.button("🔄 Donanımı Yeniden Algıla").clicked() {
+                        self.config.cached_hardware = crate::system::detect_hardware();
+                        let _ = self.config.save(&self.base_dir);
+                        self.status_message = Some(("Donanım özellikleri başarıyla güncellendi.".to_string(), false));
+                    }
+                    ui.add_space(6.0);
+                    if ui.button("🛑 Kalan Süreçleri Kapat").clicked() {
+                        self.kill_leftover_processes(Some(ui.ctx()));
+                    }
+                    ui.add_space(8.0);
                     ui.label(egui::RichText::new(self.t("locked_auto")).color(egui::Color32::GRAY).size(11.0));
                 });
             });
@@ -2433,7 +2529,7 @@ impl LauncherApp {
                 });
             });
 
-            ui.add_space(4.0);
+            ui.add_space(8.0);
 
             // Row 2: VRAM, RAM & EKRAN HZ
             ui.columns(3, |cols| {
@@ -2471,159 +2567,36 @@ impl LauncherApp {
                     );
                 });
             });
-        });
 
-        // 3. PLAY GAME ACTION AREA (Matching wireframe bottom)
-        ui.add_space(14.0);
-        ui.vertical_centered(|ui| {
-            if self.is_game_running {
-                let time = ctx.input(|i| i.time);
-                let pulse = ((time * 3.0).sin() * 0.5 + 0.5) as f32;
-                ctx.request_repaint();
-
-                let emerald_r = (25.0 + 15.0 * pulse) as u8;
-                let emerald_g = (65.0 + 30.0 * pulse) as u8;
-                let emerald_b = (40.0 + 15.0 * pulse) as u8;
-
-                ui.horizontal(|ui| {
-                    let total_w = 210.0 + 12.0 + 180.0;
-                    let available_w = ui.available_width();
-                    if available_w > total_w {
-                        ui.add_space((available_w - total_w) / 2.0);
-                    }
-
-                    let running_btn = egui::Button::new(
-                        egui::RichText::new(self.t("play_running"))
-                            .size(17.0)
-                            .color(egui::Color32::from_rgb(140, 255, 155))
-                            .strong(),
-                    )
-                    .fill(egui::Color32::from_rgb(emerald_r, emerald_g, emerald_b))
-                    .stroke(egui::Stroke::new(1.5, egui::Color32::from_rgba_unmultiplied(100, 255, 120, (120.0 + 100.0 * pulse) as u8)))
-                    .corner_radius(egui::CornerRadius::same(10))
-                    .min_size(egui::vec2(210.0, 56.0));
-
-                    ui.add_enabled(false, running_btn);
-
-                    let force_quit_btn = egui::Button::new(
-                        egui::RichText::new(self.t("force_quit_btn"))
-                            .size(17.0)
-                            .color(egui::Color32::WHITE)
-                            .strong(),
-                    )
-                    .fill(egui::Color32::from_rgb(220, 42, 42))
-                    .stroke(egui::Stroke::new(1.5, egui::Color32::from_rgba_unmultiplied(255, 120, 120, 180)))
-                    .corner_radius(egui::CornerRadius::same(10))
-                    .min_size(egui::vec2(180.0, 56.0));
-
-                    let res = ui.add(force_quit_btn).on_hover_text(self.t("force_quit_tooltip"));
-                    if res.hovered() {
-                        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
-                    }
-                    if res.clicked() {
-                        self.force_quit_game(Some(ui.ctx()));
-                    }
-                });
-            } else if self.is_game_valid {
-                let time = ctx.input(|i| i.time);
-                let pulse = ((time * 2.6).sin() * 0.5 + 0.5) as f32;
-                ctx.request_repaint();
-
-                let r = (215.0 + 35.0 * pulse) as u8;
-                let g = (35.0 + 25.0 * pulse) as u8;
-                let b = 35u8;
-                let btn_color = egui::Color32::from_rgb(r, g, b);
-                let border_color = egui::Color32::from_rgba_unmultiplied(
-                    255,
-                    (110.0 + 90.0 * pulse) as u8,
-                    (70.0 + 50.0 * pulse) as u8,
-                    (150.0 + 105.0 * pulse) as u8,
-                );
-
-                let (rect, resp) = ui.allocate_exact_size(
-                    egui::vec2(380.0, 58.0),
-                    egui::Sense::click(),
-                );
-                let is_hovered = resp.hovered();
-                let hov_anim = ctx.animate_bool(resp.id.with("hov"), is_hovered);
-                if is_hovered {
-                    ctx.set_cursor_icon(egui::CursorIcon::PointingHand);
-                }
-
-                let is_pressed = resp.is_pointer_button_down_on();
-                let scale = if is_pressed { -1.5 } else { hov_anim * 2.0 };
-                let draw_rect = rect.expand(scale);
-
-                let painter = ui.painter();
-                painter.rect_filled(draw_rect, 12.0, btn_color);
-                painter.rect_stroke(draw_rect, 12.0, egui::Stroke::new(1.8 + pulse * 1.2 + hov_anim * 0.8, border_color), egui::StrokeKind::Inside);
-
-                let text = format!("▶   {}", self.t("play_btn_label"));
-                painter.text(
-                    draw_rect.center(),
-                    egui::Align2::CENTER_CENTER,
-                    text,
-                    egui::FontId::proportional(22.0),
-                    egui::Color32::WHITE,
-                );
-
-                if resp.clicked() {
-                    self.launch_game(ctx);
-                }
-            } else {
-                egui::Frame::group(ui.style())
-                    .fill(egui::Color32::from_rgba_unmultiplied(70, 20, 20, 235))
-                    .stroke(egui::Stroke::new(1.5, egui::Color32::from_rgb(239, 68, 68)))
-                    .corner_radius(egui::CornerRadius::same(10))
-                    .inner_margin(12.0)
-                    .show(ui, |ui| {
-                        ui.horizontal(|ui| {
-                            ui.label(egui::RichText::new("⚠️").size(24.0));
-                            ui.vertical(|ui| {
-                                ui.label(
-                                    egui::RichText::new(self.t("play_disabled_warn"))
-                                        .color(egui::Color32::from_rgb(255, 160, 160))
-                                        .size(13.5)
-                                        .strong(),
-                                );
-                                ui.label(
-                                    egui::RichText::new(self.t("play_disabled_help"))
-                                        .color(egui::Color32::from_rgb(220, 220, 230))
-                                        .size(11.5),
-                                );
-                            });
-                        });
-                    });
-            }
-
-            // Quick Tools Row
             ui.add_space(10.0);
-            ui.horizontal(|ui| {
-                let total_w = 135.0 + 8.0 + 135.0 + 8.0 + 145.0;
-                let available_w = ui.available_width();
-                if available_w > total_w {
-                    ui.add_space((available_w - total_w) / 2.0);
-                }
+            ui.separator();
+            ui.add_space(4.0);
 
-                if render_button_feedback(ui, "btn_glog", self.t("game_log_btn"), egui::vec2(135.0, 30.0), false).clicked() {
-                    let log_path = self.base_dir.join("gow3_log.txt");
-                    self.log_content = std::fs::read_to_string(&log_path)
-                        .unwrap_or_else(|_| "Log file is empty or not created yet.".to_string());
-                    self.show_log_modal = true;
-                }
-
-                ui.add_space(8.0);
-
-                if render_button_feedback(ui, "btn_llog", self.t("launcher_log_btn"), egui::vec2(135.0, 30.0), false).clicked() {
-                    self.launcher_log_content = crate::logger::read_launcher_log(&self.base_dir);
-                    self.show_launcher_log_modal = true;
-                }
-
-                ui.add_space(8.0);
-
-                if render_button_feedback(ui, "btn_kill", &format!("🛑 {}", self.t("kill_leftover_btn")), egui::vec2(145.0, 30.0), true).clicked() {
-                    self.kill_leftover_processes(Some(ui.ctx()));
-                }
+            // Dynamic Hardware Analysis & Optimization Recommendation
+            let effective_vram = self.config.get_effective_vram_budget();
+            ui.group(|ui| {
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new("💡 Donanım Analizi & Öneri:").strong().color(egui::Color32::from_rgb(255, 215, 100)));
+                    let rec_text = match cpu_grade {
+                        crate::system::CpuGrade::Ultra | crate::system::CpuGrade::Good => {
+                            "İşlemciniz güçlü. 144 FPS veya 240 FPS yamasıyla birlikte yüksek çözünürlük ölçekleyiciyi rahatça kullanabilirsiniz."
+                        }
+                        crate::system::CpuGrade::Medium => {
+                            "İşlemciniz orta seviyede. 60 FPS veya 120 FPS modu ve FSR dengeli ölçekleme önerilir."
+                        }
+                        crate::system::CpuGrade::Weak => {
+                            "İşlemciniz giriş seviyesinde. 60 FPS kilidi, FSR Performans modu ve shader arka plan derleme önerilir."
+                        }
+                    };
+                    ui.label(egui::RichText::new(rec_text).size(11.5).color(egui::Color32::from_rgb(220, 225, 235)));
+                });
+                ui.add_space(4.0);
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new(format!(
+                        "Aktif Güvenli VRAM Bütçesi: {} MB (Donanım Limiti: {} MB)",
+                        effective_vram, hw.vram_mb
+                    )).size(11.0).color(egui::Color32::from_rgb(140, 220, 150)));
+                });
             });
         });
     }
@@ -2655,22 +2628,33 @@ impl LauncherApp {
             // 1. Target FPS
             ui.horizontal(|ui| {
                 ui.label(egui::RichText::new(self.t("target_fps")).strong().color(egui::Color32::WHITE));
-                let fps_str = if self.config.target_fps == 0 {
-                    "Sınırsız (Uncapped)".to_string()
-                } else {
-                    format!("{} FPS", self.config.target_fps)
+                let fps_str = match self.config.target_fps {
+                    30 => "30 FPS (Konsol Kilidi & Düşük Sistem - Maksimum Kararlılık)".to_string(),
+                    40 => "40 FPS (Steam Deck 40Hz)".to_string(),
+                    60 => "60 FPS (Varsayılan - Akıcı & Kararlı)".to_string(),
+                    90 => "90 FPS (Steam Deck OLED 90Hz)".to_string(),
+                    120 => "120 FPS (120Hz Ultra Akıcı - 60Hz Fizik Korumalı)".to_string(),
+                    144 => "144 FPS (144Hz Ultra Akıcı - 60Hz Fizik Korumalı)".to_string(),
+                    165 => "165 FPS (165Hz Ultra Akıcı - 60Hz Fizik Korumalı)".to_string(),
+                    240 => "240 FPS (240Hz Maksimum - 60Hz Fizik Korumalı)".to_string(),
+                    0 => "Sınırsız (Uncapped)".to_string(),
+                    other => format!("{} FPS", other),
                 };
                 egui::ComboBox::from_id_salt("target_fps_combo")
                     .selected_text(fps_str)
                     .show_ui(ui, |ui| {
-                        ui.selectable_value(&mut self.config.target_fps, 30, "30 FPS");
-                        ui.selectable_value(&mut self.config.target_fps, 60, "60 FPS");
-                        ui.selectable_value(&mut self.config.target_fps, 120, "120 FPS");
-                        ui.selectable_value(&mut self.config.target_fps, 144, "144 FPS (Önerilen)");
+                        ui.selectable_value(&mut self.config.target_fps, 30, "30 FPS (Konsol Kilidi & Düşük Sistem)");
+                        ui.selectable_value(&mut self.config.target_fps, 40, "40 FPS (Steam Deck 40Hz)");
+                        ui.selectable_value(&mut self.config.target_fps, 60, "60 FPS (Varsayılan - Akıcı & Kararlı)");
+                        ui.selectable_value(&mut self.config.target_fps, 90, "90 FPS (Steam Deck OLED 90Hz)");
+                        ui.selectable_value(&mut self.config.target_fps, 120, "120 FPS (120Hz Ultra Akıcı)");
+                        ui.selectable_value(&mut self.config.target_fps, 144, "144 FPS (144Hz Ultra Akıcı)");
+                        ui.selectable_value(&mut self.config.target_fps, 165, "165 FPS (165Hz Ultra Akıcı)");
+                        ui.selectable_value(&mut self.config.target_fps, 240, "240 FPS (240Hz Maksimum - Ultra Hızlı)");
                         ui.selectable_value(&mut self.config.target_fps, 0, "Sınırsız (Uncapped)");
                     });
             });
-            ui.label(egui::RichText::new("Oyunun hedef kare hızı sınırı. 144Hz monitörlerde 144 FPS ultra akıcı deneyim sağlar.").color(egui::Color32::LIGHT_GRAY).size(11.0));
+            ui.label(egui::RichText::new("Oyunun hedef kare hızı sınırı. Delta-Time ve 60Hz fizik motor koruması sayesinde 240 FPS'e kadar oyun hızlanmadan ve sapıtmadan ultra akıcı çalışır.").color(egui::Color32::LIGHT_GRAY).size(11.0));
 
             ui.add_space(8.0);
             // 2. Skip Cinematics with X
@@ -2906,10 +2890,37 @@ impl LauncherApp {
             // 6. VRAM GC Budget
             ui.horizontal(|ui| {
                 ui.label(egui::RichText::new(self.t("vram_budget")).strong().color(egui::Color32::WHITE));
-                let vram_budget_str = format!("{} MB", self.config.vram_gc_budget_mb);
-                ui.add(egui::Slider::new(&mut self.config.vram_gc_budget_mb, 1024..=12288).step_by(256.0).text(vram_budget_str));
+                let vram_text = match self.config.vram_gc_budget_mb {
+                    1280 => "1280 MB (2 GB GPU / Düşük Sistem - PCIe Taşma Korumalı)".to_string(),
+                    2048 => "2048 MB (3 GB GPU / Steam Deck)".to_string(),
+                    3072 => "3072 MB (4 GB GPU)".to_string(),
+                    4096 => "4096 MB (6 GB GPU)".to_string(),
+                    5120 => "5120 MB (8 GB GPU - Önerilen / Kararlı)".to_string(),
+                    6144 => "6144 MB (10-12 GB GPU)".to_string(),
+                    8192 => "8192 MB (12-16 GB+ GPU / Yüksek)".to_string(),
+                    other => format!("{} MB", other),
+                };
+                egui::ComboBox::from_id_salt("vram_gc_combo")
+                    .selected_text(vram_text)
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(&mut self.config.vram_gc_budget_mb, 1280, "1280 MB (2 GB GPU / Düşük Sistem - PCIe Taşma Korumalı)");
+                        ui.selectable_value(&mut self.config.vram_gc_budget_mb, 2048, "2048 MB (3 GB GPU / Steam Deck)");
+                        ui.selectable_value(&mut self.config.vram_gc_budget_mb, 3072, "3072 MB (4 GB GPU)");
+                        ui.selectable_value(&mut self.config.vram_gc_budget_mb, 4096, "4096 MB (6 GB GPU)");
+                        ui.selectable_value(&mut self.config.vram_gc_budget_mb, 5120, "5120 MB (8 GB GPU - Önerilen / Kararlı)");
+                        ui.selectable_value(&mut self.config.vram_gc_budget_mb, 6144, "6144 MB (10-12 GB GPU)");
+                        ui.selectable_value(&mut self.config.vram_gc_budget_mb, 8192, "8192 MB (12-16 GB+ GPU / Yüksek)");
+                    });
             });
             ui.label(egui::RichText::new(self.t("vram_budget_desc")).color(egui::Color32::LIGHT_GRAY).size(11.0));
+
+            let effective = self.config.get_effective_vram_budget();
+            if effective != self.config.vram_gc_budget_mb && self.config.cached_hardware.vram_mb > 0 {
+                ui.label(egui::RichText::new(format!(
+                    "🛡️ Donanım Koruması Devrede: Ekran kartınızın kapasitesine ({} MB) göre aktif VRAM bütçesi {} MB olarak güvenli şekilde sınırlandırıldı.",
+                    self.config.cached_hardware.vram_mb, effective
+                )).color(egui::Color32::from_rgb(102, 225, 106)).size(11.0));
+            }
 
             ui.add_space(8.0);
             // 7. Display Mode & VSync
@@ -3601,6 +3612,22 @@ impl eframe::App for LauncherApp {
                         self.shader_install_status = Some(err_msg.clone());
                         self.status_message = Some((err_msg, true));
                         crate::log_error!("Shader cache pre-caching failed: {}", e);
+                    }
+                }
+            }
+        }
+
+        // 6c. Check GitHub release notes fetch thread
+        if let Some(ref rx) = self.release_notes_rx {
+            if let Ok(res) = rx.try_recv() {
+                self.is_fetching_release_notes = false;
+                self.release_notes_rx = None;
+                match res {
+                    Ok(notes) => {
+                        self.github_release_notes = Some(notes);
+                    }
+                    Err(e) => {
+                        eprintln!("[Launcher] GitHub release notes fetch failed: {}", e);
                     }
                 }
             }
@@ -4500,28 +4527,107 @@ impl eframe::App for LauncherApp {
             egui::Window::new(self.t("release_notes_title"))
                 .collapsible(false)
                 .resizable(true)
-                .default_width(640.0)
+                .default_width(680.0)
+                .default_height(500.0)
                 .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
                 .show(&ctx, |ui| {
                     ui.spacing_mut().item_spacing = egui::vec2(10.0, 10.0);
-                    egui::ScrollArea::vertical().max_height(420.0).show(ui, |ui| {
-                        ui.label(
-                            egui::RichText::new(self.t("release_notes_content"))
-                                .size(13.0)
-                                .color(egui::Color32::from_rgb(235, 240, 250)),
-                        );
+                    egui::ScrollArea::vertical().max_height(450.0).show(ui, |ui| {
+                        // Current Version Banner: v2.0
+                        ui.group(|ui| {
+                            ui.horizontal(|ui| {
+                                ui.heading(
+                                    egui::RichText::new("🚀 God of War III Launcher v2.0 (Güncel Sürüm)")
+                                        .color(egui::Color32::from_rgb(255, 215, 100))
+                                        .strong()
+                                        .size(15.0),
+                                );
+                                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                    ui.label(
+                                        egui::RichText::new("En Son / Aktif")
+                                            .color(egui::Color32::from_rgb(102, 225, 106))
+                                            .strong()
+                                            .size(11.5),
+                                    );
+                                });
+                            });
+                            ui.separator();
+                            ui.label(
+                                egui::RichText::new(self.t("release_notes_content"))
+                                    .size(12.5)
+                                    .color(egui::Color32::from_rgb(235, 240, 250)),
+                            );
+                        });
+
+                        ui.add_space(8.0);
+
+                        // Real-time GitHub Releases Section
+                        if self.is_fetching_release_notes {
+                            ui.horizontal(|ui| {
+                                ui.spinner();
+                                ui.label(egui::RichText::new("GitHub üzerinden geçmiş sürüm notları yükleniyor...").color(egui::Color32::LIGHT_GRAY));
+                            });
+                        } else if let Some(ref notes) = self.github_release_notes {
+                            if !notes.is_empty() {
+                                ui.label(
+                                    egui::RichText::new("📦 Önceki GitHub Sürümleri")
+                                        .size(14.0)
+                                        .color(egui::Color32::from_rgb(140, 200, 255))
+                                        .strong(),
+                                );
+                                ui.separator();
+                                for note in notes {
+                                    if note.tag_name != "v2.0" {
+                                        ui.group(|ui| {
+                                            ui.horizontal(|ui| {
+                                                ui.label(
+                                                    egui::RichText::new(format!("🏷️ {}", note.tag_name))
+                                                        .strong()
+                                                        .size(13.5)
+                                                        .color(egui::Color32::from_rgb(255, 180, 100)),
+                                                );
+                                                if !note.title.is_empty() && note.title != note.tag_name {
+                                                    ui.label(egui::RichText::new(&note.title).strong().color(egui::Color32::WHITE));
+                                                }
+                                                if !note.published_at.is_empty() {
+                                                    let date_str = note.published_at.split('T').next().unwrap_or(&note.published_at);
+                                                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                                        ui.label(egui::RichText::new(date_str).color(egui::Color32::GRAY).size(11.0));
+                                                    });
+                                                }
+                                            });
+                                            if !note.body.is_empty() {
+                                                ui.separator();
+                                                ui.label(
+                                                    egui::RichText::new(&note.body)
+                                                        .size(12.0)
+                                                        .color(egui::Color32::from_rgb(215, 220, 230)),
+                                                );
+                                            }
+                                        });
+                                        ui.add_space(4.0);
+                                    }
+                                }
+                            }
+                        }
                     });
                     ui.separator();
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        let close_btn = egui::Button::new(
-                            egui::RichText::new(self.t("close")).strong().size(12.5),
-                        )
-                        .min_size(egui::vec2(90.0, 30.0))
-                        .corner_radius(egui::CornerRadius::same(6));
-
-                        if ui.add(close_btn).clicked() {
-                            self.show_release_notes_modal = false;
+                    ui.horizontal(|ui| {
+                        if ui.button("🔄 Yenile").clicked() {
+                            self.github_release_notes = None;
+                            self.start_fetch_release_notes();
                         }
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            let close_btn = egui::Button::new(
+                                egui::RichText::new(self.t("close")).strong().size(12.5),
+                            )
+                            .min_size(egui::vec2(90.0, 30.0))
+                            .corner_radius(egui::CornerRadius::same(6));
+
+                            if ui.add(close_btn).clicked() {
+                                self.show_release_notes_modal = false;
+                            }
+                        });
                     });
                 });
         }

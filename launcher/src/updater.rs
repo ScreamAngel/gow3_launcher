@@ -10,6 +10,42 @@ pub const GITHUB_REPO: &str = "ScreamAngel/gow3_launcher";
 pub const GITHUB_REPO_URL: &str = "https://github.com/ScreamAngel/gow3_launcher.git";
 
 #[derive(Debug, Clone)]
+pub struct GithubReleaseNote {
+    pub tag_name: String,
+    pub title: String,
+    pub published_at: String,
+    pub body: String,
+}
+
+pub fn fetch_github_release_notes() -> Result<Vec<GithubReleaseNote>, String> {
+    let url = "https://api.github.com/repos/ScreamAngel/gow3_launcher/releases";
+    let body = http_get_string(url).ok_or_else(|| "GitHub Releases bağlantısı kurulamadı.".to_string())?;
+
+    let val: serde_json::Value = serde_json::from_str(&body).map_err(|e| format!("JSON parse hatası: {}", e))?;
+    let mut notes = Vec::new();
+
+    if let Some(arr) = val.as_array() {
+        for item in arr {
+            let tag = item["tag_name"].as_str().unwrap_or("").to_string();
+            let title = item["name"].as_str().unwrap_or("").to_string();
+            let published_at = item["published_at"].as_str().unwrap_or("").to_string();
+            let body_text = item["body"].as_str().unwrap_or("").to_string();
+
+            if !tag.is_empty() {
+                notes.push(GithubReleaseNote {
+                    tag_name: tag,
+                    title: if title.is_empty() { "Sürüm Notu".to_string() } else { title },
+                    published_at,
+                    body: body_text,
+                });
+            }
+        }
+    }
+
+    Ok(notes)
+}
+
+#[derive(Debug, Clone)]
 pub struct UpdateInfo {
     pub commit_sha: String,
     pub commit_message: String,
@@ -441,5 +477,12 @@ mod tests {
         assert_eq!(compare_version_strings("v1.5", "v1.4"), std::cmp::Ordering::Greater);
         assert_eq!(compare_version_strings("v1.10", "v1.9"), std::cmp::Ordering::Greater);
         assert_eq!(compare_version_strings("1.4", "v1.4"), std::cmp::Ordering::Equal);
+    }
+
+    #[test]
+    fn test_fetch_github_release_notes() {
+        if let Ok(notes) = fetch_github_release_notes() {
+            assert!(!notes.is_empty(), "Should fetch at least one release note from GitHub");
+        }
     }
 }

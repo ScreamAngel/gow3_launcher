@@ -888,11 +888,22 @@ pub fn launch_gow3(
     let python = ensure_python(base_dir)?;
 
     // 1. Run mods.py
-    let mods_dir = base_dir.join("mods");
+    let mods_dir = if base_dir.join("mods").is_dir() {
+        base_dir.join("mods")
+    } else if base_dir.join("gow3-linux/mods").is_dir() {
+        base_dir.join("gow3-linux/mods")
+    } else {
+        base_dir.join("mods")
+    };
     if !mods_dir.exists() {
         let _ = std::fs::create_dir_all(&mods_dir);
     }
-    let _ = Command::new(&python)
+
+    config.save_mods_config(base_dir);
+    let mods_config_path = base_dir.join("mods_config.json");
+
+    let mut mods_cmd = Command::new(&python);
+    mods_cmd
         .arg(scripts_path.join("mods.py"))
         .arg(game_dir)
         .arg("--out")
@@ -900,12 +911,35 @@ pub fn launch_gow3(
         .arg("--mods-dir")
         .arg(&mods_dir)
         .arg("--enabled")
-        .arg("1")
+        .arg("1");
+
+    if mods_config_path.exists() {
+        mods_cmd.arg("--config").arg(&mods_config_path);
+    }
+
+    let mut effective_app0 = game_dir.to_path_buf();
+
+    if let Ok(output) = mods_cmd
         .env("PYTHONPATH", &scripts_path)
         .current_dir(base_dir)
-        .stdout(Stdio::from(log_file.try_clone().unwrap()))
-        .stderr(Stdio::from(log_file_err.try_clone().unwrap()))
-        .status();
+        .output()
+    {
+        if let Ok(mut lf) = log_file.try_clone() {
+            use std::io::Write;
+            let _ = lf.write_all(&output.stdout);
+            let _ = lf.write_all(&output.stderr);
+        }
+        if output.status.success() {
+            let out_str = String::from_utf8_lossy(&output.stdout);
+            if let Some(last_line) = out_str.lines().filter(|l| !l.trim().is_empty()).last() {
+                let candidate = PathBuf::from(last_line.trim());
+                if candidate.is_dir() {
+                    crate::log_info!("Mods active. Mounting overlay directory: {:?}", candidate);
+                    effective_app0 = candidate;
+                }
+            }
+        }
+    }
 
     // 2. Run prepare.py (ELF parsing and analysis)
     let status = Command::new(&python)
@@ -1089,7 +1123,7 @@ pub fn launch_gow3(
         .arg("--patches")
         .arg(&patches_bin)
         .arg("--app0")
-        .arg(game_dir)
+        .arg(&effective_app0)
         .arg("--user")
         .arg(&user_dir)
         .arg("--timeout")

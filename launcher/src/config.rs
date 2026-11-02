@@ -255,6 +255,10 @@ pub struct LauncherConfig {
     #[serde(default = "default_launcher_version")]
     pub launcher_version: String,
 
+    // Mods Management
+    #[serde(default)]
+    pub disabled_mods: Vec<String>,
+
     // Graphics Settings
     #[serde(default = "default_render_resolution")]
     pub render_resolution: String,
@@ -340,6 +344,7 @@ impl Default for LauncherConfig {
             dmem_mb: default_dmem(),
             cached_hardware: CachedHardware::default(),
             last_git_commit: default_last_commit(),
+            disabled_mods: Vec::new(),
             render_resolution: default_render_resolution(),
             fsr_enabled: false,
             disable_motion_blur: false,
@@ -544,10 +549,23 @@ impl LauncherConfig {
         default_cfg
     }
 
+    pub fn save_mods_config(&self, base_dir: &Path) {
+        let mods_config_path = base_dir.join("mods_config.json");
+        let json = serde_json::json!({
+            "disabled": self.disabled_mods,
+            "order": []
+        });
+        if let Ok(content) = serde_json::to_string_pretty(&json) {
+            let _ = fs::write(&mods_config_path, content);
+        }
+    }
+
     pub fn save(&self, base_dir: &Path) -> std::io::Result<()> {
         let path = Self::config_path(base_dir);
         let content = serde_json::to_string_pretty(self)?;
-        fs::write(path, content)
+        let res = fs::write(path, content);
+        self.save_mods_config(base_dir);
+        res
     }
 
     pub fn build_gow3_key_map(&self) -> String {

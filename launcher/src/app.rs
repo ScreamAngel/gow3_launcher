@@ -24,6 +24,7 @@ pub enum ViewMode {
 pub enum SettingsTab {
     #[default]
     Graphics,
+    Mods,
     SystemSpecs,
     GameLocation,
     Controls,
@@ -691,6 +692,78 @@ fn paint_turkish_flag(painter: &egui::Painter, rect: egui::Rect) {
     ));
 }
 
+fn paint_uk_flag(painter: &egui::Painter, rect: egui::Rect) {
+    painter.rect_filled(rect, 2.0, egui::Color32::from_rgb(1, 33, 105));
+    let w = rect.width();
+    let h = rect.height();
+
+    // White diagonal saltire
+    painter.line_segment([rect.left_top(), rect.right_bottom()], egui::Stroke::new(h * 0.28, egui::Color32::WHITE));
+    painter.line_segment([rect.left_bottom(), rect.right_top()], egui::Stroke::new(h * 0.28, egui::Color32::WHITE));
+
+    // Red diagonal saltire
+    painter.line_segment([rect.left_top(), rect.right_bottom()], egui::Stroke::new(h * 0.14, egui::Color32::from_rgb(200, 16, 46)));
+    painter.line_segment([rect.left_bottom(), rect.right_top()], egui::Stroke::new(h * 0.14, egui::Color32::from_rgb(200, 16, 46)));
+
+    // White central cross
+    let cross_w = w * 0.32;
+    let cross_h = h * 0.32;
+    painter.rect_filled(
+        egui::Rect::from_min_max(egui::pos2(rect.center().x - cross_w / 2.0, rect.min.y), egui::pos2(rect.center().x + cross_w / 2.0, rect.max.y)),
+        0.0,
+        egui::Color32::WHITE,
+    );
+    painter.rect_filled(
+        egui::Rect::from_min_max(egui::pos2(rect.min.x, rect.center().y - cross_h / 2.0), egui::pos2(rect.max.x, rect.center().y + cross_h / 2.0)),
+        0.0,
+        egui::Color32::WHITE,
+    );
+
+    // Red central cross
+    let red_w = w * 0.18;
+    let red_h = h * 0.18;
+    painter.rect_filled(
+        egui::Rect::from_min_max(egui::pos2(rect.center().x - red_w / 2.0, rect.min.y), egui::pos2(rect.center().x + red_w / 2.0, rect.max.y)),
+        0.0,
+        egui::Color32::from_rgb(200, 16, 46),
+    );
+    painter.rect_filled(
+        egui::Rect::from_min_max(egui::pos2(rect.min.x, rect.center().y - red_h / 2.0), egui::pos2(rect.max.x, rect.center().y + red_h / 2.0)),
+        0.0,
+        egui::Color32::from_rgb(200, 16, 46),
+    );
+}
+
+fn paint_german_flag(painter: &egui::Painter, rect: egui::Rect) {
+    let h = rect.height() / 3.0;
+    // Top stripe: Black
+    let r1 = egui::Rect::from_min_max(rect.min, egui::pos2(rect.max.x, rect.min.y + h));
+    painter.rect_filled(r1, egui::CornerRadius { nw: 2, ne: 2, sw: 0, se: 0 }, egui::Color32::from_rgb(10, 10, 10));
+    // Mid stripe: Red
+    let r2 = egui::Rect::from_min_max(egui::pos2(rect.min.x, rect.min.y + h), egui::pos2(rect.max.x, rect.min.y + h * 2.0));
+    painter.rect_filled(r2, 0.0, egui::Color32::from_rgb(221, 0, 0));
+    // Bottom stripe: Gold
+    let r3 = egui::Rect::from_min_max(egui::pos2(rect.min.x, rect.min.y + h * 2.0), rect.max);
+    painter.rect_filled(r3, egui::CornerRadius { nw: 0, ne: 0, sw: 2, se: 2 }, egui::Color32::from_rgb(255, 206, 0));
+}
+
+fn paint_spanish_flag(painter: &egui::Painter, rect: egui::Rect) {
+    let h = rect.height();
+    // Top stripe: Red (25%)
+    let r1 = egui::Rect::from_min_max(rect.min, egui::pos2(rect.max.x, rect.min.y + h * 0.25));
+    painter.rect_filled(r1, egui::CornerRadius { nw: 2, ne: 2, sw: 0, se: 0 }, egui::Color32::from_rgb(170, 21, 27));
+    // Mid stripe: Yellow (50%)
+    let r2 = egui::Rect::from_min_max(egui::pos2(rect.min.x, rect.min.y + h * 0.25), egui::pos2(rect.max.x, rect.min.y + h * 0.75));
+    painter.rect_filled(r2, 0.0, egui::Color32::from_rgb(241, 191, 0));
+    // Bottom stripe: Red (25%)
+    let r3 = egui::Rect::from_min_max(egui::pos2(rect.min.x, rect.min.y + h * 0.75), rect.max);
+    painter.rect_filled(r3, egui::CornerRadius { nw: 0, ne: 0, sw: 2, se: 2 }, egui::Color32::from_rgb(170, 21, 27));
+    // Coat of arms marker in yellow band
+    let mark_x = rect.left() + rect.width() * 0.32;
+    let mark_cy = rect.center().y;
+    painter.rect_filled(egui::Rect::from_center_size(egui::pos2(mark_x, mark_cy), egui::vec2(h * 0.22, h * 0.28)), 1.0, egui::Color32::from_rgb(170, 21, 27));
+}
+
 fn render_button_feedback(
     ui: &mut egui::Ui,
     id_source: &str,
@@ -1126,6 +1199,9 @@ pub struct LauncherApp {
 
     // Dynamic Launcher Version
     launcher_version: String,
+
+    // Installed Game Mods
+    installed_mods: Vec<crate::mods_manager::InstalledMod>,
 }
 
 #[derive(Debug, Clone)]
@@ -1181,6 +1257,7 @@ impl LauncherApp {
         let gamemode_avail = is_gamemode_available();
         let has_python = crate::runner::find_python(&base_dir).is_ok();
         let has_engine = crate::runner::find_game_engine(&base_dir).is_some();
+        let installed_mods = crate::mods_manager::scan_installed_mods(&base_dir, &config.disabled_mods);
 
         let mut app = Self {
             base_dir: base_dir.clone(),
@@ -1237,6 +1314,7 @@ impl LauncherApp {
             rage_full_texture: None,
             shader_loading: None,
             launcher_version,
+            installed_mods,
         };
 
         crate::log_info!("Launcher UI initialized successfully. Version: {}", app.launcher_version);
@@ -1433,6 +1511,10 @@ impl LauncherApp {
                 self.status_message = Some((format!("Error: {}", e), true));
             }
         }
+    }
+
+    pub fn refresh_installed_mods(&mut self) {
+        self.installed_mods = crate::mods_manager::scan_installed_mods(&self.base_dir, &self.config.disabled_mods);
     }
 
     fn start_game_scan(&mut self) {
@@ -1908,12 +1990,12 @@ impl LauncherApp {
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing = egui::vec2(6.0, 0.0);
                 let langs = [
-                    (Language::Turkish, "🇹🇷 TR"),
-                    (Language::English, "🇬🇧 EN"),
-                    (Language::German, "🇩🇪 DE"),
-                    (Language::Spanish, "🇪🇸 ES"),
+                    (Language::Turkish, "TR"),
+                    (Language::English, "EN"),
+                    (Language::German, "DE"),
+                    (Language::Spanish, "ES"),
                 ];
-                for (lang, label) in &langs {
+                for (lang, code_str) in &langs {
                     let is_selected = self.current_lang == *lang;
                     let (rect, resp) = ui.allocate_exact_size(egui::vec2(60.0, 28.0), egui::Sense::click());
                     let hov = resp.hovered();
@@ -1956,29 +2038,24 @@ impl LauncherApp {
                         egui::Color32::from_rgb(190, 195, 210)
                     };
 
-                    if *lang == Language::Turkish {
-                        let flag_size = egui::vec2(16.0, 11.0);
-                        let flag_rect = egui::Rect::from_min_size(
-                            egui::pos2(rect.left() + 9.0, rect.center().y - flag_size.y / 2.0),
-                            flag_size,
-                        );
-                        paint_turkish_flag(&p, flag_rect);
-                        p.text(
-                            egui::pos2(rect.left() + 32.0, rect.center().y),
-                            egui::Align2::LEFT_CENTER,
-                            "TR",
-                            egui::FontId::proportional(12.0),
-                            text_color,
-                        );
-                    } else {
-                        p.text(
-                            rect.center(),
-                            egui::Align2::CENTER_CENTER,
-                            *label,
-                            egui::FontId::proportional(12.0),
-                            text_color,
-                        );
+                    let flag_size = egui::vec2(16.0, 11.0);
+                    let flag_rect = egui::Rect::from_min_size(
+                        egui::pos2(rect.left() + 9.0, rect.center().y - flag_size.y / 2.0),
+                        flag_size,
+                    );
+                    match lang {
+                        Language::Turkish => paint_turkish_flag(&p, flag_rect),
+                        Language::English => paint_uk_flag(&p, flag_rect),
+                        Language::German => paint_german_flag(&p, flag_rect),
+                        Language::Spanish => paint_spanish_flag(&p, flag_rect),
                     }
+                    p.text(
+                        egui::pos2(rect.left() + 32.0, rect.center().y),
+                        egui::Align2::LEFT_CENTER,
+                        *code_str,
+                        egui::FontId::proportional(12.0),
+                        text_color,
+                    );
 
                     if resp.clicked() {
                         self.current_lang = *lang;
@@ -2155,12 +2232,12 @@ impl LauncherApp {
             }
         }
 
-        // 7. Bottom-Left: Console Action Menu Items (Row 1: Latest News, Row 2: Options)
+        // 7. Bottom-Left: Console Action Menu Items (Row 1: Latest News, Row 2: Mods, Row 3: Options)
         let bl_x = screen_rect.min.x + 28.0;
-        let bl_y = screen_rect.max.y - 88.0;
+        let bl_y = screen_rect.max.y - 124.0;
         let bl_rect = egui::Rect::from_min_size(
             egui::pos2(bl_x, bl_y),
-            egui::vec2(280.0, 75.0),
+            egui::vec2(280.0, 114.0),
         );
         ui.scope_builder(egui::UiBuilder::new().max_rect(bl_rect), |ui| {
             ui.vertical(|ui| {
@@ -2179,7 +2256,21 @@ impl LauncherApp {
                     self.show_release_notes_modal = true;
                 }
 
-                // Row 2: ⚙️ AYARLAR / OPTIONS
+                // Row 2: 📦 MODLAR / MODS
+                if render_console_action_button(
+                    ui,
+                    "btn_mods",
+                    "📦",
+                    self.t("nav_mods"),
+                    14.5,
+                    false,
+                ) {
+                    self.settings_tab = SettingsTab::Mods;
+                    self.view_mode = ViewMode::Settings;
+                    self.view_transition_start = std::time::Instant::now();
+                }
+
+                // Row 3: ⚙️ AYARLAR / OPTIONS
                 if render_console_action_button(
                     ui,
                     "btn_options",
@@ -2188,6 +2279,7 @@ impl LauncherApp {
                     14.5,
                     false,
                 ) {
+                    self.settings_tab = SettingsTab::Graphics;
                     self.view_mode = ViewMode::Settings;
                     self.view_transition_start = std::time::Instant::now();
                 }
@@ -2278,7 +2370,20 @@ impl LauncherApp {
                     }
                     ui.add_space(8.0);
 
-                    // 2. ⚡ SİSTEM ÖZELLİKLERİ
+                    // 2. 📦 MODLAR
+                    if render_settings_tab_btn(
+                        ui,
+                        "tab_mods",
+                        "📦",
+                        self.t("nav_mods"),
+                        self.settings_tab == SettingsTab::Mods,
+                    ) {
+                        self.settings_tab = SettingsTab::Mods;
+                        self.view_transition_start = std::time::Instant::now();
+                    }
+                    ui.add_space(8.0);
+
+                    // 3. ⚡ SİSTEM ÖZELLİKLERİ
                     if render_settings_tab_btn(
                         ui,
                         "tab_sys",
@@ -2291,7 +2396,7 @@ impl LauncherApp {
                     }
                     ui.add_space(8.0);
 
-                    // 3. 📁 OYUN KONUMU
+                    // 4. 📁 OYUN KONUMU
                     if render_settings_tab_btn(
                         ui,
                         "tab_loc",
@@ -2304,7 +2409,7 @@ impl LauncherApp {
                     }
                     ui.add_space(8.0);
 
-                    // 4. 🎮 KONTROLLER
+                    // 5. 🎮 KONTROLLER
                     if render_settings_tab_btn(
                         ui,
                         "tab_ctrl",
@@ -2317,11 +2422,11 @@ impl LauncherApp {
                     }
                     ui.add_space(8.0);
 
-                    // 5. 🧪 SHADER AYARI
+                    // 6. ⚡ SHADER AYARI
                     if render_settings_tab_btn(
                         ui,
                         "tab_shd",
-                        "🧪",
+                        "⚡",
                         self.t("nav_shaders"),
                         self.settings_tab == SettingsTab::Shaders,
                     ) {
@@ -2357,6 +2462,9 @@ impl LauncherApp {
                                     self.render_graphics_screen(ui, ctx);
                                     ui.add_space(14.0);
                                     self.render_mods_screen(ui, ctx);
+                                }
+                                SettingsTab::Mods => {
+                                    self.render_custom_mods_screen(ui, ctx);
                                 }
                                 SettingsTab::SystemSpecs => {
                                     self.render_system_specs_screen(ui, ctx);
@@ -2742,6 +2850,275 @@ impl LauncherApp {
                 if render_button_feedback(ui, "btn_save_mods", &format!("💾 {}", self.t("save_apply")), egui::vec2(200.0, 34.0), false).clicked() {
                     self.apply_all_optimizations();
                 }
+            });
+        });
+    }
+
+    // ==========================================
+    // SCREEN 2.5: AYARLAR -> OYUN MODLARI (MOD MANAGER)
+    // ==========================================
+    pub fn render_custom_mods_screen(&mut self, ui: &mut egui::Ui, _ctx: &egui::Context) {
+        let card_frame = egui::Frame::new()
+            .fill(egui::Color32::from_rgba_unmultiplied(14, 15, 23, 235))
+            .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(220, 38, 38, 65)))
+            .inner_margin(egui::Margin::symmetric(14, 12))
+            .corner_radius(egui::CornerRadius::same(10));
+
+        render_section_tag(ui, self.t("tag_mods"));
+        card_frame.show(ui, |ui| {
+            ui.heading(
+                egui::RichText::new(format!("📦 {}", self.t("mods_title")))
+                    .size(16.0)
+                    .color(egui::Color32::from_rgb(255, 215, 120)),
+            );
+            ui.label(
+                egui::RichText::new(self.t("mods_desc"))
+                    .size(11.5)
+                    .color(egui::Color32::from_rgb(175, 185, 205)),
+            );
+            ui.separator();
+
+            // Actions row: Open Folder & Refresh
+            ui.horizontal(|ui| {
+                if render_button_feedback(
+                    ui,
+                    "btn_open_mods_folder",
+                    &format!("📂 {}", self.t("mods_open_folder")),
+                    egui::vec2(210.0, 34.0),
+                    false,
+                )
+                .clicked()
+                {
+                    crate::mods_manager::open_mods_folder(&self.base_dir);
+                }
+
+                if render_button_feedback(
+                    ui,
+                    "btn_refresh_mods_list",
+                    &format!("🔄 {}", self.t("mods_refresh")),
+                    egui::vec2(180.0, 34.0),
+                    false,
+                )
+                .clicked()
+                {
+                    self.refresh_installed_mods();
+                    self.status_message = Some((
+                        format!("{} ({} mod)", self.t("mods_refresh"), self.installed_mods.len()),
+                        false,
+                    ));
+                }
+            });
+
+            ui.add_space(8.0);
+
+            // Summary badge bar
+            let total_count = self.installed_mods.len();
+            let active_count = self.installed_mods.iter().filter(|m| m.is_enabled).count();
+            let disabled_count = total_count.saturating_sub(active_count);
+
+            let summary_frame = egui::Frame::new()
+                .fill(egui::Color32::from_rgba_unmultiplied(18, 22, 34, 220))
+                .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(100, 180, 255, 60)))
+                .corner_radius(egui::CornerRadius::same(6))
+                .inner_margin(egui::Margin::symmetric(10, 6));
+
+            summary_frame.show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    ui.label(
+                        egui::RichText::new(
+                            self.t("mods_count_summary")
+                                .replacen("{}", &total_count.to_string(), 1)
+                                .replacen("{}", &active_count.to_string(), 1)
+                                .replacen("{}", &disabled_count.to_string(), 1),
+                        )
+                        .color(egui::Color32::from_rgb(160, 215, 255))
+                        .size(12.0)
+                        .strong(),
+                    );
+                });
+            });
+
+            ui.add_space(10.0);
+
+            // Mods list or empty state
+            if self.installed_mods.is_empty() {
+                let empty_frame = egui::Frame::new()
+                    .fill(egui::Color32::from_rgba_unmultiplied(22, 24, 32, 200))
+                    .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(255, 255, 255, 25)))
+                    .corner_radius(egui::CornerRadius::same(8))
+                    .inner_margin(egui::Margin::symmetric(16, 16));
+
+                empty_frame.show(ui, |ui| {
+                    ui.vertical_centered(|ui| {
+                        ui.label(
+                            egui::RichText::new(format!("📦 {}", self.t("mods_empty_title")))
+                                .color(egui::Color32::from_rgb(255, 215, 120))
+                                .size(14.0)
+                                .strong(),
+                        );
+                        ui.add_space(4.0);
+                        ui.label(
+                            egui::RichText::new(self.t("mods_empty_desc"))
+                                .color(egui::Color32::from_rgb(175, 180, 195))
+                                .size(11.5),
+                        );
+                    });
+                });
+            } else {
+                let mut toggled_mod: Option<(String, bool)> = None;
+
+                for m in &self.installed_mods {
+                    let is_active = m.is_enabled;
+                    let mod_frame = egui::Frame::new()
+                        .fill(if is_active {
+                            egui::Color32::from_rgba_unmultiplied(18, 25, 38, 230)
+                        } else {
+                            egui::Color32::from_rgba_unmultiplied(18, 19, 24, 180)
+                        })
+                        .stroke(egui::Stroke::new(
+                            1.0,
+                            if is_active {
+                                egui::Color32::from_rgba_unmultiplied(100, 180, 255, 90)
+                            } else {
+                                egui::Color32::from_rgba_unmultiplied(255, 255, 255, 20)
+                            },
+                        ))
+                        .corner_radius(egui::CornerRadius::same(8))
+                        .inner_margin(egui::Margin::symmetric(12, 10));
+
+                    mod_frame.show(ui, |ui| {
+                        // Line 1: Switch, Icon, Title, Version, Status Badge
+                        ui.horizontal(|ui| {
+                            let mut checked = is_active;
+                            if toggle_switch(ui, &mut checked).changed() {
+                                toggled_mod = Some((m.folder_name.clone(), checked));
+                            }
+
+                            let icon = if m.folder_name.to_lowercase().contains("cj") {
+                                "🦸‍♂️"
+                            } else if m.folder_name.to_lowercase().contains("blade") {
+                                "⚔️"
+                            } else if m.folder_name.to_lowercase().contains("costume") || m.folder_name.to_lowercase().contains("skin") {
+                                "🎭"
+                            } else {
+                                "📦"
+                            };
+
+                            let title_resp = ui.add(
+                                egui::Label::new(
+                                    egui::RichText::new(format!("{} {}", icon, m.title))
+                                        .size(14.5)
+                                        .strong()
+                                        .color(if is_active {
+                                            egui::Color32::WHITE
+                                        } else {
+                                            egui::Color32::from_rgb(150, 155, 165)
+                                        }),
+                                )
+                                .sense(egui::Sense::click()),
+                            );
+                            if title_resp.clicked() {
+                                toggled_mod = Some((m.folder_name.clone(), !is_active));
+                            }
+                            if title_resp.hovered() {
+                                ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+                            }
+
+                            ui.label(
+                                egui::RichText::new(format!("[{}]", m.version))
+                                    .size(11.0)
+                                    .color(egui::Color32::from_rgb(140, 165, 200)),
+                            );
+
+                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                if is_active {
+                                    ui.label(
+                                        egui::RichText::new(self.t("mods_status_active"))
+                                            .size(11.5)
+                                            .color(egui::Color32::from_rgb(134, 239, 172))
+                                            .strong(),
+                                    );
+                                } else {
+                                    ui.label(
+                                        egui::RichText::new(self.t("mods_status_disabled"))
+                                            .size(11.5)
+                                            .color(egui::Color32::from_rgb(180, 100, 100)),
+                                    );
+                                }
+                            });
+                        });
+
+                        // Line 2: Description (if any)
+                        if !m.description.is_empty() {
+                            ui.add_space(3.0);
+                            ui.label(
+                                egui::RichText::new(&m.description)
+                                    .size(11.0)
+                                    .color(egui::Color32::from_rgb(175, 185, 200)),
+                            );
+                        }
+
+                        // Line 3: Author and Replaced files info
+                        ui.add_space(4.0);
+                        ui.horizontal(|ui| {
+                            ui.label(
+                                egui::RichText::new(format!("👤 {}: {}", self.t("mods_author"), m.author))
+                                    .size(10.5)
+                                    .color(egui::Color32::from_rgb(255, 215, 120)),
+                            );
+
+                            ui.label(egui::RichText::new("•").color(egui::Color32::DARK_GRAY));
+
+                            let samples_str = if !m.sample_files.is_empty() {
+                                format!(" (örn. {})", m.sample_files.join(", "))
+                            } else {
+                                String::new()
+                            };
+
+                            ui.label(
+                                egui::RichText::new(format!(
+                                    "🎯 {}: {}{}",
+                                    self.t("mods_files_replaced"),
+                                    m.file_count,
+                                    samples_str
+                                ))
+                                .size(10.5)
+                                .color(egui::Color32::from_rgb(150, 200, 255)),
+                            );
+                        });
+                    });
+
+                    ui.add_space(6.0);
+                }
+
+                // If user toggled a mod, update config and state
+                if let Some((folder, enabled)) = toggled_mod {
+                    if let Some(item) = self.installed_mods.iter_mut().find(|x| x.folder_name == folder) {
+                        item.is_enabled = enabled;
+                    }
+
+                    if enabled {
+                        self.config.disabled_mods.retain(|x| x != &folder);
+                    } else if !self.config.disabled_mods.contains(&folder) {
+                        self.config.disabled_mods.push(folder.clone());
+                    }
+
+                    let _ = self.config.save(&self.base_dir);
+                    self.status_message = Some((
+                        format!("'{}' modu {}", folder, if enabled { "aktif edildi" } else { "devre dışı bırakıldı" }),
+                        false,
+                    ));
+                }
+            }
+
+            ui.add_space(8.0);
+            ui.separator();
+            ui.horizontal(|ui| {
+                ui.label(
+                    egui::RichText::new("💡 Bilgi: Oyun modları sanal katman (Overlay FS) üzerinden dinamik aktarılır. Orijinal oyun dosyalarınız asla bozulmaz veya değişmez.")
+                        .size(10.5)
+                        .color(egui::Color32::from_rgb(140, 150, 170)),
+                );
             });
         });
     }

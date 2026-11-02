@@ -19,23 +19,34 @@ def child(folder, name):
     return folder / name
 
 
+KNOWN_GOW3_DIRS = {
+    'exec', 'dutch', 'english', 'french', 'german',
+    'italian', 'polish', 'portuguese', 'russian', 'spanish'
+}
+
+
 def content_root(folder):
     """(root, prefix): where a mod's files are and the game path they go to, or None.
 
-    Accepted layouts: <mod>/dvdroot_ps4, <mod>/app0/dvdroot_ps4 and one wrapper folder around
-    either (an archive extracted into a folder of its name)."""
+    Accepted layouts: <mod>/dvdroot_ps4, <mod>/app0/dvdroot_ps4, <mod>/EXEC,
+    <mod>/app0/EXEC and one wrapper folder around either."""
     folder = Path(folder)
     if not folder.is_dir():
         return None
     for wrapper in ('', 'app0'):
         base = child(folder, wrapper) if wrapper else folder
+        if not base.is_dir():
+            continue
         dvdroot = child(base, 'dvdroot_ps4')
         if dvdroot.is_dir():
             return base, ''
+        for d in KNOWN_GOW3_DIRS:
+            if child(base, d).is_dir():
+                return base, ''
     entries = [e for e in folder.iterdir() if not e.name.startswith('.')]
     folders = [e for e in entries if e.is_dir()]
     if len(folders) == 1 and not [e for e in entries if e.is_file() and
-                                  e.suffix.casefold() not in ('.txt', '.md', '.jpg', '.png', '.ini')]:
+                                  e.suffix.casefold() not in ('.txt', '.md', '.jpg', '.png', '.ini', '.json')]:
         return content_root(folders[0])
     return None
 
@@ -67,10 +78,10 @@ def selected(root, config):
 
 
 def mod_files(folder):
-    """(game path, source) of every file a mod replaces or adds under dvdroot_ps4."""
+    """(game path, source) of every file a mod replaces or adds under the game root."""
     layout = content_root(folder)
     if not layout:
-        raise ValueError(f'{folder}: expected dvdroot_ps4 (or chr/, parts/, ...) inside the mod folder')
+        raise ValueError(f'{folder}: expected EXEC/ or dvdroot_ps4/ inside the mod folder')
     root, prefix = layout
     root = root.resolve()
     for directory, folders, files in os.walk(root, followlinks=False):
@@ -81,14 +92,20 @@ def mod_files(folder):
         for name in sorted(files):
             source = directory / name
             relative = Path(prefix) / source.relative_to(root) if prefix else source.relative_to(root)
-            # Readme/metadata stay outside the mounted game. This loader handles assets;
-            # executable patches use the existing patch compiler, with address validation.
-            if relative.parts[0].casefold() != 'dvdroot_ps4':
-                if relative.parts[0].casefold() in ('eboot.bin', 'sce_module', 'sce_sys'):
+            # Skip documentation / metadata at the mod root
+            if len(relative.parts) == 1:
+                if source.suffix.casefold() in ('.txt', '.md', '.json', '.jpg', '.png', '.ini'):
+                    continue
+            # Strip packaging wrapper prefixes (app0, dvdroot_ps4) so files align with the game root
+            while len(relative.parts) > 1 and relative.parts[0].casefold() in ('app0', 'dvdroot_ps4'):
+                relative = Path(*relative.parts[1:])
+
+            if relative.parts[0].casefold() in ('eboot.bin', 'sce_module', 'sce_sys'):
+                if relative.parts[0].casefold() in ('eboot.bin', 'sce_module'):
                     raise ValueError(f'Executable/system replacement is unsupported: {source}')
                 continue
             if not source.is_file():
-                raise ValueError(f'Not a regular mod file: {source}')
+                continue
             yield relative, source
 
 
@@ -201,6 +218,9 @@ def build_overlay(game, out, mods):
         return game
     out = Path(out).resolve()
     out.mkdir(parents=True, exist_ok=True)
+    for old_dir in out.glob('mod-game-*'):
+        if old_dir.is_dir():
+            shutil.rmtree(old_dir, ignore_errors=True)
     if os.name == 'nt' and not symlinks_work(out) and out.drive.casefold() != game.drive.casefold():
         # Hard links only reach files on the same volume: the overlay goes beside the game.
         out = game.parent

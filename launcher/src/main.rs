@@ -9,6 +9,7 @@ mod system;
 mod tuner;
 mod updater;
 mod shader_downloader;
+pub mod mods_manager;
 
 use app::LauncherApp;
 use eframe::egui;

@@ -125,11 +125,12 @@ fn update_run_sh(base_dir: &Path, config: &LauncherConfig) -> Result<(), String>
     replace_or_insert_env(&mut content, "GOW3_DMEM_POOL_MB", &config.dmem_mb.to_string());
     replace_or_insert_env(&mut content, "GOW3_DMEM_MB", &config.dmem_mb.to_string());
     replace_or_insert_env(&mut content, "GOW3_DEFAULT_ENGINE_FPS", &config.target_fps.to_string());
-    replace_or_insert_env(&mut content, "GOW3_FORCE_READBACK", if config.patch_readbacks { "1" } else { "0" });
+    replace_or_insert_env(&mut content, "GOW3_FORCE_READBACK", if config.patch_readbacks && config.async_readbacks { "1" } else { "0" });
     replace_or_insert_env(&mut content, "GOW3_READBACKS", if config.patch_readbacks { "1" } else { "0" });
     replace_or_insert_env(&mut content, "GOW3_READBACK_LINEAR", if config.patch_readbacks { "1" } else { "0" });
     replace_or_insert_env(&mut content, "GOW3_DEFERRED_READBACK", if config.async_readbacks { "1" } else { "0" });
     replace_or_insert_env(&mut content, "GOW3_STALE_READBACK", if config.async_readbacks { "1" } else { "0" });
+    replace_or_insert_env(&mut content, "GOW3_COPY_GPU_BUFFERS", "1");
 
     let cpu_threads = if config.cached_hardware.cpu_threads > 0 {
         config.cached_hardware.cpu_threads

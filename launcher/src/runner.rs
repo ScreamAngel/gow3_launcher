@@ -1193,13 +1193,17 @@ pub fn launch_gow3(
     cmd.env("GOW3_OBJECT_MOTION", if config.disable_motion_blur { "0" } else { "1" });
     cmd.env("GOW3_READBACKS", if config.patch_readbacks { "1" } else { "0" });
     cmd.env("GOW3_READBACK_LINEAR", if config.patch_readbacks { "1" } else { "0" });
-    cmd.env("GOW3_FORCE_READBACK", if config.patch_readbacks { "1" } else { "0" });
+    cmd.env("GOW3_FORCE_READBACK", if config.patch_readbacks && config.async_readbacks { "1" } else { "0" });
 
     // Asynchronous & Stale Readbacks:
     // Decouples CPU from GPU fences. CPU reads use the previous frame's copy and CPU writes proceed
     // without stalling the render thread.
     cmd.env("GOW3_DEFERRED_READBACK", if config.async_readbacks { "1" } else { "0" });
     cmd.env("GOW3_STALE_READBACK", if config.async_readbacks { "1" } else { "0" });
+
+    // Direct GPU Buffer Copies: offload buffer copies to GPU hardware command stream
+    // avoiding CPU pipeline stalls and PCIe round-trip wait states.
+    cmd.env("GOW3_COPY_GPU_BUFFERS", "1");
 
     // CPU Thread Tuning:
     // Scale draw preparation workers and copy threads to CPU topology to prevent thread contention.

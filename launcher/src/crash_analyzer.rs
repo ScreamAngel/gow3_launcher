@@ -116,7 +116,7 @@ pub fn analyze_post_game(base_dir: &Path, exit_code: Option<i32>) -> Option<Cras
         return Some(CrashDiagnosis {
             title: "⚠️ Doku (Texture) Okuma Hatası Algılandı".to_string(),
             description: "GPU'dan sistem belleğine doku transferi sırasında gecikme veya veri bozulması yaşandı (Altın sarısı doku hatası belirtisi).".to_string(),
-            recommendation: "Launcher üzerinde 'Doku Bozulması ve Sararma Önleme (Instant Readbacks)' seçeneğinin AÇIK ve 'Asenkron Geri Okuma' seçeneğinin KAPALI olduğundan emin olun.".to_string(),
+            recommendation: "Launcher üzerinde 'Doku Bozulması ve Sararma Önleme (Instant Readbacks)' ve 'Asenkron Geri Okuma (Önerilen)' seçeneklerinin AÇIK olduğundan emin olun.".to_string(),
             log_snippet: extract_relevant_snippet(&tail_str, "readback"),
         });
     }

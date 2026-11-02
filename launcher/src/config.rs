@@ -516,11 +516,10 @@ impl LauncherConfig {
             if let Ok(content) = fs::read_to_string(&path) {
                 if let Ok(mut cfg) = serde_json::from_str::<LauncherConfig>(&content) {
                     let mut changed = false;
-                    // Migrate from older versions: ensure v1.9 version string and disable async_readbacks
-                    // to fix black flickering screens, logo transitions, and save-loading freezes.
-                    if cfg.launcher_version != "v1.9" || cfg.async_readbacks {
+                    // Migrate from older versions: ensure v1.9 version string and enable recommended async_readbacks
+                    if cfg.launcher_version != "v1.9" {
                         cfg.launcher_version = "v1.9".to_string();
-                        cfg.async_readbacks = false;
+                        cfg.async_readbacks = true;
                         changed = true;
                     }
                     // If the user's config still has old default bindings,

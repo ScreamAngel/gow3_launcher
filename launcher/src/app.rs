@@ -1228,6 +1228,7 @@ pub struct ShaderLoadingState {
     pub is_complete: bool,
     pub completed_at: Option<std::time::Instant>,
     pub phase_changed_at: Option<std::time::Instant>,
+    pub game_ready_at: Option<std::time::Instant>,
     pub start_time: std::time::Instant,
     pub rx: Receiver<ShaderProgressMsg>,
 }
@@ -1694,6 +1695,7 @@ impl LauncherApp {
                 is_complete: false,
                 completed_at: None,
                 phase_changed_at: None,
+                game_ready_at: None,
                 start_time: std::time::Instant::now(),
                 rx: progress_rx,
             });
@@ -1703,13 +1705,15 @@ impl LauncherApp {
             let running_pid_monitor = self.running_pid.clone();
             thread::spawn(move || {
                 let log_path = base_dir_monitor.join("gow3_log.txt");
+                let user_log_path = base_dir_monitor.join("user/log/shad_log.txt");
                 let mut last_pos: u64 = 0;
+                let mut user_last_pos: u64 = 0;
                 let start = std::time::Instant::now();
                 let detected_total = initial_total;
                 let mut pid_seen = false;
                 let mut warmup_done = false;
 
-                while start.elapsed().as_secs() < 40 {
+                while start.elapsed().as_secs() < 120 {
                     let pid = running_pid_monitor.load(Ordering::SeqCst);
                     if pid > 0 {
                         pid_seen = true;
@@ -1771,12 +1775,17 @@ impl LauncherApp {
                                     });
                                 }
 
-                                // 2. Game is completely open: guest x86-64 code entered or WAD stats / _init_env
+                                // 2. Game screen is actually visible on display: Sony opening credits, video playback or graphics stream
                                 if warmup_done
-                                    && (line.contains("Entering original x86-64 code")
-                                        || line.contains("_init_env returned")
-                                        || line.contains("WAD_STATS:")
-                                        || line.contains("Runtime: direct allocation"))
+                                    && (line.contains("OPENINGCREDITS")
+                                        || line.contains("Starting video stream")
+                                        || line.contains("allocate a frame buffer")
+                                        || line.contains("my_decode_thread")
+                                        || line.contains("subtitle =")
+                                        || line.contains("WAD Shell")
+                                        || line.contains("WAD R_UI")
+                                        || line.contains("IT_SET_PREDICATION")
+                                        || line.contains("ProcessGraphics"))
                                 {
                                     let _ = progress_tx.send(ShaderProgressMsg {
                                         current: detected_total,
@@ -1793,6 +1802,42 @@ impl LauncherApp {
                             }
                         }
                     }
+
+                    // Also check user/log/shad_log.txt for opening credits / video decoder in case
+                    if warmup_done {
+                        if let Ok(mut uf) = std::fs::File::open(&user_log_path) {
+                            use std::io::{BufRead, BufReader, Seek, SeekFrom};
+                            if let Ok(umeta) = uf.metadata() {
+                                if umeta.len() < user_last_pos {
+                                    user_last_pos = 0;
+                                }
+                            }
+                            if uf.seek(SeekFrom::Start(user_last_pos)).is_ok() {
+                                let ureader = BufReader::new(uf);
+                                for uline in ureader.lines().flatten() {
+                                    if uline.contains("OPENINGCREDITS")
+                                        || uline.contains("Starting video stream")
+                                        || uline.contains("allocate a frame buffer")
+                                        || uline.contains("my_decode_thread")
+                                        || uline.contains("sceVideodecCreateDecoder")
+                                    {
+                                        let _ = progress_tx.send(ShaderProgressMsg {
+                                            current: detected_total,
+                                            total: detected_total,
+                                            progress: 1.0,
+                                            is_complete: true,
+                                            game_window_ready: true,
+                                        });
+                                        return;
+                                    }
+                                }
+                                if let Ok(new_umeta) = std::fs::metadata(&user_log_path) {
+                                    user_last_pos = new_umeta.len();
+                                }
+                            }
+                        }
+                    }
+
                     thread::sleep(std::time::Duration::from_millis(30));
                 }
             });
@@ -4170,6 +4215,9 @@ impl eframe::App for LauncherApp {
                 }
                 if msg.game_window_ready {
                     game_ready = true;
+                    if sl.game_ready_at.is_none() {
+                        sl.game_ready_at = Some(std::time::Instant::now());
+                    }
                 }
             }
 
@@ -4219,9 +4267,23 @@ impl eframe::App for LauncherApp {
 
             // Check if game window is ready to dismiss loading screen
             if sl.phase == ShaderLoadingPhase::WaitingForGameWindow {
+                if game_ready && sl.game_ready_at.is_none() {
+                    sl.game_ready_at = Some(std::time::Instant::now());
+                }
+
                 let time_in_wait = sl.phase_changed_at.map(|t| t.elapsed().as_millis()).unwrap_or(0);
-                // Minimum wait 400ms to avoid any blink, dismiss if game reported ready or after 2.8s fallback
-                if (game_ready && time_in_wait >= 400) || time_in_wait >= 2800 {
+                let ready_elapsed = sl.game_ready_at.map(|t| t.elapsed().as_millis());
+
+                // Hold screen until the Sony intro video is visibly rendering on screen!
+                // Once game_ready is received (Sony intro starts), hold for 800ms so the Sony logo
+                // is visibly drawn and active on screen, then cleanly dismiss the loading overlay.
+                // Safety fallback timeout: 60 seconds (prevents hanging indefinitely if log is silenced).
+                let should_dismiss = match ready_elapsed {
+                    Some(ms) => ms >= 800,
+                    None => time_in_wait >= 60_000,
+                };
+
+                if should_dismiss {
                     ctx.send_viewport_cmd(egui::ViewportCommand::WindowLevel(egui::WindowLevel::Normal));
                     ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(false));
                     self.shader_loading = None;

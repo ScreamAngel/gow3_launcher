@@ -328,3 +328,24 @@ bool SDL_PollEvent(SDL_Event *event) {
     }
     return result;
 }
+
+// Override Gow3Overlay::SetLoading and ImGui::ProgressBar to completely eliminate
+// the engine's plain generic loading bar in fullscreen mode
+#ifdef _WIN32
+__declspec(dllexport)
+#endif
+void _ZN11Gow3Overlay10SetLoadingEbjj(bool is_loading, unsigned int current, unsigned int total) {
+    (void)is_loading;
+    (void)current;
+    (void)total;
+}
+
+#ifdef _WIN32
+__declspec(dllexport)
+#endif
+void _ZN5ImGui11ProgressBarEfRK6ImVec2PKc(float fraction, const void* size_arg, const char* overlay) {
+    (void)fraction;
+    (void)size_arg;
+    (void)overlay;
+}
+

@@ -1194,7 +1194,11 @@ impl LauncherApp {
         });
     }
 
-    fn force_quit_game(&mut self) {
+    fn force_quit_game(&mut self, ctx: Option<&egui::Context>) {
+        if let Some(c) = ctx {
+            c.send_viewport_cmd(egui::ViewportCommand::WindowLevel(egui::WindowLevel::Normal));
+            c.send_viewport_cmd(egui::ViewportCommand::Fullscreen(false));
+        }
         let pid = self.running_pid.load(Ordering::SeqCst);
         crate::runner::kill_game_processes(pid);
         self.running_pid.store(0, Ordering::SeqCst);
@@ -1204,18 +1208,26 @@ impl LauncherApp {
         self.status_message = Some((self.t("force_quit_status").to_string(), false));
     }
 
-    fn kill_leftover_processes(&mut self) {
+    fn kill_leftover_processes(&mut self, ctx: Option<&egui::Context>) {
+        if let Some(c) = ctx {
+            c.send_viewport_cmd(egui::ViewportCommand::WindowLevel(egui::WindowLevel::Normal));
+            c.send_viewport_cmd(egui::ViewportCommand::Fullscreen(false));
+        }
         crate::runner::kill_game_processes(0);
         self.shader_loading = None;
         self.status_message = Some((self.t("force_quit_status").to_string(), false));
     }
 
-    fn launch_game(&mut self) {
+    fn launch_game(&mut self, ctx: &egui::Context) {
         self.apply_all_optimizations();
 
         self.is_game_running = true;
         let (tx, rx) = channel();
         self.game_exit_rx = Some(rx);
+
+        // Switch to fullscreen & keep on top during shader compilation so it seamlessly covers the screen
+        ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(true));
+        ctx.send_viewport_cmd(egui::ViewportCommand::WindowLevel(egui::WindowLevel::AlwaysOnTop));
 
         // Initialize God of War III Shader Loading Screen
         let (progress_tx, progress_rx) = channel();
@@ -1286,7 +1298,7 @@ impl LauncherApp {
                                     is_complete: true,
                                 });
                                 return;
-                            } else if line.contains("Vulkan presenter ready") || line.contains("vblank 144 Hz") || line.contains("USERDATA' mounted") {
+                            } else if line.contains("Vulkan presenter ready") || line.contains("vblank") || line.contains("USERDATA' mounted") {
                                 let _ = progress_tx.send(ShaderProgressMsg {
                                     current: detected_total,
                                     total: detected_total,
@@ -1351,6 +1363,13 @@ impl LauncherApp {
             );
         }
 
+        // Responsive scaling factor for fullscreen / high-resolution displays
+        let scale = if screen_rect.height() > 800.0 {
+            (screen_rect.height() / 720.0).clamp(1.0, 1.8)
+        } else {
+            1.0
+        };
+
         // Center position for rage bar
         let center = screen_rect.center();
         let glow_pulse = ((time * 2.8).sin() * 0.5 + 0.5) as f32; // 0.0 to 1.0
@@ -1358,21 +1377,21 @@ impl LauncherApp {
         // Ambient radial ember glow behind rage crest
         let glow_alpha = ((25.0 + 35.0 * progress + 20.0 * glow_pulse) as u8).min(110);
         painter.circle_filled(
-            egui::pos2(center.x, center.y - 45.0),
-            160.0 + progress * 50.0,
+            egui::pos2(center.x, center.y - 45.0 * scale),
+            (160.0 + progress * 50.0) * scale,
             egui::Color32::from_rgba_unmultiplied(220, 60, 20, glow_alpha / 3),
         );
         painter.circle_filled(
-            egui::pos2(center.x, center.y - 45.0),
-            90.0 + progress * 35.0,
+            egui::pos2(center.x, center.y - 45.0 * scale),
+            (90.0 + progress * 35.0) * scale,
             egui::Color32::from_rgba_unmultiplied(255, 170, 30, glow_alpha / 2),
         );
 
         // 2. God of War Spartan Rage Bar (Height: ~192, Width: ~135; aspect ratio 0.70)
-        let bar_w = 135.0;
-        let bar_h = 192.0;
+        let bar_w = 135.0 * scale;
+        let bar_h = 192.0 * scale;
         let bar_rect = egui::Rect::from_center_size(
-            egui::pos2(center.x, center.y - 50.0),
+            egui::pos2(center.x, center.y - 50.0 * scale),
             egui::vec2(bar_w, bar_h),
         );
 
@@ -1404,7 +1423,7 @@ impl LauncherApp {
                     let beam_w = bar_w * 0.72;
                     let beam_rect = egui::Rect::from_center_size(
                         egui::pos2(center.x, top_y),
-                        egui::vec2(beam_w, 3.5 + glow_pulse * 2.5),
+                        egui::vec2(beam_w, (3.5 + glow_pulse * 2.5) * scale),
                     );
                     painter.rect_filled(
                         beam_rect,
@@ -1419,12 +1438,12 @@ impl LauncherApp {
         let pct_val = (progress * 100.0).round() as u32;
         let pct_str = format!("{}%", pct_val.min(100));
 
-        let gow_font_pct = egui::FontId::new(44.0, egui::FontFamily::Name("GodOfWar".into()));
-        let pct_pos = egui::pos2(center.x, center.y + 75.0);
+        let gow_font_pct = egui::FontId::new(44.0 * scale, egui::FontFamily::Name("GodOfWar".into()));
+        let pct_pos = egui::pos2(center.x, center.y + 75.0 * scale);
 
         // Shadow / Glow behind percentage
         painter.text(
-            egui::pos2(pct_pos.x + 2.0, pct_pos.y + 2.0),
+            egui::pos2(pct_pos.x + 2.0 * scale, pct_pos.y + 2.0 * scale),
             egui::Align2::CENTER_CENTER,
             &pct_str,
             gow_font_pct.clone(),
@@ -1440,11 +1459,11 @@ impl LauncherApp {
 
         // 4. "LOADING SHADERS..." in God of War Font
         let label_str = self.t("loading_shaders");
-        let gow_font_label = egui::FontId::new(22.0, egui::FontFamily::Name("GodOfWar".into()));
-        let label_pos = egui::pos2(center.x, center.y + 120.0);
+        let gow_font_label = egui::FontId::new(22.0 * scale, egui::FontFamily::Name("GodOfWar".into()));
+        let label_pos = egui::pos2(center.x, center.y + 120.0 * scale);
 
         painter.text(
-            egui::pos2(label_pos.x + 1.5, label_pos.y + 1.5),
+            egui::pos2(label_pos.x + 1.5 * scale, label_pos.y + 1.5 * scale),
             egui::Align2::CENTER_CENTER,
             label_str,
             gow_font_label.clone(),
@@ -1462,32 +1481,32 @@ impl LauncherApp {
         if total_shaders > 0 {
             let detail_str = format!("{} / {} Boru Hattı", current_shaders, total_shaders);
             painter.text(
-                egui::pos2(center.x, center.y + 155.0),
+                egui::pos2(center.x, center.y + 155.0 * scale),
                 egui::Align2::CENTER_CENTER,
                 detail_str,
-                egui::FontId::proportional(13.0),
+                egui::FontId::proportional(13.0 * scale),
                 egui::Color32::from_rgb(180, 170, 160),
             );
         } else {
             painter.text(
-                egui::pos2(center.x, center.y + 155.0),
+                egui::pos2(center.x, center.y + 155.0 * scale),
                 egui::Align2::CENTER_CENTER,
                 self.t("loading_shaders_sub"),
-                egui::FontId::proportional(13.0),
+                egui::FontId::proportional(13.0 * scale),
                 egui::Color32::from_rgb(160, 150, 140),
             );
         }
 
         // 6. Force Quit / Cancel button at bottom
         let quit_rect = egui::Rect::from_center_size(
-            egui::pos2(center.x, screen_rect.max.y - 45.0),
-            egui::vec2(160.0, 36.0),
+            egui::pos2(center.x, screen_rect.max.y - 45.0 * scale.min(1.2)),
+            egui::vec2(160.0 * scale.min(1.2), 36.0 * scale.min(1.2)),
         );
         let quit_response = ui.put(
             quit_rect,
             egui::Button::new(
                 egui::RichText::new(self.t("force_quit_btn"))
-                    .size(14.0)
+                    .size(14.0 * scale.min(1.1))
                     .color(egui::Color32::from_rgb(240, 185, 185)),
             )
             .fill(egui::Color32::from_rgb(45, 18, 20))
@@ -1498,7 +1517,7 @@ impl LauncherApp {
             ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
         }
         if quit_response.clicked() {
-            self.force_quit_game();
+            self.force_quit_game(Some(ctx));
         }
     }
 }
@@ -1595,6 +1614,10 @@ impl eframe::App for LauncherApp {
             if let Ok(res) = rx.try_recv() {
                 self.is_game_running = false;
                 self.game_exit_rx = None;
+                if self.shader_loading.is_some() {
+                    ctx.send_viewport_cmd(egui::ViewportCommand::WindowLevel(egui::WindowLevel::Normal));
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(false));
+                }
                 self.shader_loading = None;
 
                 match res {
@@ -1728,9 +1751,18 @@ impl eframe::App for LauncherApp {
                 }
                 if let Some(done_time) = sl.completed_at {
                     if done_time.elapsed().as_millis() > 650 {
+                        ctx.send_viewport_cmd(egui::ViewportCommand::WindowLevel(egui::WindowLevel::Normal));
+                        ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(false));
                         self.shader_loading = None;
                     }
                 }
+            }
+
+            // Safety: allow user to press Escape to dismiss shader loading screen early
+            if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+                ctx.send_viewport_cmd(egui::ViewportCommand::WindowLevel(egui::WindowLevel::Normal));
+                ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(false));
+                self.shader_loading = None;
             }
         }
 
@@ -2472,7 +2504,7 @@ impl eframe::App for LauncherApp {
                         ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
                     }
                     if res.clicked() {
-                        self.kill_leftover_processes();
+                        self.kill_leftover_processes(Some(ui.ctx()));
                     }
                 });
 
@@ -2524,7 +2556,7 @@ impl eframe::App for LauncherApp {
                                 ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
                             }
                             if res.clicked() {
-                                self.force_quit_game();
+                                self.force_quit_game(Some(ui.ctx()));
                             }
                         });
                     } else if self.is_game_valid {
@@ -2559,7 +2591,7 @@ impl eframe::App for LauncherApp {
                             ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
                         }
                         if res.clicked() {
-                            self.launch_game();
+                            self.launch_game(ui.ctx());
                         }
                         ui.add_space(3.0);
                         ui.label(

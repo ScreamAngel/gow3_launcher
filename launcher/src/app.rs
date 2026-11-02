@@ -13,14 +13,20 @@ use crate::system::{detect_hardware, is_gamemode_available};
 use crate::tuner::apply_settings;
 use crate::updater::{apply_github_update, check_github_update, UpdateInfo};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum NavItem {
-    Home,
-    Mods,
-    SettingsGraphics,
-    SettingsGameLocation,
-    SettingsControls,
-    SettingsShaders,
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ViewMode {
+    #[default]
+    MainMenu,
+    Settings,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SettingsTab {
+    #[default]
+    Graphics,
+    GameLocation,
+    Controls,
+    Shaders,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -400,6 +406,7 @@ fn render_hero_pill_badge(
     painter.galley(text_pos, galley, text_col);
 }
 
+#[allow(dead_code)]
 fn render_nav_item(
     ui: &mut egui::Ui,
     id_str: &str,
@@ -510,6 +517,141 @@ fn render_nav_item(
     painter.galley(text_pos, galley, text_color);
 
     response.clicked()
+}
+
+fn render_console_action_button(
+    ui: &mut egui::Ui,
+    id_source: &str,
+    icon: &str,
+    label: &str,
+    font_size: f32,
+    is_gold_accent: bool,
+) -> bool {
+    let id = ui.make_persistent_id(id_source);
+    let full_text = format!("{} {}", icon, label);
+    let font_id = egui::FontId::proportional(font_size);
+    let galley = ui.painter().layout_no_wrap(full_text.clone(), font_id, egui::Color32::WHITE);
+    let padding = egui::vec2(16.0, 8.0);
+    let desired_size = egui::vec2(galley.rect.width() + padding.x * 2.0, font_size + padding.y * 2.0);
+    let (rect, resp) = ui.allocate_exact_size(desired_size, egui::Sense::click());
+
+    let is_hovered = resp.hovered();
+    let hov_anim = ui.ctx().animate_bool(id.with("hov"), is_hovered);
+    if is_hovered {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+    }
+
+    let is_pressed = resp.is_pointer_button_down_on();
+    let scale = if is_pressed { -1.0 } else { hov_anim * 1.5 };
+    let draw_rect = rect.expand(scale);
+    let painter = ui.painter();
+
+    let bg_color = egui::Color32::from_rgba_unmultiplied(
+        (12.0 + 30.0 * hov_anim) as u8,
+        (14.0 + 20.0 * hov_anim) as u8,
+        (20.0 + 15.0 * hov_anim) as u8,
+        (100.0 + 100.0 * hov_anim) as u8,
+    );
+    let border_stroke = if hov_anim > 0.01 {
+        egui::Stroke::new(
+            1.2 + 0.5 * hov_anim,
+            if is_gold_accent {
+                egui::Color32::from_rgba_unmultiplied(255, 215, 100, (140.0 + 115.0 * hov_anim) as u8)
+            } else {
+                egui::Color32::from_rgba_unmultiplied(239, 68, 68, (140.0 + 115.0 * hov_anim) as u8)
+            },
+        )
+    } else {
+        egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(255, 255, 255, 35))
+    };
+
+    painter.rect_filled(draw_rect, 6.0, bg_color);
+    painter.rect_stroke(draw_rect, 6.0, border_stroke, egui::StrokeKind::Inside);
+
+    let text_col = if is_hovered {
+        if is_gold_accent {
+            egui::Color32::from_rgb(255, 225, 120)
+        } else {
+            egui::Color32::WHITE
+        }
+    } else {
+        egui::Color32::from_rgb(215, 220, 230)
+    };
+
+    let text_pos = egui::pos2(
+        draw_rect.min.x + padding.x,
+        draw_rect.center().y - galley.rect.height() / 2.0,
+    );
+    painter.galley(text_pos, galley, text_col);
+
+    resp.clicked()
+}
+
+fn render_settings_tab_btn(
+    ui: &mut egui::Ui,
+    id_source: &str,
+    icon: &str,
+    label: &str,
+    is_active: bool,
+) -> bool {
+    let id = ui.make_persistent_id(id_source);
+    let full_text = format!("{} {}", icon, label);
+    let font_id = egui::FontId::proportional(14.0);
+    let galley = ui.painter().layout_no_wrap(full_text.clone(), font_id, egui::Color32::WHITE);
+    let desired_size = egui::vec2(galley.rect.width() + 28.0, 36.0);
+    let (rect, resp) = ui.allocate_exact_size(desired_size, egui::Sense::click());
+
+    let is_hovered = resp.hovered();
+    let hov_anim = ui.ctx().animate_bool(id.with("hov"), is_hovered);
+    let act_anim = ui.ctx().animate_bool(id.with("act"), is_active);
+    if is_hovered {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+    }
+
+    let is_pressed = resp.is_pointer_button_down_on();
+    let scale = if is_pressed { -1.0 } else { hov_anim * 1.5 };
+    let draw_rect = rect.expand(scale);
+    let painter = ui.painter();
+
+    let bg_color = if act_anim > 0.01 {
+        egui::Color32::from_rgba_unmultiplied(
+            egui::lerp(20.0..=180.0, act_anim) as u8,
+            egui::lerp(22.0..=35.0, act_anim) as u8,
+            egui::lerp(30.0..=35.0, act_anim) as u8,
+            egui::lerp(120.0..=230.0, act_anim) as u8,
+        )
+    } else if hov_anim > 0.01 {
+        egui::Color32::from_rgba_unmultiplied(35, 38, 52, (180.0 * hov_anim) as u8)
+    } else {
+        egui::Color32::from_rgba_unmultiplied(16, 18, 25, 140)
+    };
+
+    let border_stroke = if act_anim > 0.01 {
+        egui::Stroke::new(1.4, egui::Color32::from_rgb(255, 215, 100))
+    } else if hov_anim > 0.01 {
+        egui::Stroke::new(1.0, egui::Color32::from_rgb(239, 68, 68))
+    } else {
+        egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(255, 255, 255, 30))
+    };
+
+    painter.rect_filled(draw_rect, 7.0, bg_color);
+    painter.rect_stroke(draw_rect, 7.0, border_stroke, egui::StrokeKind::Inside);
+
+    let text_col = if is_active {
+        egui::Color32::WHITE
+    } else if is_hovered {
+        egui::Color32::from_rgb(255, 225, 120)
+    } else {
+        egui::Color32::from_rgb(190, 195, 210)
+    };
+
+    let text_pos = egui::pos2(
+        draw_rect.center().x - galley.rect.width() / 2.0,
+        draw_rect.center().y - galley.rect.height() / 2.0,
+    );
+    painter.galley(text_pos, galley, text_col);
+
+    resp.clicked()
 }
 
 fn render_button_feedback(
@@ -869,9 +1011,11 @@ pub struct LauncherApp {
     status_message: Option<(String, bool)>, // (message, is_error)
     has_gamemode: bool,
 
-    // Active Navigation
-    current_nav: NavItem,
-    nav_transition_start: std::time::Instant,
+    // View Mode & Navigation
+    view_mode: ViewMode,
+    settings_tab: SettingsTab,
+    view_transition_start: std::time::Instant,
+    show_release_notes_modal: bool,
     listening_key_for: Option<KeyBindingTarget>,
 
     // Scanning state
@@ -1000,8 +1144,10 @@ impl LauncherApp {
             is_game_valid: game_valid,
             status_message: None,
             has_gamemode: gamemode_avail,
-            current_nav: NavItem::Home,
-            nav_transition_start: std::time::Instant::now(),
+            view_mode: ViewMode::MainMenu,
+            settings_tab: SettingsTab::Graphics,
+            view_transition_start: std::time::Instant::now(),
+            show_release_notes_modal: false,
             listening_key_for: None,
             is_scanning: false,
             scan_rx: None,
@@ -1667,9 +1813,528 @@ impl LauncherApp {
         }
     }
 
+    pub fn render_console_main_menu(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
+        let screen_rect = ui.max_rect();
+
+        // 1. Fullscreen Wallpaper (pic1.png)
+        if let Some(ref bg) = self.bg_texture {
+            let uv = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
+            ui.painter().image(bg.id(), screen_rect, uv, egui::Color32::WHITE);
+        } else {
+            ui.painter().rect_filled(screen_rect, 0.0, egui::Color32::from_rgb(15, 12, 18));
+        }
+
+        // 2. Cinematic Vignette (Top shadow + Bottom dark shadow for console menu readability)
+        let top_vignette = egui::Rect::from_min_max(
+            screen_rect.min,
+            egui::pos2(screen_rect.max.x, screen_rect.min.y + 70.0),
+        );
+        ui.painter().rect_filled(top_vignette, 0.0, egui::Color32::from_rgba_unmultiplied(0, 0, 0, 130));
+
+        let bottom_vignette_height = 145.0;
+        let bottom_vignette = egui::Rect::from_min_max(
+            egui::pos2(screen_rect.min.x, screen_rect.max.y - bottom_vignette_height),
+            screen_rect.max,
+        );
+        ui.painter().rect_filled(bottom_vignette, 0.0, egui::Color32::from_rgba_unmultiplied(0, 0, 0, 160));
+
+        // 3. Top-Left: Dil Seçenekleri (Language switcher)
+        let lang_top_left = screen_rect.min + egui::vec2(24.0, 18.0);
+        let lang_rect = egui::Rect::from_min_size(lang_top_left, egui::vec2(320.0, 36.0));
+        ui.scope_builder(egui::UiBuilder::new().max_rect(lang_rect), |ui| {
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing = egui::vec2(6.0, 0.0);
+                let langs = [
+                    (Language::Turkish, "🇹🇷 TR"),
+                    (Language::English, "🇬🇧 EN"),
+                    (Language::German, "🇩🇪 DE"),
+                    (Language::Spanish, "🇪🇸 ES"),
+                ];
+                for (lang, label) in &langs {
+                    let is_selected = self.current_lang == *lang;
+                    let (rect, resp) = ui.allocate_exact_size(egui::vec2(58.0, 28.0), egui::Sense::click());
+                    let hov = resp.hovered();
+                    let hov_anim = ctx.animate_bool(resp.id.with("hov"), hov);
+                    let sel_anim = ctx.animate_bool(resp.id.with("sel"), is_selected);
+                    if hov {
+                        ctx.set_cursor_icon(egui::CursorIcon::PointingHand);
+                    }
+
+                    let p = ui.painter();
+                    let bg = if sel_anim > 0.01 {
+                        egui::Color32::from_rgba_unmultiplied(
+                            egui::lerp(24.0..=160.0, sel_anim) as u8,
+                            egui::lerp(26.0..=35.0, sel_anim) as u8,
+                            egui::lerp(35.0..=35.0, sel_anim) as u8,
+                            egui::lerp(100.0..=220.0, sel_anim) as u8,
+                        )
+                    } else if hov_anim > 0.01 {
+                        egui::Color32::from_rgba_unmultiplied(40, 42, 58, (180.0 * hov_anim) as u8)
+                    } else {
+                        egui::Color32::from_rgba_unmultiplied(15, 17, 24, 150)
+                    };
+
+                    let stroke = if sel_anim > 0.01 {
+                        egui::Stroke::new(1.3, egui::Color32::from_rgb(255, 215, 100))
+                    } else if hov_anim > 0.01 {
+                        egui::Stroke::new(1.0, egui::Color32::from_rgb(239, 68, 68))
+                    } else {
+                        egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(255, 255, 255, 35))
+                    };
+
+                    p.rect_filled(rect, 6.0, bg);
+                    p.rect_stroke(rect, 6.0, stroke, egui::StrokeKind::Inside);
+
+                    let text_color = if is_selected {
+                        egui::Color32::WHITE
+                    } else if hov {
+                        egui::Color32::from_rgb(255, 225, 120)
+                    } else {
+                        egui::Color32::from_rgb(190, 195, 210)
+                    };
+
+                    p.text(
+                        rect.center(),
+                        egui::Align2::CENTER_CENTER,
+                        *label,
+                        egui::FontId::proportional(12.0),
+                        text_color,
+                    );
+
+                    if resp.clicked() {
+                        self.current_lang = *lang;
+                        self.config.language = lang.code().to_string();
+                        let _ = self.config.save(&self.base_dir);
+                    }
+                }
+            });
+        });
+
+        // 4. Top-Right: Launcher Sürümü (v2.0)
+        let ver_text = format!("v{}", self.launcher_version.trim_start_matches('v'));
+        let ver_font = egui::FontId::proportional(16.0);
+        let ver_galley = ui.painter().layout_no_wrap(ver_text.clone(), ver_font.clone(), egui::Color32::WHITE);
+        let ver_rect = egui::Rect::from_min_size(
+            egui::pos2(screen_rect.max.x - 24.0 - ver_galley.rect.width() - 12.0, screen_rect.min.y + 18.0),
+            egui::vec2(ver_galley.rect.width() + 12.0, 28.0),
+        );
+        let ver_resp = ui.allocate_rect(ver_rect, egui::Sense::click());
+        let ver_hov = ver_resp.hovered();
+        let ver_hov_anim = ctx.animate_bool(ver_resp.id.with("hov"), ver_hov);
+        if ver_hov {
+            ctx.set_cursor_icon(egui::CursorIcon::PointingHand);
+        }
+        let ver_col = if self.has_new_update {
+            egui::Color32::from_rgb(255, 215, 100)
+        } else if ver_hov_anim > 0.01 {
+            egui::Color32::from_rgb(255, 225, 120)
+        } else {
+            egui::Color32::from_rgb(180, 185, 200)
+        };
+        ui.painter().text(
+            ver_rect.center(),
+            egui::Align2::CENTER_CENTER,
+            ver_text,
+            ver_font,
+            ver_col,
+        );
+        if ver_resp.clicked() {
+            self.start_update_check();
+        }
+
+        // 5. Bottom-Right: God of War III Remastered Logo (gow3-remastered.png)
+        if let Some(ref logo) = self.logo_texture {
+            let logo_w = (screen_rect.width() * 0.28).clamp(240.0, 320.0);
+            let logo_h = logo_w / 2.79;
+            let logo_rect = egui::Rect::from_min_size(
+                egui::pos2(screen_rect.max.x - logo_w - 24.0, screen_rect.max.y - logo_h - 20.0),
+                egui::vec2(logo_w, logo_h),
+            );
+            let uv = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
+            ui.painter().image(logo.id(), logo_rect, uv, egui::Color32::WHITE);
+        }
+
+        // 6. Bottom-Center: Play Button (▶ OYNA)
+        let play_y = screen_rect.max.y - 72.0;
+        let play_center_x = screen_rect.center().x;
+
+        if self.is_game_running {
+            let time = ctx.input(|i| i.time);
+            let pulse = ((time * 3.0).sin() * 0.5 + 0.5) as f32;
+            ctx.request_repaint();
+
+            let row_w = 400.0;
+            let row_rect = egui::Rect::from_min_size(
+                egui::pos2(play_center_x - row_w / 2.0, play_y),
+                egui::vec2(row_w, 48.0),
+            );
+            ui.scope_builder(egui::UiBuilder::new().max_rect(row_rect), |ui| {
+                ui.horizontal(|ui| {
+                    let emerald_r = (25.0 + 15.0 * pulse) as u8;
+                    let emerald_g = (65.0 + 30.0 * pulse) as u8;
+                    let emerald_b = (40.0 + 15.0 * pulse) as u8;
+
+                    let running_btn = egui::Button::new(
+                        egui::RichText::new(self.t("play_running"))
+                            .size(15.5)
+                            .color(egui::Color32::from_rgb(140, 255, 155))
+                            .strong(),
+                    )
+                    .fill(egui::Color32::from_rgb(emerald_r, emerald_g, emerald_b))
+                    .stroke(egui::Stroke::new(1.5, egui::Color32::from_rgba_unmultiplied(100, 255, 120, (120.0 + 100.0 * pulse) as u8)))
+                    .corner_radius(egui::CornerRadius::same(8))
+                    .min_size(egui::vec2(200.0, 48.0));
+                    ui.add_enabled(false, running_btn);
+
+                    let force_quit_btn = egui::Button::new(
+                        egui::RichText::new(self.t("force_quit_btn"))
+                            .size(15.5)
+                            .color(egui::Color32::WHITE)
+                            .strong(),
+                    )
+                    .fill(egui::Color32::from_rgb(220, 42, 42))
+                    .stroke(egui::Stroke::new(1.5, egui::Color32::from_rgba_unmultiplied(255, 120, 120, 180)))
+                    .corner_radius(egui::CornerRadius::same(8))
+                    .min_size(egui::vec2(170.0, 48.0));
+
+                    let res = ui.add(force_quit_btn).on_hover_text(self.t("force_quit_tooltip"));
+                    if res.hovered() {
+                        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+                    }
+                    if res.clicked() {
+                        self.force_quit_game(Some(ui.ctx()));
+                    }
+                });
+            });
+        } else {
+            let time = ctx.input(|i| i.time);
+            let pulse = ((time * 2.5).sin() * 0.5 + 0.5) as f32;
+            ctx.request_repaint();
+
+            let play_label = format!("▶  {}", self.t("menu_play"));
+            let play_font = egui::FontId::proportional(22.0);
+            let play_galley = ui.painter().layout_no_wrap(play_label.clone(), play_font.clone(), egui::Color32::WHITE);
+            let btn_w = (play_galley.rect.width() + 48.0).max(210.0);
+            let btn_h = 50.0;
+            let play_rect = egui::Rect::from_center_size(
+                egui::pos2(play_center_x, play_y + btn_h / 2.0),
+                egui::vec2(btn_w, btn_h),
+            );
+
+            let resp = ui.allocate_rect(play_rect, egui::Sense::click());
+            let is_hov = resp.hovered();
+            let hov_anim = ctx.animate_bool(resp.id.with("play_hov"), is_hov);
+            if is_hov {
+                ctx.set_cursor_icon(egui::CursorIcon::PointingHand);
+            }
+            let is_pressed = resp.is_pointer_button_down_on();
+            let scale = if is_pressed { -1.5 } else { hov_anim * 2.0 };
+            let draw_rect = play_rect.expand(scale);
+
+            let bg_r = (215.0 + 35.0 * pulse) as u8;
+            let bg_g = (35.0 + 25.0 * pulse) as u8;
+            let bg_b = 35u8;
+            let btn_color = if hov_anim > 0.01 {
+                egui::Color32::from_rgb(
+                    egui::lerp(bg_r as f32..=245.0, hov_anim) as u8,
+                    egui::lerp(bg_g as f32..=50.0, hov_anim) as u8,
+                    egui::lerp(bg_b as f32..=40.0, hov_anim) as u8,
+                )
+            } else {
+                egui::Color32::from_rgb(bg_r, bg_g, bg_b)
+            };
+
+            let border_color = if hov_anim > 0.01 {
+                egui::Color32::from_rgb(255, 225, 120)
+            } else {
+                egui::Color32::from_rgba_unmultiplied(
+                    255,
+                    (110.0 + 90.0 * pulse) as u8,
+                    (70.0 + 50.0 * pulse) as u8,
+                    (160.0 + 95.0 * pulse) as u8,
+                )
+            };
+
+            ui.painter().rect_filled(draw_rect, 10.0, btn_color);
+            ui.painter().rect_stroke(draw_rect, 10.0, egui::Stroke::new(1.8 + pulse * 1.0 + hov_anim * 0.8, border_color), egui::StrokeKind::Inside);
+
+            let text_color = if is_hov {
+                egui::Color32::WHITE
+            } else {
+                egui::Color32::from_rgb(255, 245, 230)
+            };
+            ui.painter().text(
+                draw_rect.center(),
+                egui::Align2::CENTER_CENTER,
+                play_label,
+                play_font,
+                text_color,
+            );
+
+            if resp.clicked() {
+                self.launch_game(ctx);
+            }
+        }
+
+        // 7. Bottom-Left: Console Action Menu Items (Row 1: Latest News, Row 2: Options)
+        let bl_x = screen_rect.min.x + 28.0;
+        let bl_y = screen_rect.max.y - 88.0;
+        let bl_rect = egui::Rect::from_min_size(
+            egui::pos2(bl_x, bl_y),
+            egui::vec2(280.0, 75.0),
+        );
+        ui.scope_builder(egui::UiBuilder::new().max_rect(bl_rect), |ui| {
+            ui.vertical(|ui| {
+                ui.spacing_mut().item_spacing = egui::vec2(0.0, 6.0);
+
+                // Row 1: 📜 GÜNCELLEME NOTLARI / LATEST NEWS
+                if render_console_action_button(
+                    ui,
+                    "btn_latest_news",
+                    "📜",
+                    self.t("menu_latest_news"),
+                    14.5,
+                    true,
+                ) {
+                    self.show_release_notes_modal = true;
+                }
+
+                // Row 2: ⚙️ AYARLAR / OPTIONS
+                if render_console_action_button(
+                    ui,
+                    "btn_options",
+                    "⚙️",
+                    self.t("menu_options"),
+                    14.5,
+                    false,
+                ) {
+                    self.view_mode = ViewMode::Settings;
+                    self.view_transition_start = std::time::Instant::now();
+                }
+            });
+        });
+
+        // Status banner overlay if status message is active
+        if let Some((ref msg, is_err)) = self.status_message {
+            let (bg, border, text_col) = if is_err {
+                (
+                    egui::Color32::from_rgba_unmultiplied(65, 20, 20, 220),
+                    egui::Color32::from_rgb(239, 68, 68),
+                    egui::Color32::from_rgb(255, 140, 140),
+                )
+            } else {
+                (
+                    egui::Color32::from_rgba_unmultiplied(20, 50, 28, 220),
+                    egui::Color32::from_rgb(34, 197, 94),
+                    egui::Color32::from_rgb(134, 239, 172),
+                )
+            };
+
+            let banner_rect = egui::Rect::from_center_size(
+                egui::pos2(screen_rect.center().x, screen_rect.min.y + 60.0),
+                egui::vec2(480.0, 32.0),
+            );
+            ui.painter().rect_filled(banner_rect, 6.0, bg);
+            ui.painter().rect_stroke(banner_rect, 6.0, egui::Stroke::new(1.0, border), egui::StrokeKind::Inside);
+            let icon = if is_err { "⚠️" } else { "✅" };
+            ui.painter().text(
+                banner_rect.center(),
+                egui::Align2::CENTER_CENTER,
+                format!("{} {}", icon, msg),
+                egui::FontId::proportional(12.5),
+                text_col,
+            );
+        }
+    }
+
+    pub fn render_settings_screen(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
+        let screen_rect = ui.max_rect();
+
+        // 1. Fullscreen Wallpaper (pic1.png)
+        if let Some(ref bg) = self.bg_texture {
+            let uv = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
+            ui.painter().image(bg.id(), screen_rect, uv, egui::Color32::from_white_alpha(90));
+        }
+
+        // 2. Dark Frosted Backdrop
+        ui.painter().rect_filled(
+            screen_rect,
+            0.0,
+            egui::Color32::from_rgba_unmultiplied(10, 11, 16, 238),
+        );
+
+        let total_avail = ui.available_size();
+        let header_h = 52.0;
+        let footer_h = 48.0;
+        let content_h = (total_avail.y - header_h - footer_h - 16.0).max(200.0);
+
+        ui.vertical(|ui| {
+            // ==========================================
+            // HEADER BAR: TITLE + 4 TABS
+            // ==========================================
+            ui.allocate_ui_with_layout(
+                egui::vec2(total_avail.x, header_h),
+                egui::Layout::left_to_right(egui::Align::Center),
+                |ui| {
+                    ui.add_space(16.0);
+                    ui.label(
+                        egui::RichText::new(format!("⚙️ {}", self.t("menu_options")))
+                            .size(19.0)
+                            .color(egui::Color32::from_rgb(255, 215, 100))
+                            .strong(),
+                    );
+                    ui.add_space(24.0);
+
+                    // 1. 🎨 GRAFİKLER
+                    if render_settings_tab_btn(
+                        ui,
+                        "tab_gfx",
+                        "🎨",
+                        self.t("nav_graphics"),
+                        self.settings_tab == SettingsTab::Graphics,
+                    ) {
+                        self.settings_tab = SettingsTab::Graphics;
+                        self.view_transition_start = std::time::Instant::now();
+                    }
+                    ui.add_space(8.0);
+
+                    // 2. 📁 OYUN KONUMU
+                    if render_settings_tab_btn(
+                        ui,
+                        "tab_loc",
+                        "📁",
+                        self.t("nav_game_location"),
+                        self.settings_tab == SettingsTab::GameLocation,
+                    ) {
+                        self.settings_tab = SettingsTab::GameLocation;
+                        self.view_transition_start = std::time::Instant::now();
+                    }
+                    ui.add_space(8.0);
+
+                    // 3. 🎮 KONTROLLER
+                    if render_settings_tab_btn(
+                        ui,
+                        "tab_ctrl",
+                        "🎮",
+                        self.t("nav_controls"),
+                        self.settings_tab == SettingsTab::Controls,
+                    ) {
+                        self.settings_tab = SettingsTab::Controls;
+                        self.view_transition_start = std::time::Instant::now();
+                    }
+                    ui.add_space(8.0);
+
+                    // 4. ⚡ SHADER AYARI
+                    if render_settings_tab_btn(
+                        ui,
+                        "tab_shd",
+                        "⚡",
+                        self.t("nav_shaders"),
+                        self.settings_tab == SettingsTab::Shaders,
+                    ) {
+                        self.settings_tab = SettingsTab::Shaders;
+                        self.view_transition_start = std::time::Instant::now();
+                    }
+                },
+            );
+
+            ui.separator();
+
+            // ==========================================
+            // MAIN CONTENT SCROLL AREA
+            // ==========================================
+            ui.allocate_ui_with_layout(
+                egui::vec2(total_avail.x, content_h),
+                egui::Layout::top_down(egui::Align::Min),
+                |ui| {
+                    egui::ScrollArea::vertical()
+                        .auto_shrink([false, false])
+                        .show(ui, |ui| {
+                            // Fade / smooth slide transition
+                            let elapsed = self.view_transition_start.elapsed().as_secs_f32();
+                            let t = (elapsed / 0.18).min(1.0);
+                            if t < 1.0 {
+                                ui.ctx().request_repaint();
+                            }
+                            let slide = (1.0 - t * (2.0 - t)) * 6.0;
+                            ui.add_space(slide);
+
+                            match self.settings_tab {
+                                SettingsTab::Graphics => {
+                                    self.render_graphics_screen(ui, ctx);
+                                    ui.add_space(14.0);
+                                    self.render_mods_screen(ui, ctx);
+                                }
+                                SettingsTab::GameLocation => {
+                                    self.render_game_location_screen(ui, ctx);
+                                }
+                                SettingsTab::Controls => {
+                                    self.render_controls_screen(ui, ctx);
+                                }
+                                SettingsTab::Shaders => {
+                                    self.render_shaders_screen(ui, ctx);
+                                }
+                            }
+                        });
+                },
+            );
+
+            ui.separator();
+
+            // ==========================================
+            // FOOTER BAR: GERİ DÖN + KAYDET + LOG BUTTONS
+            // ==========================================
+            ui.allocate_ui_with_layout(
+                egui::vec2(total_avail.x, footer_h),
+                egui::Layout::left_to_right(egui::Align::Center),
+                |ui| {
+                    ui.add_space(16.0);
+
+                    // ◀ GERİ DÖN
+                    let back_text = format!("◀  {}", self.t("menu_back"));
+                    if render_button_feedback(ui, "btn_settings_back", &back_text, egui::vec2(130.0, 34.0), false).clicked() {
+                        self.view_mode = ViewMode::MainMenu;
+                        self.view_transition_start = std::time::Instant::now();
+                    }
+
+                    ui.add_space(16.0);
+
+                    // 💾 KAYDET VE UYGULA
+                    if render_button_feedback(ui, "btn_settings_save", &format!("💾 {}", self.t("save_apply")), egui::vec2(190.0, 34.0), false).clicked() {
+                        self.apply_all_optimizations();
+                    }
+
+                    // Status banner if present
+                    if let Some((ref msg, is_err)) = self.status_message {
+                        ui.add_space(16.0);
+                        let icon = if is_err { "⚠️" } else { "✅" };
+                        let col = if is_err { egui::Color32::from_rgb(255, 140, 140) } else { egui::Color32::from_rgb(134, 239, 172) };
+                        ui.label(egui::RichText::new(format!("{} {}", icon, msg)).color(col).strong().size(12.0));
+                    }
+
+                    // Right-aligned log buttons
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        ui.add_space(16.0);
+                        if ui.button("📋 Launcher Logu").clicked() {
+                            self.launcher_log_content = crate::logger::read_launcher_log(&self.base_dir);
+                            self.show_launcher_log_modal = true;
+                        }
+                        ui.add_space(8.0);
+                        if ui.button("📝 Oyun Logu").clicked() {
+                            let log_path = self.base_dir.join("gow3.log");
+                            self.log_content = std::fs::read_to_string(&log_path).unwrap_or_else(|_| "Log dosyası bulunamadı.".to_string());
+                            self.show_log_modal = true;
+                        }
+                    });
+                },
+            );
+        });
+    }
+
     // ==========================================
     // SCREEN 1: ANASAYFA (HOME)
     // ==========================================
+    #[allow(dead_code)]
     pub fn render_home_screen(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
         let card_frame = egui::Frame::new()
             .fill(egui::Color32::from_rgba_unmultiplied(14, 15, 23, 235))
@@ -2998,23 +3663,7 @@ impl eframe::App for LauncherApp {
             return;
         }
 
-        // --- FULL SCREEN BACKGROUND WALLPAPER ---
-        if let Some(ref tex) = self.bg_texture {
-            let painter = ui.painter();
-            let rect = ui.max_rect();
-            let uv = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
-            painter.image(
-                tex.id(),
-                rect,
-                uv,
-                egui::Color32::from_white_alpha(150),
-            );
-            painter.rect_filled(
-                rect,
-                0.0,
-                egui::Color32::from_rgba_unmultiplied(7, 8, 12, 175),
-            );
-        }
+
 
         let mut visuals = egui::Visuals::dark();
         visuals.panel_fill = egui::Color32::from_rgb(7, 8, 12);
@@ -3050,363 +3699,11 @@ impl eframe::App for LauncherApp {
             s.spacing.scroll.foreground_color = true;
         });
 
-        // --- TWO-COLUMN WIREFRAME LAYOUT ---
-        let total_avail = ui.available_size();
-        let sidebar_width = 248.0;
-        let right_width = (total_avail.x - sidebar_width - 10.0).max(400.0);
-        let footer_height = 46.0;
-        let left_top_height = 58.0;
-        let main_height = (total_avail.y - footer_height - 10.0).max(300.0);
-        let nav_height = (main_height - left_top_height - 10.0).max(200.0);
-
-        let box_frame = egui::Frame::new()
-            .fill(egui::Color32::from_rgba_unmultiplied(12, 13, 20, 240))
-            .stroke(egui::Stroke::new(1.2, egui::Color32::from_rgba_unmultiplied(220, 38, 38, 75)))
-            .corner_radius(egui::CornerRadius::same(8))
-            .inner_margin(egui::Margin::symmetric(10, 8));
-
-        ui.horizontal(|ui| {
-            // ==========================================
-            // LEFT COLUMN (SIDEBAR)
-            // ==========================================
-            ui.allocate_ui_with_layout(
-                egui::vec2(sidebar_width, total_avail.y),
-                egui::Layout::top_down(egui::Align::Min),
-                |ui| {
-                    ui.spacing_mut().item_spacing = egui::vec2(0.0, 10.0);
-
-                    // 1. TOP-LEFT BOX: OMEGA ICON + "GOD OF WAR III"
-                    ui.allocate_ui_with_layout(
-                        egui::vec2(sidebar_width, left_top_height),
-                        egui::Layout::top_down(egui::Align::Min),
-                        |ui| {
-                            box_frame.show(ui, |ui| {
-                                ui.set_min_size(egui::vec2(sidebar_width - 20.0, left_top_height - 16.0));
-                                ui.horizontal_centered(|ui| {
-                                    if let Some(ref icon) = self.icon_texture {
-                                        ui.add(egui::Image::new(icon).max_height(34.0));
-                                        ui.add_space(8.0);
-                                    }
-                                    ui.vertical(|ui| {
-                                        ui.label(
-                                            egui::RichText::new("GOD OF WAR III")
-                                                .size(14.5)
-                                                .color(egui::Color32::from_rgb(255, 215, 110))
-                                                .strong(),
-                                        );
-                                        ui.label(
-                                            egui::RichText::new("REMASTERED")
-                                                .size(9.5)
-                                                .color(egui::Color32::from_rgb(239, 68, 68))
-                                                .strong(),
-                                        );
-                                    });
-                                });
-                            });
-                        },
-                    );
-
-                    // 2. MIDDLE BOX: NAVIGATION TREE
-                    ui.allocate_ui_with_layout(
-                        egui::vec2(sidebar_width, nav_height),
-                        egui::Layout::top_down(egui::Align::Min),
-                        |ui| {
-                            box_frame.show(ui, |ui| {
-                                ui.set_min_size(egui::vec2(sidebar_width - 20.0, nav_height - 16.0));
-                                ui.spacing_mut().item_spacing = egui::vec2(0.0, 4.0);
-
-                                // 🏠 ANASAYFA
-                                if render_nav_item(ui, "nav_home", "🏠", self.t("nav_home"), self.current_nav == NavItem::Home, false) {
-                                    if self.current_nav != NavItem::Home {
-                                        self.current_nav = NavItem::Home;
-                                        self.nav_transition_start = std::time::Instant::now();
-                                    }
-                                }
-
-                                // 📥 MODLAR
-                                if render_nav_item(ui, "nav_mods", "📥", self.t("nav_mods"), self.current_nav == NavItem::Mods, false) {
-                                    if self.current_nav != NavItem::Mods {
-                                        self.current_nav = NavItem::Mods;
-                                        self.nav_transition_start = std::time::Instant::now();
-                                    }
-                                }
-
-                                // ⚙️ AYARLAR (Parent)
-                                let is_in_settings = matches!(
-                                    self.current_nav,
-                                    NavItem::SettingsGraphics | NavItem::SettingsGameLocation | NavItem::SettingsControls | NavItem::SettingsShaders
-                                );
-                                if render_nav_item(ui, "nav_settings", "⚙️", self.t("nav_settings"), is_in_settings, false) {
-                                    if !is_in_settings {
-                                        self.current_nav = NavItem::SettingsGraphics;
-                                        self.nav_transition_start = std::time::Instant::now();
-                                    }
-                                }
-
-                                // Tree branches
-                                // ├── GRAFİKLER
-                                if render_nav_item(ui, "nav_graphics", "├──", self.t("nav_graphics"), self.current_nav == NavItem::SettingsGraphics, true) {
-                                    if self.current_nav != NavItem::SettingsGraphics {
-                                        self.current_nav = NavItem::SettingsGraphics;
-                                        self.nav_transition_start = std::time::Instant::now();
-                                    }
-                                }
-
-                                // ├── OYUN KONUMU
-                                if render_nav_item(ui, "nav_loc", "├──", self.t("nav_game_location"), self.current_nav == NavItem::SettingsGameLocation, true) {
-                                    if self.current_nav != NavItem::SettingsGameLocation {
-                                        self.current_nav = NavItem::SettingsGameLocation;
-                                        self.nav_transition_start = std::time::Instant::now();
-                                    }
-                                }
-
-                                // ├── KONTROLLER
-                                if render_nav_item(ui, "nav_ctrl", "├──", self.t("nav_controls"), self.current_nav == NavItem::SettingsControls, true) {
-                                    if self.current_nav != NavItem::SettingsControls {
-                                        self.current_nav = NavItem::SettingsControls;
-                                        self.nav_transition_start = std::time::Instant::now();
-                                    }
-                                }
-
-                                // └── SHADER AYARI
-                                if render_nav_item(ui, "nav_shader", "└──", self.t("nav_shaders"), self.current_nav == NavItem::SettingsShaders, true) {
-                                    if self.current_nav != NavItem::SettingsShaders {
-                                        self.current_nav = NavItem::SettingsShaders;
-                                        self.nav_transition_start = std::time::Instant::now();
-                                    }
-                                }
-                            });
-                        },
-                    );
-
-                    // 3. BOTTOM-LEFT BOX: LAUNCHER SÜRÜMÜ
-                    ui.allocate_ui_with_layout(
-                        egui::vec2(sidebar_width, footer_height),
-                        egui::Layout::top_down(egui::Align::Min),
-                        |ui| {
-                            box_frame.show(ui, |ui| {
-                                ui.set_min_size(egui::vec2(sidebar_width - 20.0, footer_height - 16.0));
-                                ui.horizontal_centered(|ui| {
-                                    let (rect, resp) = ui.allocate_exact_size(
-                                        egui::vec2(ui.available_width(), 26.0),
-                                        egui::Sense::click(),
-                                    );
-                                    let hov = resp.hovered();
-                                    let hov_anim = ui.ctx().animate_bool(resp.id, hov);
-                                    if hov {
-                                        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
-                                    }
-                                    let painter = ui.painter();
-                                    let bg = if self.has_new_update {
-                                        egui::Color32::from_rgb(60, 20, 24)
-                                    } else if hov_anim > 0.01 {
-                                        egui::Color32::from_rgba_unmultiplied(35, 38, 52, (180.0 * hov_anim) as u8)
-                                    } else {
-                                        egui::Color32::TRANSPARENT
-                                    };
-                                    painter.rect_filled(rect, egui::CornerRadius::same(4), bg);
-
-                                    let ver_label = format!("{}: {}", self.t("launcher_version_label"), self.launcher_version);
-                                    let text_color = if self.has_new_update {
-                                        egui::Color32::from_rgb(255, 220, 100)
-                                    } else if hov {
-                                        egui::Color32::WHITE
-                                    } else {
-                                        egui::Color32::from_rgb(180, 185, 200)
-                                    };
-                                    painter.text(
-                                        rect.center(),
-                                        egui::Align2::CENTER_CENTER,
-                                        ver_label,
-                                        egui::FontId::proportional(11.5),
-                                        text_color,
-                                    );
-
-                                    if resp.clicked() {
-                                        self.start_update_check();
-                                    }
-                                });
-                            });
-                        },
-                    );
-                },
-            );
-
-            ui.add_space(8.0);
-
-            // ==========================================
-            // RIGHT COLUMN (MAIN CONTENT + DİL SEÇENEKLERİ)
-            // ==========================================
-            ui.allocate_ui_with_layout(
-                egui::vec2(right_width, total_avail.y),
-                egui::Layout::top_down(egui::Align::Min),
-                |ui| {
-                    ui.spacing_mut().item_spacing = egui::vec2(0.0, 10.0);
-
-                    // 4. MAIN CONTENT BOX
-                    ui.allocate_ui_with_layout(
-                        egui::vec2(right_width, main_height),
-                        egui::Layout::top_down(egui::Align::Min),
-                        |ui| {
-                            box_frame.show(ui, |ui| {
-                                ui.set_min_size(egui::vec2(right_width - 20.0, main_height - 16.0));
-
-                                // Status banner if present
-                                if let Some((ref msg, is_err)) = self.status_message {
-                                    let (bg, border, text_col) = if is_err {
-                                        (
-                                            egui::Color32::from_rgba_unmultiplied(65, 20, 20, 220),
-                                            egui::Color32::from_rgb(239, 68, 68),
-                                            egui::Color32::from_rgb(255, 140, 140),
-                                        )
-                                    } else {
-                                        (
-                                            egui::Color32::from_rgba_unmultiplied(20, 50, 28, 220),
-                                            egui::Color32::from_rgb(34, 197, 94),
-                                            egui::Color32::from_rgb(134, 239, 172),
-                                        )
-                                    };
-
-                                    egui::Frame::new()
-                                        .fill(bg)
-                                        .stroke(egui::Stroke::new(1.0, border))
-                                        .corner_radius(egui::CornerRadius::same(6))
-                                        .inner_margin(egui::Margin::symmetric(10, 5))
-                                        .show(ui, |ui| {
-                                            ui.horizontal(|ui| {
-                                                let icon = if is_err { "⚠️" } else { "✅" };
-                                                ui.label(egui::RichText::new(icon).size(12.0));
-                                                ui.label(egui::RichText::new(msg).color(text_col).strong().size(11.5));
-                                            });
-                                        });
-                                    ui.add_space(4.0);
-                                }
-
-                                egui::ScrollArea::vertical()
-                                    .auto_shrink([false, false])
-                                    .show(ui, |ui| {
-                                        // Page transition animation (fade + smooth slide)
-                                        let elapsed = self.nav_transition_start.elapsed().as_secs_f32();
-                                        let duration = 0.20;
-                                        let t = (elapsed / duration).min(1.0);
-                                        if t < 1.0 {
-                                            ui.ctx().request_repaint();
-                                        }
-                                        let ease = t * (2.0 - t);
-                                        let slide_offset = (1.0 - ease) * 8.0;
-                                        ui.add_space(slide_offset);
-
-                                        match self.current_nav {
-                                            NavItem::Home => self.render_home_screen(ui, &ctx),
-                                            NavItem::Mods => self.render_mods_screen(ui, &ctx),
-                                            NavItem::SettingsGraphics => self.render_graphics_screen(ui, &ctx),
-                                            NavItem::SettingsGameLocation => self.render_game_location_screen(ui, &ctx),
-                                            NavItem::SettingsControls => self.render_controls_screen(ui, &ctx),
-                                            NavItem::SettingsShaders => self.render_shaders_screen(ui, &ctx),
-                                        }
-                                    });
-                            });
-                        },
-                    );
-
-                    // 5. BOTTOM-RIGHT BOX: DİL SEÇENEKLERİ
-                    ui.allocate_ui_with_layout(
-                        egui::vec2(right_width, footer_height),
-                        egui::Layout::top_down(egui::Align::Min),
-                        |ui| {
-                            box_frame.show(ui, |ui| {
-                                ui.set_min_size(egui::vec2(right_width - 20.0, footer_height - 16.0));
-                                ui.horizontal_centered(|ui| {
-                                    ui.label(
-                                        egui::RichText::new(format!("🌐 {}", self.t("lang_options_title")))
-                                            .size(12.0)
-                                            .color(egui::Color32::from_rgb(210, 215, 230))
-                                            .strong(),
-                                    );
-
-                                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                        let langs = [
-                                            (Language::Spanish, "🇪🇸 ES"),
-                                            (Language::German, "🇩🇪 DE"),
-                                            (Language::English, "🇬🇧 EN"),
-                                            (Language::Turkish, "🇹🇷 TR"),
-                                        ];
-
-                                        for (lang, label) in &langs {
-                                            let is_selected = self.current_lang == *lang;
-                                            let (rect, resp) = ui.allocate_exact_size(egui::vec2(64.0, 26.0), egui::Sense::click());
-                                            let hov = resp.hovered();
-                                            let hov_anim = ui.ctx().animate_bool(resp.id.with("hov"), hov);
-                                            let sel_anim = ui.ctx().animate_bool(resp.id.with("sel"), is_selected);
-
-                                            if hov {
-                                                ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
-                                            }
-
-                                            let is_pressed = resp.is_pointer_button_down_on();
-                                            let scale = if is_pressed { -1.0 } else { hov_anim * 1.5 };
-                                            let draw_rect = rect.expand(scale);
-
-                                            let bg = if sel_anim > 0.01 {
-                                                egui::Color32::from_rgb(
-                                                    egui::lerp(28.0..=180.0, sel_anim) as u8,
-                                                    egui::lerp(30.0..=35.0, sel_anim) as u8,
-                                                    egui::lerp(42.0..=35.0, sel_anim) as u8,
-                                                )
-                                            } else if hov_anim > 0.01 {
-                                                egui::Color32::from_rgb(
-                                                    egui::lerp(24.0..=45.0, hov_anim) as u8,
-                                                    egui::lerp(26.0..=35.0, hov_anim) as u8,
-                                                    egui::lerp(36.0..=45.0, hov_anim) as u8,
-                                                )
-                                            } else {
-                                                egui::Color32::from_rgb(22, 24, 32)
-                                            };
-
-                                            let border = if sel_anim > 0.01 {
-                                                egui::Stroke::new(1.2, egui::Color32::from_rgb(255, 215, 100))
-                                            } else if hov_anim > 0.01 {
-                                                egui::Stroke::new(1.0, egui::Color32::from_rgb(239, 68, 68))
-                                            } else {
-                                                egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(255, 255, 255, 25))
-                                            };
-
-                                            let painter = ui.painter();
-                                            painter.rect_filled(draw_rect, 5.0, bg);
-                                            painter.rect_stroke(draw_rect, 5.0, border, egui::StrokeKind::Inside);
-
-                                            let text_col = if is_selected {
-                                                egui::Color32::WHITE
-                                            } else if hov {
-                                                egui::Color32::from_rgb(240, 240, 250)
-                                            } else {
-                                                egui::Color32::from_rgb(180, 185, 200)
-                                            };
-
-                                            painter.text(
-                                                draw_rect.center(),
-                                                egui::Align2::CENTER_CENTER,
-                                                *label,
-                                                egui::FontId::proportional(11.5),
-                                                text_col,
-                                            );
-
-                                            if resp.clicked() {
-                                                self.current_lang = *lang;
-                                                self.config.language = lang.code().to_string();
-                                                let _ = self.config.save(&self.base_dir);
-                                            }
-
-                                            ui.add_space(4.0);
-                                        }
-                                    });
-                                });
-                            });
-                        },
-                    );
-                },
-            );
-        });
+        // --- MAIN VIEW ROUTING: CONSOLE MAIN MENU OR SETTINGS SCREEN ---
+        match self.view_mode {
+            ViewMode::MainMenu => self.render_console_main_menu(ui, &ctx),
+            ViewMode::Settings => self.render_settings_screen(ui, &ctx),
+        }
 
         // Dim background if any modal dialog is currently active
         let modal_active = self.found_candidates_modal.is_some()
@@ -3417,7 +3714,8 @@ impl eframe::App for LauncherApp {
             || self.show_launcher_log_modal
             || self.error_modal.is_some()
             || self.update_modal.is_some()
-            || self.listening_key_for.is_some();
+            || self.listening_key_for.is_some()
+            || self.show_release_notes_modal;
 
         if modal_active {
             ui.painter().rect_filled(
@@ -4195,6 +4493,37 @@ impl eframe::App for LauncherApp {
             } else if close_modal {
                 self.listening_key_for = None;
             }
+        }
+
+        // --- MODAL: RELEASE NOTES (GÜNCELLEME NOTLARI) ---
+        if self.show_release_notes_modal {
+            egui::Window::new(self.t("release_notes_title"))
+                .collapsible(false)
+                .resizable(true)
+                .default_width(640.0)
+                .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
+                .show(&ctx, |ui| {
+                    ui.spacing_mut().item_spacing = egui::vec2(10.0, 10.0);
+                    egui::ScrollArea::vertical().max_height(420.0).show(ui, |ui| {
+                        ui.label(
+                            egui::RichText::new(self.t("release_notes_content"))
+                                .size(13.0)
+                                .color(egui::Color32::from_rgb(235, 240, 250)),
+                        );
+                    });
+                    ui.separator();
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        let close_btn = egui::Button::new(
+                            egui::RichText::new(self.t("close")).strong().size(12.5),
+                        )
+                        .min_size(egui::vec2(90.0, 30.0))
+                        .corner_radius(egui::CornerRadius::same(6));
+
+                        if ui.add(close_btn).clicked() {
+                            self.show_release_notes_modal = false;
+                        }
+                    });
+                });
         }
     }
 }

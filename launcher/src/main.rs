@@ -58,9 +58,9 @@ fn main() -> eframe::Result<()> {
     }
 
     let mut viewport = egui::ViewportBuilder::default()
-        .with_title("God of War® III Remastered - Launcher")
-        .with_inner_size([980.0, 680.0])
-        .with_min_inner_size([860.0, 580.0])
+        .with_title("God of War® III Remastered")
+        .with_inner_size([1024.0, 576.0])
+        .with_min_inner_size([854.0, 480.0])
         .with_resizable(true);
 
     if let Some(icon) = load_window_icon(&base_dir) {

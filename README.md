@@ -3,6 +3,8 @@ Launcher for God Of War 3 PC on Linux and Windows
 
 **To ensure mod support works, install the launcher using a clean installation**
 
+**Mod desteğinin düzgün çalışmasını sağlamak için, başlatıcıyı temiz bir kurulum yaparak yükleyin**
+
  # ⚡ God of War® III Remastered - Linux-Windows Port & Native Launcher                                                                                                                        
                                                                                                                                                                                           
    An optimized Linux-Windows port and native graphical launcher for **God of War® III Remastered** (*CUSA01623 / CUSA01715*), featuring hardware auto-tuning, 144Hz Delta-Time synchronization, crash diagnostics, and upstream GitHub integration.                                                                                                                                     

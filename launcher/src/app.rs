@@ -789,6 +789,12 @@ pub struct LauncherApp {
     is_downloading_engine: bool,
     engine_dl_rx: Option<Receiver<Result<String, String>>>,
 
+    // Shader Cache Pre-caching state
+    is_installing_shaders: bool,
+    shader_install_status: Option<String>,
+    shader_install_rx: Option<Receiver<Result<usize, String>>>,
+    cached_shader_count: usize,
+
     // Modals
     show_first_launch_modal: bool,
     active_crash_diagnosis: Option<CrashDiagnosis>,
@@ -874,7 +880,7 @@ impl LauncherApp {
         let has_engine = crate::runner::find_game_engine(&base_dir).is_some();
 
         let mut app = Self {
-            base_dir,
+            base_dir: base_dir.clone(),
             config,
             current_lang: lang,
             is_game_valid: game_valid,
@@ -901,6 +907,10 @@ impl LauncherApp {
             has_engine,
             is_downloading_engine: false,
             engine_dl_rx: None,
+            is_installing_shaders: false,
+            shader_install_status: None,
+            shader_install_rx: None,
+            cached_shader_count: crate::shader_downloader::count_cached_shaders(&base_dir),
             show_first_launch_modal: is_first,
             active_crash_diagnosis: None,
             show_log_modal: false,
@@ -1190,6 +1200,22 @@ impl LauncherApp {
         let base_dir_clone = self.base_dir.clone();
         thread::spawn(move || {
             let res = crate::runner::download_engine(&base_dir_clone, is_alternative);
+            let _ = tx.send(res);
+        });
+    }
+
+    fn start_shader_install(&mut self) {
+        if self.is_installing_shaders {
+            return;
+        }
+        self.is_installing_shaders = true;
+        self.shader_install_status = Some(self.t("shader_downloading").to_string());
+        let (tx, rx) = channel();
+        self.shader_install_rx = Some(rx);
+
+        let base_dir_clone = self.base_dir.clone();
+        thread::spawn(move || {
+            let res = crate::shader_downloader::download_and_install_shaders(&base_dir_clone);
             let _ = tx.send(res);
         });
     }
@@ -1715,6 +1741,29 @@ impl eframe::App for LauncherApp {
                             details: e,
                             log_hint: Some(self.t("err_engine_dl_hint").to_string()),
                         });
+                    }
+                }
+            }
+        }
+
+        // 6b. Check Shader cache installer thread
+        if let Some(ref rx) = self.shader_install_rx {
+            if let Ok(res) = rx.try_recv() {
+                self.is_installing_shaders = false;
+                self.shader_install_rx = None;
+                match res {
+                    Ok(count) => {
+                        self.cached_shader_count = count;
+                        let msg = self.t("shader_success").replace("{}", &count.to_string());
+                        self.shader_install_status = Some(msg.clone());
+                        self.status_message = Some((msg, false));
+                        crate::log_info!("Shader cache pre-caching successful. Total shaders: {}", count);
+                    }
+                    Err(e) => {
+                        let err_msg = format!("Hata: {}", e);
+                        self.shader_install_status = Some(err_msg.clone());
+                        self.status_message = Some((err_msg, true));
+                        crate::log_error!("Shader cache pre-caching failed: {}", e);
                     }
                 }
             }
@@ -2854,6 +2903,72 @@ impl eframe::App for LauncherApp {
                         }
                     });
                     ui.label(egui::RichText::new(launch_shaders_desc).color(egui::Color32::LIGHT_GRAY).size(11.0));
+
+                    // --- 7c. RESMİ / TAM SHADER ÖNBELLEĞİ (PRE-CACHING) ---
+                    ui.add_space(8.0);
+                    let shader_box = egui::Frame::new()
+                        .fill(egui::Color32::from_rgb(20, 24, 30))
+                        .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgb(50, 60, 75)))
+                        .corner_radius(egui::CornerRadius::same(6))
+                        .inner_margin(egui::Margin::same(10));
+
+                    shader_box.show(ui, |ui| {
+                        ui.horizontal(|ui| {
+                            ui.label(egui::RichText::new(self.t("shader_cache_title")).strong().size(13.0).color(egui::Color32::GOLD));
+                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                if self.cached_shader_count >= 20000 {
+                                    ui.label(egui::RichText::new(self.t("shader_installed_badge").replace("{}", &self.cached_shader_count.to_string()))
+                                        .color(egui::Color32::from_rgb(100, 255, 120)).strong().size(11.0));
+                                } else {
+                                    ui.label(egui::RichText::new(self.t("shader_missing_badge").replace("{}", &self.cached_shader_count.to_string()))
+                                        .color(egui::Color32::from_rgb(255, 190, 80)).size(11.0));
+                                }
+                            });
+                        });
+
+                        ui.add_space(4.0);
+                        ui.label(egui::RichText::new(self.t("shader_cache_desc")).color(egui::Color32::LIGHT_GRAY).size(11.0));
+                        ui.add_space(6.0);
+
+                        ui.horizontal(|ui| {
+                            if self.is_installing_shaders {
+                                ui.spinner();
+                                let status_txt = self.shader_install_status.as_deref().unwrap_or("İşleniyor...");
+                                ui.label(egui::RichText::new(status_txt).color(egui::Color32::LIGHT_BLUE).size(12.0));
+                            } else {
+                                let btn_label = if self.cached_shader_count >= 20000 {
+                                    self.t("shader_download_btn_update")
+                                } else {
+                                    self.t("shader_download_btn")
+                                };
+                                let btn = egui::Button::new(
+                                    egui::RichText::new(btn_label)
+                                        .strong()
+                                        .color(egui::Color32::WHITE)
+                                ).fill(if self.cached_shader_count >= 20000 {
+                                    egui::Color32::from_rgb(45, 75, 55)
+                                } else {
+                                    egui::Color32::from_rgb(140, 40, 40)
+                                });
+
+                                if ui.add_sized([ui.available_width(), 28.0], btn).clicked() {
+                                    self.start_shader_install();
+                                }
+                            }
+                        });
+
+                        if let Some(ref st) = self.shader_install_status {
+                            if !self.is_installing_shaders {
+                                ui.add_space(4.0);
+                                let color = if st.contains("Hata") || st.contains("Error") {
+                                    egui::Color32::from_rgb(255, 100, 100)
+                                } else {
+                                    egui::Color32::from_rgb(100, 255, 120)
+                                };
+                                ui.label(egui::RichText::new(st).color(color).size(11.0));
+                            }
+                        }
+                    });
 
                     ui.add_space(8.0);
 

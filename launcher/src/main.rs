@@ -8,6 +8,7 @@ mod scanner;
 mod system;
 mod tuner;
 mod updater;
+mod shader_downloader;
 
 use app::LauncherApp;
 use eframe::egui;

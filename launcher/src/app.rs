@@ -1664,13 +1664,23 @@ impl LauncherApp {
             ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(true));
             ctx.send_viewport_cmd(egui::ViewportCommand::WindowLevel(egui::WindowLevel::AlwaysOnTop));
 
+            let initial_total = if self.cached_shader_count > 0 && self.cached_shader_count < 5000 {
+                self.cached_shader_count as u32
+            } else {
+                2302u32
+            };
+
+            // Truncate previous log so monitor reads this session fresh
+            let log_path = self.base_dir.join("gow3_log.txt");
+            let _ = std::fs::remove_file(&log_path);
+
             // Initialize God of War III Shader Loading Screen
             let (progress_tx, progress_rx) = channel();
             self.shader_loading = Some(ShaderLoadingState {
                 progress: 0.0,
-                target_progress: 0.05,
+                target_progress: 0.06,
                 current_shaders: 0,
-                total_shaders: 0,
+                total_shaders: initial_total,
                 is_complete: false,
                 completed_at: None,
                 start_time: std::time::Instant::now(),
@@ -1683,49 +1693,48 @@ impl LauncherApp {
             thread::spawn(move || {
                 let log_path = base_dir_monitor.join("gow3_log.txt");
                 let mut last_pos: u64 = 0;
-                if let Ok(meta) = std::fs::metadata(&log_path) {
-                    last_pos = meta.len();
-                }
-
                 let start = std::time::Instant::now();
-                let mut detected_total = 0u32;
+                let detected_total = initial_total;
+                let mut pid_seen = false;
 
-                while start.elapsed().as_secs() < 45 {
-                    // If game process stopped, exit monitor
-                    if start.elapsed().as_millis() > 2000 && running_pid_monitor.load(Ordering::SeqCst) == 0 {
+                while start.elapsed().as_secs() < 35 {
+                    let pid = running_pid_monitor.load(Ordering::SeqCst);
+                    if pid > 0 {
+                        pid_seen = true;
+                    } else if pid_seen && start.elapsed().as_millis() > 3000 {
+                        // Process had started and then died
                         break;
                     }
 
                     if let Ok(mut f) = std::fs::File::open(&log_path) {
                         use std::io::{BufRead, BufReader, Seek, SeekFrom};
+                        if let Ok(meta) = f.metadata() {
+                            if meta.len() < last_pos {
+                                last_pos = 0;
+                            }
+                        }
                         if f.seek(SeekFrom::Start(last_pos)).is_ok() {
                             let reader = BufReader::new(f);
                             for line in reader.lines().flatten() {
-                                // Match "done 1478/2063" in warm-up progress
-                                if line.contains("Warm-up progress:") {
-                                    if let Some(done_idx) = line.find("done ") {
-                                        let sub = &line[done_idx + 5..];
-                                        if let Some(slash_idx) = sub.find('/') {
-                                            let cur_str = &sub[..slash_idx];
-                                            let rest = &sub[slash_idx + 1..];
-                                            let end_idx = rest.find(|c: char| !c.is_ascii_digit()).unwrap_or(rest.len());
-                                            let tot_str = &rest[..end_idx];
-
-                                            if let (Ok(cur), Ok(tot)) = (cur_str.trim().parse::<u32>(), tot_str.trim().parse::<u32>()) {
+                                // 1. Match "Pipeline warm-up: 2301 of 2302 pipelines in 1.60 s"
+                                if line.contains("Pipeline warm-up:") {
+                                    if let Some(pos) = line.find("Pipeline warm-up:") {
+                                        let sub = line[pos + 17..].trim();
+                                        let parts: Vec<&str> = sub.split_whitespace().collect();
+                                        if parts.len() >= 3 && parts[1] == "of" {
+                                            if let (Ok(cur), Ok(tot)) = (parts[0].parse::<u32>(), parts[2].parse::<u32>()) {
                                                 if tot > 0 {
-                                                    detected_total = tot;
-                                                    let p = (cur as f32 / tot as f32).clamp(0.0, 1.0);
                                                     let _ = progress_tx.send(ShaderProgressMsg {
                                                         current: cur,
                                                         total: tot,
-                                                        progress: p,
-                                                        is_complete: cur >= tot,
+                                                        progress: 1.0,
+                                                        is_complete: true,
                                                     });
+                                                    return;
                                                 }
                                             }
                                         }
                                     }
-                                } else if line.contains("Pipeline warm-up:") && (line.contains("pipelines in") || line.contains("Preloaded")) {
                                     let _ = progress_tx.send(ShaderProgressMsg {
                                         current: detected_total,
                                         total: detected_total,
@@ -1733,7 +1742,18 @@ impl LauncherApp {
                                         is_complete: true,
                                     });
                                     return;
-                                } else if line.contains("Vulkan presenter ready") || line.contains("vblank") || line.contains("USERDATA' mounted") {
+                                }
+
+                                // 2. Match general warm-up / preload completion markers
+                                if line.contains("pipelines in")
+                                    || line.contains("Preloaded")
+                                    || line.contains("Pipeline binary cache:")
+                                    || line.contains("Swapchain: VSync")
+                                    || line.contains("Vulkan presenter ready")
+                                    || line.contains("vblank")
+                                    || line.contains("USERDATA' mounted")
+                                    || line.contains("Overlay: menu ready")
+                                {
                                     let _ = progress_tx.send(ShaderProgressMsg {
                                         current: detected_total,
                                         total: detected_total,
@@ -1748,7 +1768,7 @@ impl LauncherApp {
                             }
                         }
                     }
-                    thread::sleep(std::time::Duration::from_millis(40));
+                    thread::sleep(std::time::Duration::from_millis(30));
                 }
             });
         }
@@ -1853,20 +1873,6 @@ impl LauncherApp {
                     egui::pos2(1.0, 1.0),
                 );
                 painter.image(tex_full.id(), filled_rect, uv_rect, egui::Color32::WHITE);
-
-                // Fiery waterline shimmer beam at current fill level
-                if progress < 0.99 {
-                    let beam_w = bar_w * 0.72;
-                    let beam_rect = egui::Rect::from_center_size(
-                        egui::pos2(center.x, top_y),
-                        egui::vec2(beam_w, (3.5 + glow_pulse * 2.5) * scale),
-                    );
-                    painter.rect_filled(
-                        beam_rect,
-                        egui::CornerRadius::same(2),
-                        egui::Color32::from_rgba_unmultiplied(255, 235, 130, (170.0 + 85.0 * glow_pulse) as u8),
-                    );
-                }
             }
         }
 
@@ -4016,12 +4022,17 @@ impl eframe::App for LauncherApp {
 
             // Poll progress updates from monitor thread
             while let Ok(msg) = sl.rx.try_recv() {
-                sl.current_shaders = msg.current;
-                sl.total_shaders = msg.total;
+                if msg.total > 0 {
+                    sl.total_shaders = msg.total;
+                }
+                if msg.current > 0 {
+                    sl.current_shaders = msg.current;
+                }
                 if msg.progress > sl.target_progress {
                     sl.target_progress = msg.progress;
                 }
                 if msg.is_complete {
+                    sl.is_complete = true;
                     sl.target_progress = 1.0;
                     if sl.completed_at.is_none() {
                         sl.completed_at = Some(std::time::Instant::now());
@@ -4030,22 +4041,44 @@ impl eframe::App for LauncherApp {
             }
 
             let elapsed = sl.start_time.elapsed().as_secs_f32();
-            let baseline = (elapsed * 0.20).min(0.35);
-            if sl.target_progress < baseline && !sl.is_complete {
+            let pid = self.running_pid.load(Ordering::SeqCst);
+
+            // Auto-complete triggers if game engine is up and running or after warmup phase
+            if (pid > 0 && elapsed > 5.5) || elapsed > 8.5 {
+                sl.is_complete = true;
+                sl.target_progress = 1.0;
+            }
+
+            // Continuous, smooth synchronous baseline progress curve (no artificial 35% cap)
+            let baseline = if sl.is_complete {
+                1.0
+            } else {
+                let curve = (1.0 - (-elapsed / 3.0).exp()) * 0.96;
+                curve.clamp(0.06, 0.96)
+            };
+
+            if sl.target_progress < baseline {
                 sl.target_progress = baseline;
             }
 
             let dt = ctx.input(|i| i.stable_dt).min(0.1);
-            let speed = if sl.target_progress >= 1.0 { 8.0 } else { 4.5 };
+            let speed = if sl.target_progress >= 1.0 { 9.0 } else { 5.5 };
             sl.progress += (sl.target_progress - sl.progress) * (dt * speed).min(1.0);
 
-            if sl.progress >= 0.99 {
+            // Synchronize current shaders counter concurrently with progress
+            if sl.total_shaders > 0 {
+                let cur_count = (sl.total_shaders as f32 * sl.progress).round() as u32;
+                sl.current_shaders = sl.current_shaders.max(cur_count).min(sl.total_shaders);
+            }
+
+            if sl.progress >= 0.995 {
                 sl.progress = 1.0;
+                sl.current_shaders = sl.total_shaders;
                 if sl.completed_at.is_none() {
                     sl.completed_at = Some(std::time::Instant::now());
                 }
                 if let Some(done_time) = sl.completed_at {
-                    if done_time.elapsed().as_millis() > 650 {
+                    if done_time.elapsed().as_millis() > 500 {
                         ctx.send_viewport_cmd(egui::ViewportCommand::WindowLevel(egui::WindowLevel::Normal));
                         ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(false));
                         self.shader_loading = None;

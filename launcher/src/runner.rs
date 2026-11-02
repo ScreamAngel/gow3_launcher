@@ -1148,6 +1148,9 @@ pub fn launch_gow3(
         if std::env::var("__GL_VRR_ALLOWED").is_err() {
             cmd.env("__GL_VRR_ALLOWED", "1");
         }
+        if std::env::var("__GL_MaxFramesAllowed").is_err() {
+            cmd.env("__GL_MaxFramesAllowed", "1");
+        }
         if std::env::var("MESA_SHADER_CACHE_MAX_SIZE").is_err() {
             cmd.env("MESA_SHADER_CACHE_MAX_SIZE", "10G");
         }
@@ -1222,7 +1225,8 @@ pub fn launch_gow3(
     cmd.env("GOW3_PIPELINE_CACHE", "1");
     cmd.env("GOW3_PIPELINE_BINARIES", "1");
     cmd.env("GOW3_PARALLEL_WARMUP", "1");
-    cmd.env("GOW3_BACKGROUND_WARMUP", "1");
+    // Pre-warm all Vulkan pipelines before gameplay starts to completely eliminate shader stutter
+    cmd.env("GOW3_BACKGROUND_WARMUP", "0");
 
     // Clear experimental variables that cause shader corruption or texture explosions
     cmd.env_remove("GOW3_STAGING_KEEP_MB");

@@ -152,7 +152,7 @@ fn update_run_sh(base_dir: &Path, config: &LauncherConfig) -> Result<(), String>
     replace_or_insert_env(&mut content, "GOW3_PIPELINE_CACHE", "1");
     replace_or_insert_env(&mut content, "GOW3_PIPELINE_BINARIES", "1");
     replace_or_insert_env(&mut content, "GOW3_PARALLEL_WARMUP", "1");
-    replace_or_insert_env(&mut content, "GOW3_BACKGROUND_WARMUP", "1");
+    replace_or_insert_env(&mut content, "GOW3_BACKGROUND_WARMUP", "0");
     replace_or_insert_env(&mut content, "GOW3_VK_RECORD_THREAD", "1");
     replace_or_insert_env(&mut content, "GOW3_PRESENT_THREAD", "1");
     replace_or_insert_env(&mut content, "GOW3_ASYNC_FENCES", "1");
@@ -175,6 +175,7 @@ fn update_run_sh(base_dir: &Path, config: &LauncherConfig) -> Result<(), String>
     replace_or_insert_env(&mut content, "__GL_SHADER_DISK_CACHE_SKIP_CLEANUP", "1");
     replace_or_insert_env(&mut content, "__GL_THREADED_OPTIMIZATIONS", "1");
     replace_or_insert_env(&mut content, "__GL_VRR_ALLOWED", "1");
+    replace_or_insert_env(&mut content, "__GL_MaxFramesAllowed", "1");
     replace_or_insert_env(&mut content, "MESA_SHADER_CACHE_MAX_SIZE", "10G");
     replace_or_insert_env(&mut content, "GOW3_ASYNC_SHADERS", "1");
     replace_or_insert_env(&mut content, "GOW3_FPS_LIMIT", &config.target_fps.to_string());

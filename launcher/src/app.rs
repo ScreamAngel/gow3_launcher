@@ -809,9 +809,33 @@ pub struct LauncherApp {
     icon_texture: Option<egui::TextureHandle>,
     win_texture: Option<egui::TextureHandle>,
     tux_texture: Option<egui::TextureHandle>,
+    rage_empty_texture: Option<egui::TextureHandle>,
+    rage_full_texture: Option<egui::TextureHandle>,
+
+    // Shader Loading Screen
+    shader_loading: Option<ShaderLoadingState>,
 
     // Dynamic Launcher Version
     launcher_version: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct ShaderProgressMsg {
+    pub current: u32,
+    pub total: u32,
+    pub progress: f32,
+    pub is_complete: bool,
+}
+
+pub struct ShaderLoadingState {
+    pub progress: f32,
+    pub target_progress: f32,
+    pub current_shaders: u32,
+    pub total_shaders: u32,
+    pub is_complete: bool,
+    pub completed_at: Option<std::time::Instant>,
+    pub start_time: std::time::Instant,
+    pub rx: Receiver<ShaderProgressMsg>,
 }
 
 #[derive(Debug, Clone)]
@@ -890,6 +914,9 @@ impl LauncherApp {
             icon_texture: None,
             win_texture: None,
             tux_texture: None,
+            rage_empty_texture: None,
+            rage_full_texture: None,
+            shader_loading: None,
             launcher_version,
         };
 
@@ -1020,6 +1047,26 @@ impl LauncherApp {
             let pixels = img_buffer.as_flat_samples();
             let color_img = egui::ColorImage::from_rgba_unmultiplied(size, pixels.as_slice());
             self.tux_texture = Some(ctx.load_texture("gow3_tux_icon", color_img, Default::default()));
+        }
+
+        if self.rage_empty_texture.is_none() {
+            if let Ok(img) = image::load_from_memory(include_bytes!("../assets/rage_empty.png")) {
+                let size = [img.width() as _, img.height() as _];
+                let img_buffer = img.to_rgba8();
+                let pixels = img_buffer.as_flat_samples();
+                let color_img = egui::ColorImage::from_rgba_unmultiplied(size, pixels.as_slice());
+                self.rage_empty_texture = Some(ctx.load_texture("rage_empty", color_img, Default::default()));
+            }
+        }
+
+        if self.rage_full_texture.is_none() {
+            if let Ok(img) = image::load_from_memory(include_bytes!("../assets/rage_full.png")) {
+                let size = [img.width() as _, img.height() as _];
+                let img_buffer = img.to_rgba8();
+                let pixels = img_buffer.as_flat_samples();
+                let color_img = egui::ColorImage::from_rgba_unmultiplied(size, pixels.as_slice());
+                self.rage_full_texture = Some(ctx.load_texture("rage_full", color_img, Default::default()));
+            }
         }
     }
 
@@ -1153,11 +1200,13 @@ impl LauncherApp {
         self.running_pid.store(0, Ordering::SeqCst);
         self.is_game_running = false;
         self.game_exit_rx = None;
+        self.shader_loading = None;
         self.status_message = Some((self.t("force_quit_status").to_string(), false));
     }
 
     fn kill_leftover_processes(&mut self) {
         crate::runner::kill_game_processes(0);
+        self.shader_loading = None;
         self.status_message = Some((self.t("force_quit_status").to_string(), false));
     }
 
@@ -1167,6 +1216,94 @@ impl LauncherApp {
         self.is_game_running = true;
         let (tx, rx) = channel();
         self.game_exit_rx = Some(rx);
+
+        // Initialize God of War III Shader Loading Screen
+        let (progress_tx, progress_rx) = channel();
+        self.shader_loading = Some(ShaderLoadingState {
+            progress: 0.0,
+            target_progress: 0.05,
+            current_shaders: 0,
+            total_shaders: 0,
+            is_complete: false,
+            completed_at: None,
+            start_time: std::time::Instant::now(),
+            rx: progress_rx,
+        });
+
+        // Spawn background log monitor to track shader warm-up progress in real time
+        let base_dir_monitor = self.base_dir.clone();
+        let running_pid_monitor = self.running_pid.clone();
+        thread::spawn(move || {
+            let log_path = base_dir_monitor.join("gow3_log.txt");
+            let mut last_pos: u64 = 0;
+            if let Ok(meta) = std::fs::metadata(&log_path) {
+                last_pos = meta.len();
+            }
+
+            let start = std::time::Instant::now();
+            let mut detected_total = 0u32;
+
+            while start.elapsed().as_secs() < 45 {
+                // If game process stopped, exit monitor
+                if start.elapsed().as_millis() > 2000 && running_pid_monitor.load(Ordering::SeqCst) == 0 {
+                    break;
+                }
+
+                if let Ok(mut f) = std::fs::File::open(&log_path) {
+                    use std::io::{BufRead, BufReader, Seek, SeekFrom};
+                    if f.seek(SeekFrom::Start(last_pos)).is_ok() {
+                        let reader = BufReader::new(f);
+                        for line in reader.lines().flatten() {
+                            // Match "done 1478/2063" in warm-up progress
+                            if line.contains("Warm-up progress:") {
+                                if let Some(done_idx) = line.find("done ") {
+                                    let sub = &line[done_idx + 5..];
+                                    if let Some(slash_idx) = sub.find('/') {
+                                        let cur_str = &sub[..slash_idx];
+                                        let rest = &sub[slash_idx + 1..];
+                                        let end_idx = rest.find(|c: char| !c.is_ascii_digit()).unwrap_or(rest.len());
+                                        let tot_str = &rest[..end_idx];
+
+                                        if let (Ok(cur), Ok(tot)) = (cur_str.trim().parse::<u32>(), tot_str.trim().parse::<u32>()) {
+                                            if tot > 0 {
+                                                detected_total = tot;
+                                                let p = (cur as f32 / tot as f32).clamp(0.0, 1.0);
+                                                let _ = progress_tx.send(ShaderProgressMsg {
+                                                    current: cur,
+                                                    total: tot,
+                                                    progress: p,
+                                                    is_complete: cur >= tot,
+                                                });
+                                            }
+                                        }
+                                    }
+                                }
+                            } else if line.contains("Pipeline warm-up:") && (line.contains("pipelines in") || line.contains("Preloaded")) {
+                                let _ = progress_tx.send(ShaderProgressMsg {
+                                    current: detected_total,
+                                    total: detected_total,
+                                    progress: 1.0,
+                                    is_complete: true,
+                                });
+                                return;
+                            } else if line.contains("Vulkan presenter ready") || line.contains("vblank 144 Hz") || line.contains("USERDATA' mounted") {
+                                let _ = progress_tx.send(ShaderProgressMsg {
+                                    current: detected_total,
+                                    total: detected_total,
+                                    progress: 1.0,
+                                    is_complete: true,
+                                });
+                                return;
+                            }
+                        }
+                        if let Ok(new_meta) = std::fs::metadata(&log_path) {
+                            last_pos = new_meta.len();
+                        }
+                    }
+                }
+                thread::sleep(std::time::Duration::from_millis(40));
+            }
+        });
 
         let base_dir_clone = self.base_dir.clone();
         let config_clone = self.config.clone();
@@ -1189,6 +1326,180 @@ impl LauncherApp {
                 }
             }
         });
+    }
+
+    fn render_shader_loading_screen(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
+        let (progress, current_shaders, total_shaders) = if let Some(ref sl) = self.shader_loading {
+            (sl.progress.clamp(0.0, 1.0), sl.current_shaders, sl.total_shaders)
+        } else {
+            return;
+        };
+
+        let screen_rect = ui.max_rect();
+        let painter = ui.painter();
+        let time = ctx.input(|i| i.time);
+
+        // 1. Cinematic dark background with subtle vignette
+        painter.rect_filled(screen_rect, 0.0, egui::Color32::from_rgb(12, 10, 15));
+
+        if let Some(ref bg_tex) = self.bg_texture {
+            painter.image(
+                bg_tex.id(),
+                screen_rect,
+                egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)),
+                egui::Color32::from_black_alpha(215),
+            );
+        }
+
+        // Center position for rage bar
+        let center = screen_rect.center();
+        let glow_pulse = ((time * 2.8).sin() * 0.5 + 0.5) as f32; // 0.0 to 1.0
+
+        // Ambient radial ember glow behind rage crest
+        let glow_alpha = ((25.0 + 35.0 * progress + 20.0 * glow_pulse) as u8).min(110);
+        painter.circle_filled(
+            egui::pos2(center.x, center.y - 45.0),
+            160.0 + progress * 50.0,
+            egui::Color32::from_rgba_unmultiplied(220, 60, 20, glow_alpha / 3),
+        );
+        painter.circle_filled(
+            egui::pos2(center.x, center.y - 45.0),
+            90.0 + progress * 35.0,
+            egui::Color32::from_rgba_unmultiplied(255, 170, 30, glow_alpha / 2),
+        );
+
+        // 2. God of War Spartan Rage Bar (Height: ~192, Width: ~135; aspect ratio 0.70)
+        let bar_w = 135.0;
+        let bar_h = 192.0;
+        let bar_rect = egui::Rect::from_center_size(
+            egui::pos2(center.x, center.y - 50.0),
+            egui::vec2(bar_w, bar_h),
+        );
+
+        if let (Some(tex_empty), Some(tex_full)) = (&self.rage_empty_texture, &self.rage_full_texture) {
+            // Background empty meter
+            painter.image(
+                tex_empty.id(),
+                bar_rect,
+                egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)),
+                egui::Color32::WHITE,
+            );
+
+            // Fiery golden rage filling from bottom to top!
+            if progress > 0.001 {
+                let fill_height = bar_rect.height() * progress;
+                let top_y = bar_rect.max.y - fill_height;
+                let filled_rect = egui::Rect::from_min_max(
+                    egui::pos2(bar_rect.min.x, top_y),
+                    bar_rect.max,
+                );
+                let uv_rect = egui::Rect::from_min_max(
+                    egui::pos2(0.0, 1.0 - progress),
+                    egui::pos2(1.0, 1.0),
+                );
+                painter.image(tex_full.id(), filled_rect, uv_rect, egui::Color32::WHITE);
+
+                // Fiery waterline shimmer beam at current fill level
+                if progress < 0.99 {
+                    let beam_w = bar_w * 0.72;
+                    let beam_rect = egui::Rect::from_center_size(
+                        egui::pos2(center.x, top_y),
+                        egui::vec2(beam_w, 3.5 + glow_pulse * 2.5),
+                    );
+                    painter.rect_filled(
+                        beam_rect,
+                        egui::CornerRadius::same(2),
+                        egui::Color32::from_rgba_unmultiplied(255, 235, 130, (170.0 + 85.0 * glow_pulse) as u8),
+                    );
+                }
+            }
+        }
+
+        // 3. Percentage in authentic God of War Font
+        let pct_val = (progress * 100.0).round() as u32;
+        let pct_str = format!("{}%", pct_val.min(100));
+
+        let gow_font_pct = egui::FontId::new(44.0, egui::FontFamily::Name("GodOfWar".into()));
+        let pct_pos = egui::pos2(center.x, center.y + 75.0);
+
+        // Shadow / Glow behind percentage
+        painter.text(
+            egui::pos2(pct_pos.x + 2.0, pct_pos.y + 2.0),
+            egui::Align2::CENTER_CENTER,
+            &pct_str,
+            gow_font_pct.clone(),
+            egui::Color32::from_black_alpha(230),
+        );
+        painter.text(
+            pct_pos,
+            egui::Align2::CENTER_CENTER,
+            &pct_str,
+            gow_font_pct,
+            egui::Color32::from_rgb(255, 218, 85),
+        );
+
+        // 4. "LOADING SHADERS..." in God of War Font
+        let label_str = self.t("loading_shaders");
+        let gow_font_label = egui::FontId::new(22.0, egui::FontFamily::Name("GodOfWar".into()));
+        let label_pos = egui::pos2(center.x, center.y + 120.0);
+
+        painter.text(
+            egui::pos2(label_pos.x + 1.5, label_pos.y + 1.5),
+            egui::Align2::CENTER_CENTER,
+            label_str,
+            gow_font_label.clone(),
+            egui::Color32::from_black_alpha(220),
+        );
+        painter.text(
+            label_pos,
+            egui::Align2::CENTER_CENTER,
+            label_str,
+            gow_font_label,
+            egui::Color32::from_rgb(235, 222, 190),
+        );
+
+        // 5. Subtle shader pipeline counter
+        if total_shaders > 0 {
+            let detail_str = format!("{} / {} Boru Hattı", current_shaders, total_shaders);
+            painter.text(
+                egui::pos2(center.x, center.y + 155.0),
+                egui::Align2::CENTER_CENTER,
+                detail_str,
+                egui::FontId::proportional(13.0),
+                egui::Color32::from_rgb(180, 170, 160),
+            );
+        } else {
+            painter.text(
+                egui::pos2(center.x, center.y + 155.0),
+                egui::Align2::CENTER_CENTER,
+                self.t("loading_shaders_sub"),
+                egui::FontId::proportional(13.0),
+                egui::Color32::from_rgb(160, 150, 140),
+            );
+        }
+
+        // 6. Force Quit / Cancel button at bottom
+        let quit_rect = egui::Rect::from_center_size(
+            egui::pos2(center.x, screen_rect.max.y - 45.0),
+            egui::vec2(160.0, 36.0),
+        );
+        let quit_response = ui.put(
+            quit_rect,
+            egui::Button::new(
+                egui::RichText::new(self.t("force_quit_btn"))
+                    .size(14.0)
+                    .color(egui::Color32::from_rgb(240, 185, 185)),
+            )
+            .fill(egui::Color32::from_rgb(45, 18, 20))
+            .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgb(150, 45, 45)))
+            .corner_radius(egui::CornerRadius::same(6)),
+        );
+        if quit_response.hovered() {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+        }
+        if quit_response.clicked() {
+            self.force_quit_game();
+        }
     }
 }
 
@@ -1284,6 +1595,7 @@ impl eframe::App for LauncherApp {
             if let Ok(res) = rx.try_recv() {
                 self.is_game_running = false;
                 self.game_exit_rx = None;
+                self.shader_loading = None;
 
                 match res {
                     Ok(exit_code) => {
@@ -1378,6 +1690,54 @@ impl eframe::App for LauncherApp {
                     }
                 }
             }
+        }
+
+        // --- 7. SHADER LOADING SCREEN PROGRESS & ANIMATION ---
+        if let Some(ref mut sl) = self.shader_loading {
+            ctx.request_repaint();
+
+            // Poll progress updates from monitor thread
+            while let Ok(msg) = sl.rx.try_recv() {
+                sl.current_shaders = msg.current;
+                sl.total_shaders = msg.total;
+                if msg.progress > sl.target_progress {
+                    sl.target_progress = msg.progress;
+                }
+                if msg.is_complete {
+                    sl.target_progress = 1.0;
+                    if sl.completed_at.is_none() {
+                        sl.completed_at = Some(std::time::Instant::now());
+                    }
+                }
+            }
+
+            let elapsed = sl.start_time.elapsed().as_secs_f32();
+            let baseline = (elapsed * 0.20).min(0.35);
+            if sl.target_progress < baseline && !sl.is_complete {
+                sl.target_progress = baseline;
+            }
+
+            let dt = ctx.input(|i| i.stable_dt).min(0.1);
+            let speed = if sl.target_progress >= 1.0 { 8.0 } else { 4.5 };
+            sl.progress += (sl.target_progress - sl.progress) * (dt * speed).min(1.0);
+
+            if sl.progress >= 0.99 {
+                sl.progress = 1.0;
+                if sl.completed_at.is_none() {
+                    sl.completed_at = Some(std::time::Instant::now());
+                }
+                if let Some(done_time) = sl.completed_at {
+                    if done_time.elapsed().as_millis() > 650 {
+                        self.shader_loading = None;
+                    }
+                }
+            }
+        }
+
+        // If shader loading screen is active, render it full screen and return!
+        if self.shader_loading.is_some() {
+            self.render_shader_loading_screen(ui, &ctx);
+            return;
         }
 
         // --- FULL SCREEN BACKGROUND WALLPAPER ---

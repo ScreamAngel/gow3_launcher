@@ -77,6 +77,19 @@ fn main() -> eframe::Result<()> {
         native_options,
         Box::new(move |cc| {
             egui_extras::install_image_loaders(&cc.egui_ctx);
+
+            // Register God of War Font
+            let mut fonts = egui::FontDefinitions::default();
+            fonts.font_data.insert(
+                "GodOfWar".to_owned(),
+                std::sync::Arc::new(egui::FontData::from_static(include_bytes!("../assets/godofwar.ttf"))),
+            );
+            fonts.families.insert(
+                egui::FontFamily::Name("GodOfWar".into()),
+                vec!["GodOfWar".to_owned()],
+            );
+            cc.egui_ctx.set_fonts(fonts);
+
             Ok(Box::new(LauncherApp::new(cc, base_dir_clone)))
         }),
     )

@@ -1144,6 +1144,10 @@ pub struct LauncherApp {
     has_new_update: bool,
     update_rx: Option<Receiver<Result<UpdateInfo, String>>>,
     update_modal: Option<UpdateInfo>,
+    update_dismissed_this_session: bool,
+    is_applying_update: bool,
+    update_apply_rx: Option<Receiver<(Result<String, String>, LauncherConfig)>>,
+    cached_update_info: Option<UpdateInfo>,
 
     // GitHub Release Notes
     github_release_notes: Option<Vec<crate::updater::GithubReleaseNote>>,
@@ -1293,6 +1297,10 @@ impl LauncherApp {
             has_new_update: false,
             update_rx: None,
             update_modal: None,
+            update_dismissed_this_session: false,
+            is_applying_update: false,
+            update_apply_rx: None,
+            cached_update_info: None,
             github_release_notes: None,
             is_fetching_release_notes: false,
             release_notes_rx: None,
@@ -2215,37 +2223,94 @@ impl LauncherApp {
             });
         });
 
-        // 4. Top-Right: Launcher Sürümü (v2.0)
-        let ver_text = format!("v{}", self.launcher_version.trim_start_matches('v'));
-        let ver_font = egui::FontId::proportional(16.0);
-        let ver_galley = ui.painter().layout_no_wrap(ver_text.clone(), ver_font.clone(), egui::Color32::WHITE);
-        let ver_rect = egui::Rect::from_min_size(
-            egui::pos2(screen_rect.max.x - 24.0 - ver_galley.rect.width() - 12.0, screen_rect.min.y + 18.0),
-            egui::vec2(ver_galley.rect.width() + 12.0, 28.0),
+        // 4. Top-Right: Launcher Sürümü & Güncelleme Butonu
+        let top_right_rect = egui::Rect::from_min_max(
+            egui::pos2(screen_rect.max.x - 380.0, screen_rect.min.y + 16.0),
+            egui::pos2(screen_rect.max.x - 24.0, screen_rect.min.y + 48.0),
         );
-        let ver_resp = ui.allocate_rect(ver_rect, egui::Sense::click());
-        let ver_hov = ver_resp.hovered();
-        let ver_hov_anim = ctx.animate_bool(ver_resp.id.with("hov"), ver_hov);
-        if ver_hov {
-            ctx.set_cursor_icon(egui::CursorIcon::PointingHand);
-        }
-        let ver_col = if self.has_new_update {
-            egui::Color32::from_rgb(255, 215, 100)
-        } else if ver_hov_anim > 0.01 {
-            egui::Color32::from_rgb(255, 225, 120)
-        } else {
-            egui::Color32::from_rgb(180, 185, 200)
-        };
-        ui.painter().text(
-            ver_rect.center(),
-            egui::Align2::CENTER_CENTER,
-            ver_text,
-            ver_font,
-            ver_col,
-        );
-        if ver_resp.clicked() {
-            self.start_update_check();
-        }
+        ui.scope_builder(egui::UiBuilder::new().max_rect(top_right_rect), |ui| {
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                // Version display
+                let ver_text = format!("v{}", self.launcher_version.trim_start_matches('v'));
+                let ver_font = egui::FontId::proportional(15.0);
+                ui.label(
+                    egui::RichText::new(ver_text)
+                        .font(ver_font)
+                        .color(egui::Color32::from_rgb(180, 185, 200))
+                        .strong(),
+                );
+
+                ui.add_space(10.0);
+
+                // Update Button
+                if self.is_checking_update {
+                    let time = ctx.input(|i| i.time);
+                    let pulse = ((time * 4.0).sin() * 0.5 + 0.5) as f32;
+                    ctx.request_repaint();
+
+                    let btn = egui::Button::new(
+                        egui::RichText::new(format!("🔄 {}", self.t("checking_updates")))
+                            .size(12.0)
+                            .color(egui::Color32::from_rgb(200, 210, 230)),
+                    )
+                    .fill(egui::Color32::from_rgba_unmultiplied(30, 35, 50, (150.0 + 40.0 * pulse) as u8))
+                    .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(100, 150, 255, 120)))
+                    .corner_radius(egui::CornerRadius::same(6));
+                    ui.add_enabled(false, btn);
+                } else if self.has_new_update {
+                    let time = ctx.input(|i| i.time);
+                    let pulse = ((time * 3.5).sin() * 0.5 + 0.5) as f32;
+                    ctx.request_repaint();
+
+                    let btn = egui::Button::new(
+                        egui::RichText::new(self.t("update_available_badge"))
+                            .size(12.0)
+                            .color(egui::Color32::WHITE)
+                            .strong(),
+                    )
+                    .fill(egui::Color32::from_rgba_unmultiplied(
+                        (180.0 + 40.0 * pulse) as u8,
+                        (40.0 + 20.0 * pulse) as u8,
+                        25,
+                        230,
+                    ))
+                    .stroke(egui::Stroke::new(
+                        1.5 + pulse * 0.5,
+                        egui::Color32::from_rgb(255, (200.0 + 55.0 * pulse) as u8, 80),
+                    ))
+                    .corner_radius(egui::CornerRadius::same(6));
+
+                    let resp = ui.add(btn);
+                    if resp.hovered() {
+                        ctx.set_cursor_icon(egui::CursorIcon::PointingHand);
+                    }
+                    if resp.clicked() {
+                        if let Some(ref info) = self.cached_update_info {
+                            self.update_modal = Some(info.clone());
+                        } else {
+                            self.start_update_check();
+                        }
+                    }
+                } else {
+                    let btn = egui::Button::new(
+                        egui::RichText::new(format!("🔄 {}", self.t("btn_update")))
+                            .size(12.0)
+                            .color(egui::Color32::from_rgb(220, 225, 235)),
+                    )
+                    .fill(egui::Color32::from_rgba_unmultiplied(22, 24, 34, 180))
+                    .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(255, 255, 255, 45)))
+                    .corner_radius(egui::CornerRadius::same(6));
+
+                    let resp = ui.add(btn);
+                    if resp.hovered() {
+                        ctx.set_cursor_icon(egui::CursorIcon::PointingHand);
+                    }
+                    if resp.clicked() {
+                        self.start_update_check();
+                    }
+                }
+            });
+        });
 
         // 5. Bottom-Right: God of War III Remastered Logo (gow3-remastered.png)
         if let Some(ref logo) = self.logo_texture {
@@ -2665,7 +2730,7 @@ impl LauncherApp {
                         ui.label(egui::RichText::new(format!("{} {}", icon, msg)).color(col).strong().size(12.0));
                     }
 
-                    // Right-aligned log buttons
+                    // Right-aligned log and update buttons
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         ui.add_space(16.0);
                         if ui.button("📋 Launcher Logu").clicked() {
@@ -2677,6 +2742,10 @@ impl LauncherApp {
                             let log_path = self.base_dir.join("gow3.log");
                             self.log_content = std::fs::read_to_string(&log_path).unwrap_or_else(|_| "Log dosyası bulunamadı.".to_string());
                             self.show_log_modal = true;
+                        }
+                        ui.add_space(8.0);
+                        if ui.button(format!("🔄 {}", self.t("check_updates"))).clicked() {
+                            self.start_update_check();
                         }
                     });
                 },
@@ -2708,6 +2777,10 @@ impl LauncherApp {
                         self.config.cached_hardware = crate::system::detect_hardware();
                         let _ = self.config.save(&self.base_dir);
                         self.status_message = Some(("Donanım özellikleri başarıyla güncellendi.".to_string(), false));
+                    }
+                    ui.add_space(6.0);
+                    if ui.button(format!("🔄 {}", self.t("check_updates"))).clicked() {
+                        self.start_update_check();
                     }
                     ui.add_space(6.0);
                     if ui.button("🛑 Kalan Süreçleri Kapat").clicked() {
@@ -4085,10 +4158,13 @@ impl eframe::App for LauncherApp {
                 self.update_rx = None;
                 match res {
                     Ok(info) => {
+                        self.cached_update_info = Some(info.clone());
                         if info.is_new {
                             self.has_new_update = true;
-                        }
-                        if !self.silent_update_check {
+                            if !self.update_dismissed_this_session {
+                                self.update_modal = Some(info);
+                            }
+                        } else if !self.silent_update_check {
                             self.update_modal = Some(info);
                         }
                     }
@@ -4096,6 +4172,31 @@ impl eframe::App for LauncherApp {
                         if !self.silent_update_check {
                             self.status_message = Some((format!("Güncelleme hatası: {}", e), true));
                         }
+                    }
+                }
+            }
+        }
+
+        // 4b. Check background update applying thread
+        if let Some(ref rx) = self.update_apply_rx {
+            if let Ok((res, new_config)) = rx.try_recv() {
+                self.is_applying_update = false;
+                self.update_apply_rx = None;
+                match res {
+                    Ok(success_msg) => {
+                        self.config = new_config;
+                        let _ = self.config.save(&self.base_dir);
+                        self.has_new_update = false;
+                        if let Some(ref info) = self.cached_update_info {
+                            if let Some(ref tag) = info.version_tag {
+                                self.launcher_version = tag.clone();
+                            }
+                        }
+                        self.update_modal = None;
+                        self.status_message = Some((success_msg, false));
+                    }
+                    Err(e) => {
+                        self.status_message = Some((format!("Güncelleme hatası: {}", e), true));
                     }
                 }
             }
@@ -4895,52 +4996,78 @@ impl eframe::App for LauncherApp {
 
                     ui.separator();
 
-                    ui.horizontal(|ui| {
-                        let btn_text = if info.has_missing_files {
-                            "Eksik Dosyaları İndir ve Onar"
-                        } else if info.is_new {
-                            self.t("apply_update")
-                        } else {
-                            self.t("force_sync")
-                        };
+                    if self.is_applying_update {
+                        ui.horizontal(|ui| {
+                            ui.spinner();
+                            ui.label(
+                                egui::RichText::new(self.t("updating_in_progress"))
+                                    .color(egui::Color32::from_rgb(255, 215, 100))
+                                    .strong()
+                                    .size(13.5),
+                            );
+                        });
+                    } else {
+                        ui.horizontal(|ui| {
+                            let btn_text = if info.has_missing_files {
+                                "Eksik Dosyaları İndir ve Onar"
+                            } else if info.is_new {
+                                self.t("btn_update_now")
+                            } else {
+                                self.t("force_sync")
+                            };
 
-                        let apply_btn = egui::Button::new(
-                            egui::RichText::new(btn_text)
-                                .color(egui::Color32::WHITE)
-                                .strong(),
-                        )
-                        .fill(egui::Color32::from_rgb(45, 135, 75))
-                        .corner_radius(egui::CornerRadius::same(6))
-                        .min_size(egui::vec2(160.0, 32.0));
+                            let apply_btn = egui::Button::new(
+                                egui::RichText::new(btn_text)
+                                    .color(egui::Color32::WHITE)
+                                    .strong(),
+                            )
+                            .fill(egui::Color32::from_rgb(45, 135, 75))
+                            .corner_radius(egui::CornerRadius::same(6))
+                            .min_size(egui::vec2(160.0, 34.0));
 
-                        if ui.add(apply_btn).clicked() {
-                            match apply_github_update(&self.base_dir, &info, &mut self.config) {
-                                Ok(success_msg) => {
-                                    self.status_message = Some((success_msg, false));
-                                    self.has_new_update = false;
-                                    if let Some(ref tag) = info.version_tag {
-                                        self.launcher_version = tag.clone();
-                                    } else {
-                                        self.launcher_version = crate::updater::detect_launcher_version(&self.base_dir, &self.config);
-                                    }
+                            if ui.add(apply_btn).clicked() {
+                                self.is_applying_update = true;
+                                let (tx, rx) = channel();
+                                self.update_apply_rx = Some(rx);
+                                let base_dir = self.base_dir.clone();
+                                let info_clone = info.clone();
+                                let mut config_clone = self.config.clone();
+                                thread::spawn(move || {
+                                    let res = apply_github_update(&base_dir, &info_clone, &mut config_clone);
+                                    let _ = tx.send((res, config_clone));
+                                });
+                            }
+
+                            if info.is_new {
+                                let remind_btn = egui::Button::new(
+                                    egui::RichText::new(self.t("remind_later"))
+                                        .color(egui::Color32::from_rgb(220, 225, 235))
+                                        .strong(),
+                                )
+                                .fill(egui::Color32::from_rgb(45, 48, 62))
+                                .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(255, 255, 255, 60)))
+                                .corner_radius(egui::CornerRadius::same(6))
+                                .min_size(egui::vec2(130.0, 34.0));
+
+                                if ui.add(remind_btn).clicked() {
+                                    self.update_dismissed_this_session = true;
                                     self.update_modal = None;
                                 }
-                                Err(e) => {
-                                    self.status_message = Some((format!("Güncelleme hatası: {}", e), true));
+                            }
+
+                            if ui.button(self.t("view_on_github")).clicked() {
+                                ui.ctx().open_url(egui::OpenUrl::new_tab("https://github.com/ScreamAngel/gow3_launcher"));
+                            }
+
+                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                if !info.is_new {
+                                    if ui.button(self.t("close")).clicked() {
+                                        self.update_modal = None;
+                                    }
                                 }
-                            }
-                        }
-
-                        if ui.button(self.t("view_on_github")).clicked() {
-                            ui.ctx().open_url(egui::OpenUrl::new_tab("https://github.com/ScreamAngel/gow3_launcher"));
-                        }
-
-                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            if ui.button(self.t("close")).clicked() {
-                                self.update_modal = None;
-                            }
+                            });
                         });
-                    });
+                    }
                 });
         }
 

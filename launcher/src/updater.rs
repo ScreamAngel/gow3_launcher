@@ -477,6 +477,9 @@ mod tests {
         assert_eq!(compare_version_strings("v1.5", "v1.4"), std::cmp::Ordering::Greater);
         assert_eq!(compare_version_strings("v1.10", "v1.9"), std::cmp::Ordering::Greater);
         assert_eq!(compare_version_strings("1.4", "v1.4"), std::cmp::Ordering::Equal);
+        assert_eq!(compare_version_strings("v2.0.2", "v2.0.1"), std::cmp::Ordering::Greater);
+        assert_eq!(compare_version_strings("v2.0.1", "v2.0.1"), std::cmp::Ordering::Equal);
+        assert_eq!(compare_version_strings("v2.0", "v2.0.1"), std::cmp::Ordering::Less);
     }
 
     #[test]

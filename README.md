@@ -1,6 +1,8 @@
 # gow3_launcher
 Launcher for God Of War 3 PC on Linux and Windows
 
+**To ensure mod support works, install the launcher using a clean installation**
+
  # ⚡ God of War® III Remastered - Linux-Windows Port & Native Launcher                                                                                                                        
                                                                                                                                                                                           
    An optimized Linux-Windows port and native graphical launcher for **God of War® III Remastered** (*CUSA01623 / CUSA01715*), featuring hardware auto-tuning, 144Hz Delta-Time synchronization, crash diagnostics, and upstream GitHub integration.                                                                                                                                     
@@ -71,11 +73,32 @@ Launcher for God Of War 3 PC on Linux and Windows
   ### Sections of the launcher
   
   **Home Screen**
-   <img width="2287" height="1241" alt="image" src="https://github.com/user-attachments/assets/937f6239-606f-439e-9924-f8df6549623e" />
+   <img width="1901" height="1025" alt="image" src="https://github.com/user-attachments/assets/31385740-38a4-4ddd-bf5b-3d795930c51f" />
+
 
 
   **Graphics Settings**
-  <img width="2543" height="1388" alt="image" src="https://github.com/user-attachments/assets/ed939f69-93af-498a-a860-209bbb75bbd0" />
+  <img width="2284" height="1241" alt="image" src="https://github.com/user-attachments/assets/b69c4452-9e0b-4b9a-ac3e-e387d947bda4" />
+
+
+  **Mods Settings**
+  <img width="1901" height="1024" alt="image" src="https://github.com/user-attachments/assets/7a73fbbd-eb58-49a4-a052-b397da7bcb0a" />
+
+  **System Specifications**
+  <img width="1898" height="1024" alt="image" src="https://github.com/user-attachments/assets/2643f04c-02af-44e5-a2d0-c8f764688759" />
+
+  **Game Location**
+   <img width="1898" height="1025" alt="image" src="https://github.com/user-attachments/assets/aff6bba2-489c-47cf-8db4-5812dc705371" />
+
+  **Controls**
+   <img width="1901" height="1030" alt="image" src="https://github.com/user-attachments/assets/e245193f-3863-4a23-93ee-d4253a0a0d28" />
+
+  **Shader Settings**
+  <img width="1900" height="1029" alt="image" src="https://github.com/user-attachments/assets/6db7a6d5-4474-411d-aa81-defdfb65da6b" />
+
+
+
+
 
 
 

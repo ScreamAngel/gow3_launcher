@@ -111,6 +111,19 @@ pub fn analyze_post_game(base_dir: &Path, exit_code: Option<i32>) -> Option<Cras
         });
     }
 
+    // Check for GPU PM4 / Liverpool Packet Overrun or Assertion
+    if tail_str.contains("packet length exceeds remaining submission size")
+        || tail_str.contains("Unimplemented PM4")
+        || (tail_str.contains("liverpool.cpp") && tail_str.contains("Unreachable code"))
+    {
+        return Some(CrashDiagnosis {
+            title: "💥 GPU Komut Akışı (PM4 / Liverpool) Aşım Hatası".to_string(),
+            description: "GPU komut işlemcisine (Liverpool) iletilen PM4 paket uzunluğu tahsis edilen teslimat boyutunu aştı. Ara bellek kopyalaması (GOW3_COPY_GPU_BUFFERS) paket sınırlarında uyuşmazlığa yol açtı.".to_string(),
+            recommendation: "Ara GPU bellek kopyalaması güvenli şekilde kapatılmıştır. Oyunu tekrar başlatabilirsiniz.".to_string(),
+            log_snippet: extract_relevant_snippet(&tail_str, "liverpool.cpp"),
+        });
+    }
+
     // 3. Check for Texture Readback Glitch
     if tail_str.contains("Readback failed") || tail_str.contains("stale_readback") || tail_str.contains("readbackLinearImages failed") {
         return Some(CrashDiagnosis {
@@ -198,6 +211,23 @@ Host fault (signal 11) in /usr/lib/libnvidia-glcore.so.615.78.08+0xd60b72 (?), a
         let diag = analyze_post_game(&temp_dir, Some(11)).expect("Should diagnose NVIDIA EndRendering crash");
         assert!(diag.title.contains("NVIDIA Vulkan Sürücü Çökmesi"));
         assert!(diag.recommendation.contains("5120 MB"));
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_diagnose_liverpool_pm4_packet_crash() {
+        let temp_dir = std::env::temp_dir().join("gow3_crash_test_pm4");
+        let _ = fs::create_dir_all(&temp_dir);
+        let log_content = r#"
+GPU [Lib.GnmDriver] <Error> liverpool.cpp:66 NextPacket: : packet length exceeds remaining submission size. Packet dword count=18, remaining submission dwords=8
+GPU [Debug] <Critical> liverpool.cpp:745 ProcessGraphics: Unreachable code!
+Unimplemented PM4 type 0, base reg: 0, size: 1
+STOP: GPU library assertion failed (see GPU log above)
+"#;
+        fs::write(temp_dir.join("gow3_log.txt"), log_content).unwrap();
+        let diag = analyze_post_game(&temp_dir, Some(1)).expect("Should diagnose PM4 packet overrun crash");
+        assert!(diag.title.contains("GPU Komut Akışı (PM4 / Liverpool)"));
+        assert!(diag.recommendation.contains("kapatılmıştır"));
         let _ = fs::remove_dir_all(&temp_dir);
     }
 }

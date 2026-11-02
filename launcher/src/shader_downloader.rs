@@ -5,7 +5,7 @@ use std::process::Command;
 pub const SHADER_REPO_URL: &str =
     "https://raw.githubusercontent.com/ScreamAngel/gow3_launcher/main/shaders/gow3-shader-cache.tar.xz";
 pub const SHADER_FALLBACK_URL: &str =
-    "https://github.com/ScreamAngel/gow3_launcher/releases/download/v1.9/gow3-shader-cache.tar.xz";
+    "https://github.com/ScreamAngel/gow3_launcher/releases/download/v2.0/gow3-shader-cache.tar.xz";
 
 /// Resolves the shader cache directory for God of War III.
 /// Handles both running from root repo or directly inside `gow3-linux`.

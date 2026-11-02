@@ -59,8 +59,8 @@ fn main() -> eframe::Result<()> {
 
     let mut viewport = egui::ViewportBuilder::default()
         .with_title("God of War® III Remastered - Launcher")
-        .with_inner_size([800.0, 720.0])
-        .with_min_inner_size([650.0, 550.0])
+        .with_inner_size([980.0, 680.0])
+        .with_min_inner_size([860.0, 580.0])
         .with_resizable(true);
 
     if let Some(icon) = load_window_icon(&base_dir) {
@@ -79,7 +79,7 @@ fn main() -> eframe::Result<()> {
         Box::new(move |cc| {
             egui_extras::install_image_loaders(&cc.egui_ctx);
 
-            // Register God of War Font
+            // Register God of War Font and make it primary for Spartan style with unicode fallback
             let mut fonts = egui::FontDefinitions::default();
             fonts.font_data.insert(
                 "GodOfWar".to_owned(),
@@ -89,6 +89,10 @@ fn main() -> eframe::Result<()> {
                 egui::FontFamily::Name("GodOfWar".into()),
                 vec!["GodOfWar".to_owned()],
             );
+            // Prepend GodOfWar to Proportional font family so headers and labels use it automatically
+            if let Some(prop) = fonts.families.get_mut(&egui::FontFamily::Proportional) {
+                prop.insert(0, "GodOfWar".to_owned());
+            }
             cc.egui_ctx.set_fonts(fonts);
 
             Ok(Box::new(LauncherApp::new(cc, base_dir_clone)))

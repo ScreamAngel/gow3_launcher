@@ -316,7 +316,7 @@ fn default_last_commit() -> String {
     "c5638d9956002b8a9f09a240028f6793ddf7b2f8".to_string()
 }
 fn default_launcher_version() -> String {
-    "v1.9".to_string()
+    "v2.0".to_string()
 }
 fn default_render_resolution() -> String {
     "native".to_string()
@@ -516,9 +516,9 @@ impl LauncherConfig {
             if let Ok(content) = fs::read_to_string(&path) {
                 if let Ok(mut cfg) = serde_json::from_str::<LauncherConfig>(&content) {
                     let mut changed = false;
-                    // Migrate from older versions: ensure v1.9 version string and enable recommended async_readbacks
-                    if cfg.launcher_version != "v1.9" {
-                        cfg.launcher_version = "v1.9".to_string();
+                    // Migrate from older versions: ensure v2.0 version string and enable recommended async_readbacks
+                    if cfg.launcher_version != "v2.0" {
+                        cfg.launcher_version = "v2.0".to_string();
                         cfg.async_readbacks = true;
                         changed = true;
                     }
@@ -764,8 +764,8 @@ mod tests {
     }
 
     #[test]
-    fn test_launcher_version_is_v19() {
-        assert_eq!(default_launcher_version(), "v1.9");
+    fn test_launcher_version_is_v20() {
+        assert_eq!(default_launcher_version(), "v2.0");
         let def = LauncherConfig::default();
         assert!(def.async_readbacks);
         assert!(def.patch_readbacks);

@@ -5,7 +5,7 @@ use std::process::Command;
 use crate::config::LauncherConfig;
 use crate::tuner::apply_settings;
 
-pub const BUILTIN_VERSION: &str = "v2.0.1";
+pub const BUILTIN_VERSION: &str = "v2.0.2";
 pub const GITHUB_REPO: &str = "ScreamAngel/gow3_launcher";
 pub const GITHUB_REPO_URL: &str = "https://github.com/ScreamAngel/gow3_launcher.git";
 
@@ -462,10 +462,9 @@ mod tests {
             assert!(info.is_new);
         }
 
-        // Test with current version v2.0: should NOT report as an update
-        let res_current = check_github_update(Path::new(".."), "test_dummy_sha", "v2.0");
+        // Test with current version (v2.0.2): should NOT report as an update against current GitHub release (v2.0.1)
+        let res_current = check_github_update(Path::new(".."), "test_dummy_sha", BUILTIN_VERSION);
         if let Ok(info) = res_current {
-            // Because remote release on GitHub is <= v2.0, and current is v2.0, and files are present, is_new must be false!
             assert!(!info.is_new);
         }
     }
@@ -477,9 +476,9 @@ mod tests {
         assert_eq!(compare_version_strings("v1.5", "v1.4"), std::cmp::Ordering::Greater);
         assert_eq!(compare_version_strings("v1.10", "v1.9"), std::cmp::Ordering::Greater);
         assert_eq!(compare_version_strings("1.4", "v1.4"), std::cmp::Ordering::Equal);
-        assert_eq!(compare_version_strings("v2.0.2", "v2.0.1"), std::cmp::Ordering::Greater);
-        assert_eq!(compare_version_strings("v2.0.1", "v2.0.1"), std::cmp::Ordering::Equal);
-        assert_eq!(compare_version_strings("v2.0", "v2.0.1"), std::cmp::Ordering::Less);
+        assert_eq!(compare_version_strings("v2.0.3", "v2.0.2"), std::cmp::Ordering::Greater);
+        assert_eq!(compare_version_strings("v2.0.2", "v2.0.2"), std::cmp::Ordering::Equal);
+        assert_eq!(compare_version_strings("v2.0.1", "v2.0.2"), std::cmp::Ordering::Less);
     }
 
     #[test]

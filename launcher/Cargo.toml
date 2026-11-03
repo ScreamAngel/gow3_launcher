@@ -1,11 +1,11 @@
 [package]
 name = "launcher"
-version = "2.0.1"
+version = "2.0.2"
 edition = "2024"
 
 [dependencies]
 eframe = "0.36.2"
-egui_extras = { version = "0.36.2", features = ["all_loaders"] }
+egui_extras = { version = "0.36.2", features = ["image"] }
 image = { version = "0.25.10", default-features = false, features = ["png"] }
 rfd = "0.17.2"
 serde = { version = "1.0.229", features = ["derive"] }

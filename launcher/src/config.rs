@@ -322,7 +322,7 @@ fn default_last_commit() -> String {
     "c5638d9956002b8a9f09a240028f6793ddf7b2f8".to_string()
 }
 fn default_launcher_version() -> String {
-    "v2.0.2".to_string()
+    "v2.0.3".to_string()
 }
 fn default_render_resolution() -> String {
     "native".to_string()
@@ -786,7 +786,7 @@ mod tests {
 
     #[test]
     fn test_launcher_version_is_v20() {
-        assert_eq!(default_launcher_version(), "v2.0.2");
+        assert_eq!(default_launcher_version(), "v2.0.3");
         let def = LauncherConfig::default();
         assert!(def.async_readbacks);
         assert!(def.patch_readbacks);

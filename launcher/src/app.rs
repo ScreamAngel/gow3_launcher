@@ -839,14 +839,22 @@ fn render_button_feedback(
 }
 
 fn render_section_tag(ui: &mut egui::Ui, tag: &str) {
+    ui.add_space(8.0);
+    ui.horizontal(|ui| {
+        ui.label(
+            egui::RichText::new("▌")
+                .size(17.0)
+                .color(egui::Color32::from_rgb(239, 68, 68))
+                .strong(),
+        );
+        ui.label(
+            egui::RichText::new(tag.to_uppercase())
+                .size(16.0)
+                .color(egui::Color32::from_rgb(255, 95, 95))
+                .strong(),
+        );
+    });
     ui.add_space(4.0);
-    ui.label(
-        egui::RichText::new(tag)
-            .size(11.0)
-            .color(egui::Color32::from_rgb(239, 68, 68))
-            .strong(),
-    );
-    ui.add_space(1.0);
 }
 
 fn render_stat_tile(
@@ -871,12 +879,12 @@ fn render_stat_tile(
                     .corner_radius(egui::CornerRadius::same(4))
                     .inner_margin(egui::Margin::symmetric(5, 2))
                     .show(ui, |ui| {
-                        ui.label(egui::RichText::new(tag).color(tag_color).size(10.0).strong());
+                        ui.label(egui::RichText::new(tag).color(tag_color).size(11.0).strong());
                     });
-                ui.label(egui::RichText::new(title).color(egui::Color32::from_rgb(165, 170, 185)).size(11.0));
+                ui.label(egui::RichText::new(title).color(egui::Color32::from_rgb(175, 180, 195)).size(12.5));
             });
             ui.add_space(2.0);
-            ui.label(egui::RichText::new(value).color(egui::Color32::WHITE).strong().size(13.0));
+            ui.label(egui::RichText::new(value).color(egui::Color32::WHITE).strong().size(15.0));
             if let Some((b_text, b_color)) = badge {
                 ui.add_space(3.0);
                 egui::Frame::new()
@@ -885,7 +893,7 @@ fn render_stat_tile(
                     .corner_radius(egui::CornerRadius::same(4))
                     .inner_margin(egui::Margin::symmetric(6, 2))
                     .show(ui, |ui| {
-                        ui.label(egui::RichText::new(b_text).color(b_color).size(10.0).strong());
+                        ui.label(egui::RichText::new(b_text).color(b_color).size(11.5).strong());
                     });
             }
         });
@@ -1004,8 +1012,8 @@ fn render_binding_row(
 ) {
     ui.horizontal(|ui| {
         paint_ps_badge(ui, target);
-        ui.add_space(2.0);
-        ui.label(egui::RichText::new(label).size(12.5).color(egui::Color32::from_rgb(230, 230, 235)));
+        ui.add_space(4.0);
+        ui.label(egui::RichText::new(label).size(14.5).color(egui::Color32::from_rgb(240, 240, 245)).strong());
 
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             let is_listening = listening_for == Some(target);
@@ -1033,7 +1041,7 @@ fn render_binding_row(
             };
 
             let btn = egui::Button::new(
-                egui::RichText::new(btn_text).strong().size(12.0).color(text_color),
+                egui::RichText::new(btn_text).strong().size(13.5).color(text_color),
             )
             .min_size(egui::vec2(145.0, 28.0))
             .fill(bg_color)
@@ -1898,9 +1906,12 @@ impl LauncherApp {
                     1.0
                 };
                 let alpha = (elapsed * 2.2).min(1.0);
-                let pulse = ((time * 0.9).sin() * 0.006) as f32; // subtle breathing
+                // Continuous, buttery-smooth cinematic push-in zoom towards camera
+                let zoom_progress = (elapsed / 20.0).clamp(0.0, 1.0);
+                let zoom_ease = zoom_progress * (2.0 - zoom_progress); // smooth quad ease-out
+                let scale_factor = 1.0 + zoom_ease * 0.095;
                 let center = screen_rect.center();
-                let zoomed_size = screen_rect.size() * (1.0 + pulse);
+                let zoomed_size = screen_rect.size() * scale_factor;
                 let draw_rect = egui::Rect::from_center_size(center, zoomed_size);
 
                 painter.image(
@@ -2662,6 +2673,10 @@ impl LauncherApp {
                     egui::ScrollArea::vertical()
                         .auto_shrink([false, false])
                         .show(ui, |ui| {
+                            // Ayarlar ekranında göz yormayan, okunaklı net metin boyutları
+                            ui.style_mut().text_styles.insert(egui::TextStyle::Body, egui::FontId::proportional(14.5));
+                            ui.style_mut().text_styles.insert(egui::TextStyle::Button, egui::FontId::proportional(14.0));
+
                             // Fade / smooth slide transition
                             let elapsed = self.view_transition_start.elapsed().as_secs_f32();
                             let t = (elapsed / 0.18).min(1.0);
@@ -2957,7 +2972,7 @@ impl LauncherApp {
 
             // 1. Target FPS
             ui.horizontal(|ui| {
-                ui.label(egui::RichText::new(self.t("target_fps")).strong().color(egui::Color32::WHITE));
+                ui.label(egui::RichText::new(self.t("target_fps")).strong().color(egui::Color32::WHITE).size(14.5));
                 let fps_str = match self.config.target_fps {
                     30 => "30 FPS (Konsol Kilidi & Düşük Sistem - Maksimum Kararlılık)".to_string(),
                     40 => "40 FPS (Steam Deck 40Hz)".to_string(),
@@ -2984,87 +2999,87 @@ impl LauncherApp {
                         ui.selectable_value(&mut self.config.target_fps, 0, "Sınırsız (Uncapped)");
                     });
             });
-            ui.label(egui::RichText::new("Oyunun hedef kare hızı sınırı. Delta-Time ve 60Hz fizik motor koruması sayesinde 240 FPS'e kadar oyun hızlanmadan ve sapıtmadan ultra akıcı çalışır.").color(egui::Color32::LIGHT_GRAY).size(11.0));
+            ui.label(egui::RichText::new("Oyunun hedef kare hızı sınırı. Delta-Time ve 60Hz fizik motor koruması sayesinde 240 FPS'e kadar oyun hızlanmadan ve sapıtmadan ultra akıcı çalışır.").color(egui::Color32::from_rgb(190, 195, 210)).size(12.5));
 
             ui.add_space(8.0);
             // 2. Skip Cinematics with X
             ui.horizontal(|ui| {
                 toggle_switch(ui, &mut self.config.skip_cinematics);
                 let lbl = self.t("skip_cinematics");
-                if ui.add(egui::Label::new(egui::RichText::new(lbl).strong()).sense(egui::Sense::click())).clicked() {
+                if ui.add(egui::Label::new(egui::RichText::new(lbl).strong().color(egui::Color32::WHITE).size(14.5)).sense(egui::Sense::click())).clicked() {
                     self.config.skip_cinematics = !self.config.skip_cinematics;
                 }
             });
-            ui.label(egui::RichText::new(self.t("skip_cinematics_desc")).color(egui::Color32::LIGHT_GRAY).size(11.0));
+            ui.label(egui::RichText::new(self.t("skip_cinematics_desc")).color(egui::Color32::from_rgb(190, 195, 210)).size(12.5));
 
             ui.add_space(8.0);
             // 3. Feral GameMode
             ui.horizontal(|ui| {
                 toggle_switch(ui, &mut self.config.use_gamemode);
                 let lbl = self.t("gamemode_toggle");
-                if ui.add(egui::Label::new(egui::RichText::new(lbl).strong()).sense(egui::Sense::click())).clicked() {
+                if ui.add(egui::Label::new(egui::RichText::new(lbl).strong().color(egui::Color32::WHITE).size(14.5)).sense(egui::Sense::click())).clicked() {
                     self.config.use_gamemode = !self.config.use_gamemode;
                 }
                 if !self.has_gamemode {
-                    ui.label(egui::RichText::new("(Sistemde Gamemode Bulunamadı)").color(egui::Color32::YELLOW).size(10.5));
+                    ui.label(egui::RichText::new("(Sistemde Gamemode Bulunamadı)").color(egui::Color32::YELLOW).size(11.0));
                 }
             });
-            ui.label(egui::RichText::new(self.t("gamemode_desc")).color(egui::Color32::LIGHT_GRAY).size(11.0));
+            ui.label(egui::RichText::new(self.t("gamemode_desc")).color(egui::Color32::from_rgb(190, 195, 210)).size(12.5));
 
             ui.add_space(8.0);
             // 4. Delta Time Speed Patch
             ui.horizontal(|ui| {
                 toggle_switch(ui, &mut self.config.patch_delta_time);
                 let lbl = "Delta Time Senkronizasyon Yaması (60-144 FPS)";
-                if ui.add(egui::Label::new(egui::RichText::new(lbl).strong()).sense(egui::Sense::click())).clicked() {
+                if ui.add(egui::Label::new(egui::RichText::new(lbl).strong().color(egui::Color32::WHITE).size(14.5)).sense(egui::Sense::click())).clicked() {
                     self.config.patch_delta_time = !self.config.patch_delta_time;
                 }
             });
-            ui.label(egui::RichText::new("Yüksek kare hızlarında (60-144 FPS) oyun hızının iki katına çıkmasını engelleyerek normal hızda çalışmasını sağlar.").color(egui::Color32::LIGHT_GRAY).size(11.0));
+            ui.label(egui::RichText::new("Yüksek kare hızlarında (60-144 FPS) oyun hızının iki katına çıkmasını engelleyerek normal hızda çalışmasını sağlar.").color(egui::Color32::from_rgb(190, 195, 210)).size(12.5));
 
             ui.add_space(8.0);
             // 5. Disable Motion Blur
             ui.horizontal(|ui| {
                 toggle_switch(ui, &mut self.config.disable_motion_blur);
                 let lbl = self.t("disable_motion_blur");
-                if ui.add(egui::Label::new(egui::RichText::new(lbl).strong()).sense(egui::Sense::click())).clicked() {
+                if ui.add(egui::Label::new(egui::RichText::new(lbl).strong().color(egui::Color32::WHITE).size(14.5)).sense(egui::Sense::click())).clicked() {
                     self.config.disable_motion_blur = !self.config.disable_motion_blur;
                 }
             });
-            ui.label(egui::RichText::new(self.t("disable_motion_blur_desc")).color(egui::Color32::LIGHT_GRAY).size(11.0));
+            ui.label(egui::RichText::new(self.t("disable_motion_blur_desc")).color(egui::Color32::from_rgb(190, 195, 210)).size(12.5));
 
             ui.add_space(8.0);
             // 6. Disable Depth of Field
             ui.horizontal(|ui| {
                 toggle_switch(ui, &mut self.config.disable_dof);
                 let lbl = self.t("disable_dof");
-                if ui.add(egui::Label::new(egui::RichText::new(lbl).strong()).sense(egui::Sense::click())).clicked() {
+                if ui.add(egui::Label::new(egui::RichText::new(lbl).strong().color(egui::Color32::WHITE).size(14.5)).sense(egui::Sense::click())).clicked() {
                     self.config.disable_dof = !self.config.disable_dof;
                 }
             });
-            ui.label(egui::RichText::new(self.t("disable_dof_desc")).color(egui::Color32::LIGHT_GRAY).size(11.0));
+            ui.label(egui::RichText::new(self.t("disable_dof_desc")).color(egui::Color32::from_rgb(190, 195, 210)).size(12.5));
 
             ui.add_space(8.0);
             // 7. Background Controller Input
             ui.horizontal(|ui| {
                 toggle_switch(ui, &mut self.config.background_controller_input);
                 let lbl = self.t("bg_input");
-                if ui.add(egui::Label::new(egui::RichText::new(lbl).strong()).sense(egui::Sense::click())).clicked() {
+                if ui.add(egui::Label::new(egui::RichText::new(lbl).strong().color(egui::Color32::WHITE).size(14.5)).sense(egui::Sense::click())).clicked() {
                     self.config.background_controller_input = !self.config.background_controller_input;
                 }
             });
-            ui.label(egui::RichText::new(self.t("bg_input_desc")).color(egui::Color32::LIGHT_GRAY).size(11.0));
+            ui.label(egui::RichText::new(self.t("bg_input_desc")).color(egui::Color32::from_rgb(190, 195, 210)).size(12.5));
 
             ui.add_space(8.0);
             // 8. Hide Mouse Cursor
             ui.horizontal(|ui| {
                 toggle_switch(ui, &mut self.config.hide_mouse_cursor);
                 let lbl = self.t("hide_mouse_cursor");
-                if ui.add(egui::Label::new(egui::RichText::new(lbl).strong()).sense(egui::Sense::click())).clicked() {
+                if ui.add(egui::Label::new(egui::RichText::new(lbl).strong().color(egui::Color32::WHITE).size(14.5)).sense(egui::Sense::click())).clicked() {
                     self.config.hide_mouse_cursor = !self.config.hide_mouse_cursor;
                 }
             });
-            ui.label(egui::RichText::new(self.t("hide_mouse_cursor_desc")).color(egui::Color32::LIGHT_GRAY).size(11.0));
+            ui.label(egui::RichText::new(self.t("hide_mouse_cursor_desc")).color(egui::Color32::from_rgb(190, 195, 210)).size(12.5));
 
             ui.add_space(12.0);
             ui.separator();
@@ -3095,8 +3110,8 @@ impl LauncherApp {
             );
             ui.label(
                 egui::RichText::new(self.t("mods_desc"))
-                    .size(11.5)
-                    .color(egui::Color32::from_rgb(175, 185, 205)),
+                    .size(12.5)
+                    .color(egui::Color32::from_rgb(190, 195, 210)),
             );
             ui.separator();
 
@@ -3154,7 +3169,7 @@ impl LauncherApp {
                                 .replacen("{}", &disabled_count.to_string(), 1),
                         )
                         .color(egui::Color32::from_rgb(160, 215, 255))
-                        .size(12.0)
+                        .size(13.0)
                         .strong(),
                     );
                 });
@@ -3175,14 +3190,14 @@ impl LauncherApp {
                         ui.label(
                             egui::RichText::new(format!("📦 {}", self.t("mods_empty_title")))
                                 .color(egui::Color32::from_rgb(255, 215, 120))
-                                .size(14.0)
+                                .size(14.5)
                                 .strong(),
                         );
                         ui.add_space(4.0);
                         ui.label(
                             egui::RichText::new(self.t("mods_empty_desc"))
-                                .color(egui::Color32::from_rgb(175, 180, 195))
-                                .size(11.5),
+                                .color(egui::Color32::from_rgb(190, 195, 210))
+                                .size(12.5),
                         );
                     });
                 });
@@ -3229,12 +3244,12 @@ impl LauncherApp {
                             let title_resp = ui.add(
                                 egui::Label::new(
                                     egui::RichText::new(format!("{} {}", icon, m.title))
-                                        .size(14.5)
+                                        .size(15.0)
                                         .strong()
                                         .color(if is_active {
                                             egui::Color32::WHITE
                                         } else {
-                                            egui::Color32::from_rgb(150, 155, 165)
+                                            egui::Color32::from_rgb(160, 165, 175)
                                         }),
                                 )
                                 .sense(egui::Sense::click()),
@@ -3248,23 +3263,23 @@ impl LauncherApp {
 
                             ui.label(
                                 egui::RichText::new(format!("[{}]", m.version))
-                                    .size(11.0)
-                                    .color(egui::Color32::from_rgb(140, 165, 200)),
+                                    .size(11.5)
+                                    .color(egui::Color32::from_rgb(150, 175, 210)),
                             );
 
                             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                                 if is_active {
                                     ui.label(
                                         egui::RichText::new(self.t("mods_status_active"))
-                                            .size(11.5)
+                                            .size(12.5)
                                             .color(egui::Color32::from_rgb(134, 239, 172))
                                             .strong(),
                                     );
                                 } else {
                                     ui.label(
                                         egui::RichText::new(self.t("mods_status_disabled"))
-                                            .size(11.5)
-                                            .color(egui::Color32::from_rgb(180, 100, 100)),
+                                            .size(12.5)
+                                            .color(egui::Color32::from_rgb(200, 110, 110)),
                                     );
                                 }
                             });
@@ -3275,8 +3290,8 @@ impl LauncherApp {
                             ui.add_space(3.0);
                             ui.label(
                                 egui::RichText::new(&m.description)
-                                    .size(11.0)
-                                    .color(egui::Color32::from_rgb(175, 185, 200)),
+                                    .size(12.5)
+                                    .color(egui::Color32::from_rgb(190, 195, 210)),
                             );
                         }
 
@@ -3285,7 +3300,7 @@ impl LauncherApp {
                         ui.horizontal(|ui| {
                             ui.label(
                                 egui::RichText::new(format!("👤 {}: {}", self.t("mods_author"), m.author))
-                                    .size(10.5)
+                                    .size(11.5)
                                     .color(egui::Color32::from_rgb(255, 215, 120)),
                             );
 
@@ -3304,8 +3319,8 @@ impl LauncherApp {
                                     m.file_count,
                                     samples_str
                                 ))
-                                .size(10.5)
-                                .color(egui::Color32::from_rgb(150, 200, 255)),
+                                .size(11.5)
+                                .color(egui::Color32::from_rgb(160, 210, 255)),
                             );
                         });
                     });
@@ -3359,19 +3374,20 @@ impl LauncherApp {
         card_frame.show(ui, |ui| {
             ui.heading(
                 egui::RichText::new(format!("⚙️ {}", self.t("nav_graphics")))
-                    .size(16.0)
-                    .color(egui::Color32::from_rgb(150, 205, 255)),
+                    .size(17.5)
+                    .color(egui::Color32::from_rgb(150, 205, 255))
+                    .strong(),
             );
             ui.label(
                 egui::RichText::new(self.t("graphics_subtitle"))
-                    .size(11.5)
-                    .color(egui::Color32::from_rgb(175, 185, 205)),
+                    .size(13.0)
+                    .color(egui::Color32::from_rgb(185, 195, 215)),
             );
             ui.separator();
 
             // 1. Hazır Grafik Profili
             ui.horizontal(|ui| {
-                ui.label(egui::RichText::new(self.t("graphic_preset")).strong().color(egui::Color32::WHITE));
+                ui.label(egui::RichText::new(self.t("graphic_preset")).strong().color(egui::Color32::WHITE).size(14.5));
                 let current_preset_text = match self.config.graphic_preset {
                     crate::config::GraphicPreset::UltraLow => self.t("preset_ultra_low"),
                     crate::config::GraphicPreset::Low => self.t("preset_low"),
@@ -3404,12 +3420,12 @@ impl LauncherApp {
                         }
                     });
             });
-            ui.label(egui::RichText::new(self.t("preset_desc")).color(egui::Color32::LIGHT_GRAY).size(11.0));
+            ui.label(egui::RichText::new(self.t("preset_desc")).color(egui::Color32::from_rgb(190, 195, 210)).size(12.5));
 
             ui.add_space(8.0);
             // 2. Render Resolution
             ui.horizontal(|ui| {
-                ui.label(egui::RichText::new(self.t("render_resolution")).strong().color(egui::Color32::WHITE));
+                ui.label(egui::RichText::new(self.t("render_resolution")).strong().color(egui::Color32::WHITE).size(14.5));
                 let res_text = match self.config.render_resolution.as_str() {
                     "480p" => "480p (854x480 - Ultra Düşük Donanım / Yüksek FPS)",
                     "720p" => "720p (1280x720 - Düşük Sistem & Steam Deck)",
@@ -3449,46 +3465,46 @@ impl LauncherApp {
                         }
                     });
             });
-            ui.label(egui::RichText::new(self.t("res_desc")).color(egui::Color32::LIGHT_GRAY).size(11.0));
+            ui.label(egui::RichText::new(self.t("res_desc")).color(egui::Color32::from_rgb(190, 195, 210)).size(12.5));
 
             ui.add_space(8.0);
             // 3. AMD FSR
             ui.horizontal(|ui| {
                 toggle_switch(ui, &mut self.config.fsr_enabled);
                 let lbl = self.t("fsr_toggle");
-                if ui.add(egui::Label::new(egui::RichText::new(lbl).strong()).sense(egui::Sense::click())).clicked() {
+                if ui.add(egui::Label::new(egui::RichText::new(lbl).strong().color(egui::Color32::WHITE).size(14.5)).sense(egui::Sense::click())).clicked() {
                     self.config.fsr_enabled = !self.config.fsr_enabled;
                     self.config.check_preset_match();
                 }
             });
-            ui.label(egui::RichText::new(self.t("fsr_desc")).color(egui::Color32::LIGHT_GRAY).size(11.0));
+            ui.label(egui::RichText::new(self.t("fsr_desc")).color(egui::Color32::from_rgb(190, 195, 210)).size(12.5));
 
             ui.add_space(8.0);
             // 4. Texture Corruption & Yellow Tint Fix (patch_readbacks)
             ui.horizontal(|ui| {
                 toggle_switch(ui, &mut self.config.patch_readbacks);
                 let lbl = self.t("readback_patch");
-                if ui.add(egui::Label::new(egui::RichText::new(lbl).strong()).sense(egui::Sense::click())).clicked() {
+                if ui.add(egui::Label::new(egui::RichText::new(lbl).strong().color(egui::Color32::WHITE).size(14.5)).sense(egui::Sense::click())).clicked() {
                     self.config.patch_readbacks = !self.config.patch_readbacks;
                 }
             });
-            ui.label(egui::RichText::new(self.t("readback_desc")).color(egui::Color32::LIGHT_GRAY).size(11.0));
+            ui.label(egui::RichText::new(self.t("readback_desc")).color(egui::Color32::from_rgb(190, 195, 210)).size(12.5));
 
             ui.add_space(8.0);
             // 5. Asynchronous Readbacks (async_readbacks)
             ui.horizontal(|ui| {
                 toggle_switch(ui, &mut self.config.async_readbacks);
                 let lbl = self.t("async_readbacks");
-                if ui.add(egui::Label::new(egui::RichText::new(lbl).strong()).sense(egui::Sense::click())).clicked() {
+                if ui.add(egui::Label::new(egui::RichText::new(lbl).strong().color(egui::Color32::WHITE).size(14.5)).sense(egui::Sense::click())).clicked() {
                     self.config.async_readbacks = !self.config.async_readbacks;
                 }
             });
-            ui.label(egui::RichText::new(self.t("async_readbacks_desc")).color(egui::Color32::LIGHT_GRAY).size(11.0));
+            ui.label(egui::RichText::new(self.t("async_readbacks_desc")).color(egui::Color32::from_rgb(190, 195, 210)).size(12.5));
 
             ui.add_space(8.0);
             // 6. VRAM GC Budget
             ui.horizontal(|ui| {
-                ui.label(egui::RichText::new(self.t("vram_budget")).strong().color(egui::Color32::WHITE));
+                ui.label(egui::RichText::new(self.t("vram_budget")).strong().color(egui::Color32::WHITE).size(14.5));
                 let vram_text = match self.config.vram_gc_budget_mb {
                     1280 => "1280 MB (2 GB GPU / Düşük Sistem - PCIe Taşma Korumalı)".to_string(),
                     2048 => "2048 MB (3 GB GPU / Steam Deck)".to_string(),
@@ -3511,20 +3527,20 @@ impl LauncherApp {
                         ui.selectable_value(&mut self.config.vram_gc_budget_mb, 8192, "8192 MB (12-16 GB+ GPU / Yüksek)");
                     });
             });
-            ui.label(egui::RichText::new(self.t("vram_budget_desc")).color(egui::Color32::LIGHT_GRAY).size(11.0));
+            ui.label(egui::RichText::new(self.t("vram_budget_desc")).color(egui::Color32::from_rgb(190, 195, 210)).size(12.5));
 
             let effective = self.config.get_effective_vram_budget();
             if effective != self.config.vram_gc_budget_mb && self.config.cached_hardware.vram_mb > 0 {
                 ui.label(egui::RichText::new(format!(
                     "🛡️ Donanım Koruması Devrede: Ekran kartınızın kapasitesine ({} MB) göre aktif VRAM bütçesi {} MB olarak güvenli şekilde sınırlandırıldı.",
                     self.config.cached_hardware.vram_mb, effective
-                )).color(egui::Color32::from_rgb(102, 225, 106)).size(11.0));
+                )).color(egui::Color32::from_rgb(102, 225, 106)).size(12.0));
             }
 
             ui.add_space(8.0);
             // 7. Display Mode & VSync
             ui.horizontal(|ui| {
-                ui.label(egui::RichText::new(self.t("display_mode")).strong());
+                ui.label(egui::RichText::new(self.t("display_mode")).strong().color(egui::Color32::WHITE).size(14.5));
                 let mode_borderless = self.t("display_borderless");
                 let mode_fullscreen = self.t("display_fullscreen");
                 let mode_windowed = self.t("display_windowed");
@@ -3544,10 +3560,22 @@ impl LauncherApp {
                 ui.add_space(16.0);
                 toggle_switch(ui, &mut self.config.vsync);
                 let vsync_lbl = self.t("vsync");
-                if ui.add(egui::Label::new(egui::RichText::new(vsync_lbl).strong()).sense(egui::Sense::click())).clicked() {
+                if ui.add(egui::Label::new(egui::RichText::new(vsync_lbl).strong().color(egui::Color32::WHITE).size(14.5)).sense(egui::Sense::click())).clicked() {
                     self.config.vsync = !self.config.vsync;
                 }
             });
+            ui.label(egui::RichText::new(self.t("display_mode_desc")).color(egui::Color32::from_rgb(190, 195, 210)).size(12.5));
+
+            ui.add_space(8.0);
+            // 8. Hide Mouse Cursor
+            ui.horizontal(|ui| {
+                toggle_switch(ui, &mut self.config.hide_mouse_cursor);
+                let lbl = self.t("hide_mouse_cursor");
+                if ui.add(egui::Label::new(egui::RichText::new(lbl).strong().color(egui::Color32::WHITE).size(14.5)).sense(egui::Sense::click())).clicked() {
+                    self.config.hide_mouse_cursor = !self.config.hide_mouse_cursor;
+                }
+            });
+            ui.label(egui::RichText::new(self.t("hide_mouse_cursor_desc")).color(egui::Color32::from_rgb(190, 195, 210)).size(12.5));
 
             ui.add_space(12.0);
             ui.separator();
@@ -3584,7 +3612,7 @@ impl LauncherApp {
                 } else {
                     &self.config.game_dir
                 };
-                ui.label(egui::RichText::new(dir_display).monospace());
+                ui.label(egui::RichText::new(dir_display).monospace().size(13.5).color(egui::Color32::WHITE));
 
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if render_button_feedback(ui, "btn_browse", self.t("manual_select"), egui::vec2(120.0, 30.0), false).clicked() {
@@ -3607,12 +3635,14 @@ impl LauncherApp {
                 ui.label(
                     egui::RichText::new(self.t("game_valid"))
                         .color(egui::Color32::from_rgb(105, 225, 110))
+                        .size(13.0)
                         .strong(),
                 );
             } else {
                 ui.label(
                     egui::RichText::new(self.t("game_invalid"))
                         .color(egui::Color32::from_rgb(245, 90, 85))
+                        .size(13.0)
                         .strong(),
                 );
             }
@@ -3630,6 +3660,7 @@ impl LauncherApp {
                             ui.label(
                                 egui::RichText::new(self.t("scan_not_found_inline"))
                                 .color(egui::Color32::from_rgb(255, 140, 140))
+                                .size(13.0)
                                 .strong(),
                             );
                         });
@@ -3650,14 +3681,14 @@ impl LauncherApp {
 
             // 1. Python
             ui.horizontal(|ui| {
-                ui.label(egui::RichText::new("🐍 Python 3 Ortamı:").strong());
+                ui.label(egui::RichText::new("🐍 Python 3 Ortamı:").strong().color(egui::Color32::WHITE).size(14.5));
                 if self.has_python {
-                    ui.label(egui::RichText::new("✅ Sistemde Hazır").color(egui::Color32::from_rgb(105, 225, 110)).strong());
+                    ui.label(egui::RichText::new("✅ Sistemde Hazır").color(egui::Color32::from_rgb(105, 225, 110)).size(13.5).strong());
                 } else if self.is_downloading_python {
                     ui.spinner();
-                    ui.label(egui::RichText::new("İndiriliyor...").color(egui::Color32::YELLOW));
+                    ui.label(egui::RichText::new("İndiriliyor...").color(egui::Color32::YELLOW).size(13.0));
                 } else {
-                    ui.label(egui::RichText::new("⚠️ Eksik").color(egui::Color32::from_rgb(245, 90, 85)).strong());
+                    ui.label(egui::RichText::new("⚠️ Eksik").color(egui::Color32::from_rgb(245, 90, 85)).size(13.5).strong());
                     if render_button_feedback(ui, "btn_py_dl", "Python Ortamını İndir", egui::vec2(160.0, 26.0), false).clicked() {
                         self.start_python_download();
                     }
@@ -3667,14 +3698,14 @@ impl LauncherApp {
             ui.add_space(6.0);
             // 2. Engine
             ui.horizontal(|ui| {
-                ui.label(egui::RichText::new("⚙️ GOW3 Port Motoru:").strong());
+                ui.label(egui::RichText::new("⚙️ GOW3 Port Motoru:").strong().color(egui::Color32::WHITE).size(14.5));
                 if self.has_engine {
-                    ui.label(egui::RichText::new("✅ Motor Hazır").color(egui::Color32::from_rgb(105, 225, 110)).strong());
+                    ui.label(egui::RichText::new("✅ Motor Hazır").color(egui::Color32::from_rgb(105, 225, 110)).size(13.5).strong());
                 } else if self.is_downloading_engine {
                     ui.spinner();
-                    ui.label(egui::RichText::new("İndiriliyor...").color(egui::Color32::YELLOW));
+                    ui.label(egui::RichText::new("İndiriliyor...").color(egui::Color32::YELLOW).size(13.0));
                 } else {
-                    ui.label(egui::RichText::new("⚠️ Eksik").color(egui::Color32::from_rgb(245, 90, 85)).strong());
+                    ui.label(egui::RichText::new("⚠️ Eksik").color(egui::Color32::from_rgb(245, 90, 85)).size(13.5).strong());
                     if render_button_feedback(ui, "btn_eng_dl", "Motoru İndir", egui::vec2(140.0, 26.0), false).clicked() {
                         self.start_engine_download(false);
                     }
@@ -3711,25 +3742,25 @@ impl LauncherApp {
             ui.horizontal(|ui| {
                 toggle_switch(ui, &mut self.config.is_motion_controls_enabled);
                 let motion_lbl = self.t("motion_controls");
-                if ui.add(egui::Label::new(egui::RichText::new(motion_lbl).strong()).sense(egui::Sense::click())).clicked() {
+                if ui.add(egui::Label::new(egui::RichText::new(motion_lbl).strong().color(egui::Color32::WHITE).size(14.5)).sense(egui::Sense::click())).clicked() {
                     self.config.is_motion_controls_enabled = !self.config.is_motion_controls_enabled;
                 }
             });
-            ui.label(egui::RichText::new(self.t("motion_controls_desc")).color(egui::Color32::LIGHT_GRAY).size(11.0));
+            ui.label(egui::RichText::new(self.t("motion_controls_desc")).color(egui::Color32::from_rgb(190, 195, 210)).size(12.5));
 
             ui.add_space(8.0);
             // Analog stick deadzones
             ui.columns(2, |cols| {
                 cols[0].vertical(|ui| {
-                    ui.label(egui::RichText::new(self.t("deadzone_left")).strong());
+                    ui.label(egui::RichText::new(self.t("deadzone_left")).strong().color(egui::Color32::WHITE).size(14.0));
                     ui.add(egui::Slider::new(&mut self.config.deadzone_left, 1..=40).text(""));
                 });
                 cols[1].vertical(|ui| {
-                    ui.label(egui::RichText::new(self.t("deadzone_right")).strong());
+                    ui.label(egui::RichText::new(self.t("deadzone_right")).strong().color(egui::Color32::WHITE).size(14.0));
                     ui.add(egui::Slider::new(&mut self.config.deadzone_right, 1..=40).text(""));
                 });
             });
-            ui.label(egui::RichText::new(self.t("deadzone_desc")).color(egui::Color32::LIGHT_GRAY).size(11.0));
+            ui.label(egui::RichText::new(self.t("deadzone_desc")).color(egui::Color32::from_rgb(190, 195, 210)).size(12.5));
         });
 
         ui.add_space(10.0);
@@ -3844,8 +3875,8 @@ impl LauncherApp {
             );
             ui.label(
                 egui::RichText::new(self.t("shader_cache_desc"))
-                    .size(11.5)
-                    .color(egui::Color32::from_rgb(175, 185, 205)),
+                    .size(12.5)
+                    .color(egui::Color32::from_rgb(190, 195, 210)),
             );
             ui.separator();
 
@@ -3884,7 +3915,7 @@ impl LauncherApp {
                                 egui::Color32::from_rgb(254, 240, 138)
                             })
                             .strong()
-                            .size(13.0),
+                            .size(13.5),
                     );
                 });
             });
@@ -3896,7 +3927,7 @@ impl LauncherApp {
                 ui.horizontal(|ui| {
                     ui.spinner();
                     let status = self.shader_install_status.as_deref().unwrap_or(self.t("shader_downloading"));
-                    ui.label(egui::RichText::new(status).color(egui::Color32::from_rgb(255, 225, 120)).strong());
+                    ui.label(egui::RichText::new(status).color(egui::Color32::from_rgb(255, 225, 120)).size(13.0).strong());
                 });
             } else {
                 let dl_btn_text = if has_full_cache {
@@ -3937,7 +3968,7 @@ impl LauncherApp {
                     draw_rect.center(),
                     egui::Align2::CENTER_CENTER,
                     dl_btn_text,
-                    egui::FontId::proportional(13.0),
+                    egui::FontId::proportional(13.5),
                     egui::Color32::WHITE,
                 );
 
@@ -3954,11 +3985,11 @@ impl LauncherApp {
             ui.horizontal(|ui| {
                 toggle_switch(ui, &mut self.config.launch_while_compiling_shaders);
                 let lbl = self.t("launch_while_compiling_shaders");
-                if ui.add(egui::Label::new(egui::RichText::new(lbl).strong()).sense(egui::Sense::click())).clicked() {
+                if ui.add(egui::Label::new(egui::RichText::new(lbl).strong().color(egui::Color32::WHITE).size(14.5)).sense(egui::Sense::click())).clicked() {
                     self.config.launch_while_compiling_shaders = !self.config.launch_while_compiling_shaders;
                 }
             });
-            ui.label(egui::RichText::new(self.t("launch_while_compiling_shaders_desc")).color(egui::Color32::LIGHT_GRAY).size(11.0));
+            ui.label(egui::RichText::new(self.t("launch_while_compiling_shaders_desc")).color(egui::Color32::from_rgb(190, 195, 210)).size(12.5));
 
             ui.add_space(10.0);
 
@@ -3966,11 +3997,11 @@ impl LauncherApp {
             ui.horizontal(|ui| {
                 toggle_switch(ui, &mut self.config.show_shader_compile_rage_meter);
                 let lbl = self.t("show_shader_rage_meter");
-                if ui.add(egui::Label::new(egui::RichText::new(lbl).strong()).sense(egui::Sense::click())).clicked() {
+                if ui.add(egui::Label::new(egui::RichText::new(lbl).strong().color(egui::Color32::WHITE).size(14.5)).sense(egui::Sense::click())).clicked() {
                     self.config.show_shader_compile_rage_meter = !self.config.show_shader_compile_rage_meter;
                 }
             });
-            ui.label(egui::RichText::new(self.t("show_shader_rage_meter_desc")).color(egui::Color32::LIGHT_GRAY).size(11.0));
+            ui.label(egui::RichText::new(self.t("show_shader_rage_meter_desc")).color(egui::Color32::from_rgb(190, 195, 210)).size(12.5));
 
             ui.add_space(14.0);
             // SHADER SCREEN PREVIEW INFO
@@ -3989,14 +4020,14 @@ impl LauncherApp {
                             ui.vertical(|ui| {
                                 ui.label(
                                     egui::RichText::new("⚔️ Spartan Rage Shader Yükleme Ekranı (Aktif)")
-                                        .size(13.0)
+                                        .size(13.5)
                                         .color(egui::Color32::from_rgb(255, 215, 120))
                                         .strong(),
                                 );
                                 ui.label(
                                     egui::RichText::new("Oyun başlatılırken shader'lar önceden derlenir ve God of War III Spartan Rage barı yukarı doğru dolar. Derleme %100 bittiğinde oyun penceresi açılana kadar siyah ekranda bekler.")
-                                        .size(11.0)
-                                        .color(egui::Color32::from_rgb(200, 205, 220)),
+                                        .size(12.5)
+                                        .color(egui::Color32::from_rgb(205, 210, 225)),
                                 );
                             });
                         } else {
@@ -4007,14 +4038,14 @@ impl LauncherApp {
                             ui.vertical(|ui| {
                                 ui.label(
                                     egui::RichText::new("🎮 PS4 Konsol Tarzı Açılış Ekranı (pic1.png)")
-                                        .size(13.0)
+                                        .size(13.5)
                                         .color(egui::Color32::from_rgb(130, 205, 255))
                                         .strong(),
                                 );
                                 ui.label(
-                                    egui::RichText::new("Shader derleme barları ve sayaçlar gizlenir. Oyun penceresi açılana kadar ekranda tam ekran nefes alan animasyonlu PS4 resmi (pic1.png) görüntülenir.")
-                                        .size(11.0)
-                                        .color(egui::Color32::from_rgb(200, 205, 220)),
+                                    egui::RichText::new("Shader derleme barları ve sayaçlar gizlenir. Oyun penceresi açılana kadar ekranda tam ekran pürüzsüz yaklaşan animasyonlu PS4 resmi (pic1.png) görüntülenir.")
+                                        .size(12.5)
+                                        .color(egui::Color32::from_rgb(205, 210, 225)),
                                 );
                             });
                         }
@@ -4294,11 +4325,8 @@ impl eframe::App for LauncherApp {
 
         // --- 7. SHADER LOADING SCREEN PROGRESS & ANIMATION ---
         if let Some(ref mut sl) = self.shader_loading {
-            if sl.phase == ShaderLoadingPhase::Compiling {
-                ctx.request_repaint();
-            } else {
-                ctx.request_repaint_after(std::time::Duration::from_millis(500));
-            }
+            // Kesintisiz yüksek kare hızında (60-144+ FPS) pürüzsüz sinematik animasyon
+            ctx.request_repaint();
 
             // Poll progress updates from monitor thread
             while let Ok(msg) = sl.rx.try_recv() {
@@ -4364,12 +4392,13 @@ impl eframe::App for LauncherApp {
                 ctx.send_viewport_cmd(egui::ViewportCommand::WindowLevel(egui::WindowLevel::Normal));
             }
 
-            // Shader derleme ekranı kapanmaz, arkaplanda açık kalmaya devam eder (asla çökmüş gibi hissettirmez).
-            // Derleme bittiği için sistem zorlanmaz (500ms repaint).
-            // Oyun kapandığında veya çöktüğünde game_exit_rx otomatik olarak launcher ekranını normale döndürür.
-
-            // Safety: allow user to press Escape to dismiss shader loading screen early
-            if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+            // Oyun start aldıktan 20 saniye sonra açılış/shader ekranı otomatik olarak kapanır (arkada ekstra olarak durmaz)
+            if elapsed >= 20.0 {
+                ctx.send_viewport_cmd(egui::ViewportCommand::WindowLevel(egui::WindowLevel::Normal));
+                ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(false));
+                self.shader_loading = None;
+            } else if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+                // Güvenlik: Kullanıcı ESC tuşuna basarak ekranı erken kapatabilir
                 ctx.send_viewport_cmd(egui::ViewportCommand::WindowLevel(egui::WindowLevel::Normal));
                 ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(false));
                 self.shader_loading = None;

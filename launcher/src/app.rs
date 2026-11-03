@@ -840,20 +840,12 @@ fn render_button_feedback(
 
 fn render_section_tag(ui: &mut egui::Ui, tag: &str) {
     ui.add_space(8.0);
-    ui.horizontal(|ui| {
-        ui.label(
-            egui::RichText::new("▌")
-                .size(17.0)
-                .color(egui::Color32::from_rgb(239, 68, 68))
-                .strong(),
-        );
-        ui.label(
-            egui::RichText::new(tag.to_uppercase())
-                .size(16.0)
-                .color(egui::Color32::from_rgb(255, 95, 95))
-                .strong(),
-        );
-    });
+    ui.label(
+        egui::RichText::new(tag.to_uppercase())
+            .size(16.0)
+            .color(egui::Color32::from_rgb(255, 95, 95))
+            .strong(),
+    );
     ui.add_space(4.0);
 }
 

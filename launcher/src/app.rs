@@ -1206,6 +1206,9 @@ pub struct LauncherApp {
 
     // Installed Game Mods
     installed_mods: Vec<crate::mods_manager::InstalledMod>,
+
+    // Discord Rich Presence
+    pub discord_rpc: crate::discord_rpc::DiscordRpc,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1275,6 +1278,9 @@ impl LauncherApp {
         let has_engine = crate::runner::find_game_engine(&base_dir).is_some();
         let installed_mods = crate::mods_manager::scan_installed_mods(&base_dir, &config.disabled_mods);
 
+        let discord_rpc = crate::discord_rpc::DiscordRpc::new(config.discord_rpc_enabled, config.discord_client_id.clone());
+        discord_rpc.set_in_menu(&config.language);
+
         let mut app = Self {
             base_dir: base_dir.clone(),
             config,
@@ -1335,6 +1341,7 @@ impl LauncherApp {
             shader_loading: None,
             launcher_version,
             installed_mods,
+            discord_rpc,
         };
 
         crate::log_info!("Launcher UI initialized successfully. Version: {}", app.launcher_version);
@@ -1514,6 +1521,7 @@ impl LauncherApp {
     }
 
     fn apply_all_optimizations(&mut self) {
+        self.discord_rpc.update_config(self.config.discord_rpc_enabled, self.config.discord_client_id.clone());
         let res = apply_settings(&self.base_dir, &self.config);
 
         match res {
@@ -1679,7 +1687,11 @@ impl LauncherApp {
         if self.config.launch_while_compiling_shaders {
             // "Shader'lar derlenirken oyun açılsın": Fast launch immediately while compiling in the background
             self.shader_loading = None;
+            let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0);
+            let is_modded = self.installed_mods.iter().any(|m| m.is_enabled);
+            self.discord_rpc.set_in_game(now, self.config.target_fps, is_modded);
         } else {
+            self.discord_rpc.set_compiling_shaders(Some(0.0));
             // Pre-warm all shaders to 100% with the full Spartan Rage bar before game window is displayed
             ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(true));
             ctx.send_viewport_cmd(egui::ViewportCommand::WindowLevel(egui::WindowLevel::AlwaysOnTop));
@@ -3073,6 +3085,39 @@ impl LauncherApp {
             });
             ui.label(egui::RichText::new(self.t("hide_mouse_cursor_desc")).color(egui::Color32::from_rgb(190, 195, 210)).size(12.5));
 
+            ui.add_space(8.0);
+            // 9. Discord Rich Presence
+            ui.horizontal(|ui| {
+                if toggle_switch(ui, &mut self.config.discord_rpc_enabled).changed() {
+                    self.discord_rpc.update_config(self.config.discord_rpc_enabled, self.config.discord_client_id.clone());
+                }
+                let lbl = self.t("discord_rpc_toggle");
+                if ui.add(egui::Label::new(egui::RichText::new(lbl).strong().color(egui::Color32::WHITE).size(14.5)).sense(egui::Sense::click())).clicked() {
+                    self.config.discord_rpc_enabled = !self.config.discord_rpc_enabled;
+                    self.discord_rpc.update_config(self.config.discord_rpc_enabled, self.config.discord_client_id.clone());
+                }
+            });
+            ui.label(egui::RichText::new(self.t("discord_rpc_desc")).color(egui::Color32::from_rgb(190, 195, 210)).size(12.5));
+
+            if self.config.discord_rpc_enabled {
+                ui.add_space(4.0);
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new(self.t("discord_client_id_label")).size(12.0).color(egui::Color32::from_rgb(180, 185, 200)));
+                    let id_edit = ui.add(
+                        egui::TextEdit::singleline(&mut self.config.discord_client_id)
+                            .desired_width(190.0)
+                            .font(egui::TextStyle::Monospace),
+                    );
+                    if id_edit.changed() {
+                        self.discord_rpc.update_config(self.config.discord_rpc_enabled, self.config.discord_client_id.clone());
+                    }
+                    if ui.button(self.t("discord_reset_btn")).clicked() {
+                        self.config.discord_client_id = "1124351711486689290".to_string();
+                        self.discord_rpc.update_config(self.config.discord_rpc_enabled, self.config.discord_client_id.clone());
+                    }
+                });
+            }
+
             ui.add_space(12.0);
             ui.separator();
             ui.horizontal(|ui| {
@@ -4147,6 +4192,7 @@ impl eframe::App for LauncherApp {
             if let Ok(res) = rx.try_recv() {
                 self.is_game_running = false;
                 self.game_exit_rx = None;
+                self.discord_rpc.set_in_menu(&self.config.language);
                 if self.shader_loading.is_some() {
                     ctx.send_viewport_cmd(egui::ViewportCommand::WindowLevel(egui::WindowLevel::Normal));
                     ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(false));
@@ -4382,6 +4428,10 @@ impl eframe::App for LauncherApp {
                 }
                 // Drop AlwaysOnTop to Normal so the SDL2 game window can focus in front
                 ctx.send_viewport_cmd(egui::ViewportCommand::WindowLevel(egui::WindowLevel::Normal));
+
+                let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0);
+                let is_modded = self.installed_mods.iter().any(|m| m.is_enabled);
+                self.discord_rpc.set_in_game(now, self.config.target_fps, is_modded);
             }
 
             // Oyun start aldıktan 20 saniye sonra açılış/shader ekranı otomatik olarak kapanır (arkada ekstra olarak durmaz)
@@ -5370,6 +5420,12 @@ impl eframe::App for LauncherApp {
                     });
                 });
         }
+    }
+}
+
+impl Drop for LauncherApp {
+    fn drop(&mut self) {
+        self.discord_rpc.shutdown();
     }
 }
 

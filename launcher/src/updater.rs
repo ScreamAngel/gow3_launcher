@@ -5,7 +5,7 @@ use std::process::Command;
 use crate::config::LauncherConfig;
 use crate::tuner::apply_settings;
 
-pub const BUILTIN_VERSION: &str = "v2.0.3";
+pub const BUILTIN_VERSION: &str = "v2.1";
 pub const GITHUB_REPO: &str = "ScreamAngel/gow3_launcher";
 pub const GITHUB_REPO_URL: &str = "https://github.com/ScreamAngel/gow3_launcher.git";
 
@@ -476,9 +476,9 @@ mod tests {
         assert_eq!(compare_version_strings("v1.5", "v1.4"), std::cmp::Ordering::Greater);
         assert_eq!(compare_version_strings("v1.10", "v1.9"), std::cmp::Ordering::Greater);
         assert_eq!(compare_version_strings("1.4", "v1.4"), std::cmp::Ordering::Equal);
-        assert_eq!(compare_version_strings("v2.0.4", "v2.0.3"), std::cmp::Ordering::Greater);
-        assert_eq!(compare_version_strings("v2.0.3", "v2.0.3"), std::cmp::Ordering::Equal);
-        assert_eq!(compare_version_strings("v2.0.2", "v2.0.3"), std::cmp::Ordering::Less);
+        assert_eq!(compare_version_strings("v2.2", "v2.1"), std::cmp::Ordering::Greater);
+        assert_eq!(compare_version_strings("v2.1", "v2.1"), std::cmp::Ordering::Equal);
+        assert_eq!(compare_version_strings("v2.0.3", "v2.1"), std::cmp::Ordering::Less);
     }
 
     #[test]

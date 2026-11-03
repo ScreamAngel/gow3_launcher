@@ -294,6 +294,16 @@ pub struct LauncherConfig {
     // Keyboard bindings
     #[serde(default)]
     pub keyboard_bindings: KeyboardBindings,
+
+    // Discord Rich Presence
+    #[serde(default = "default_true")]
+    pub discord_rpc_enabled: bool,
+    #[serde(default = "default_discord_client_id")]
+    pub discord_client_id: String,
+}
+
+fn default_discord_client_id() -> String {
+    "1124351711486689290".to_string()
 }
 
 fn default_language() -> String {
@@ -322,7 +332,7 @@ fn default_last_commit() -> String {
     "c5638d9956002b8a9f09a240028f6793ddf7b2f8".to_string()
 }
 fn default_launcher_version() -> String {
-    "v2.0.3".to_string()
+    "v2.1".to_string()
 }
 fn default_render_resolution() -> String {
     "native".to_string()
@@ -361,6 +371,8 @@ impl Default for LauncherConfig {
             deadzone_left: default_deadzone(),
             deadzone_right: default_deadzone(),
             keyboard_bindings: KeyboardBindings::default(),
+            discord_rpc_enabled: true,
+            discord_client_id: default_discord_client_id(),
         }
     }
 }
@@ -786,10 +798,12 @@ mod tests {
 
     #[test]
     fn test_launcher_version_is_v20() {
-        assert_eq!(default_launcher_version(), "v2.0.3");
+        assert_eq!(default_launcher_version(), "v2.1");
         let def = LauncherConfig::default();
         assert!(def.async_readbacks);
         assert!(def.patch_readbacks);
+        assert!(def.discord_rpc_enabled);
+        assert_eq!(def.discord_client_id, "1124351711486689290");
     }
 
     #[test]

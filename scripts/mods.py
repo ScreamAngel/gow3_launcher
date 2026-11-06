@@ -159,13 +159,19 @@ def make_link(link, target):
             raise
     if target.is_dir():
         import _winapi
-        _winapi.CreateJunction(str(target), str(link))
+        try:
+            _winapi.CreateJunction(str(target), str(link))
+        except OSError:
+            # Fallback if junction creation fails across volumes or permissions
+            shutil.copytree(target, link, dirs_exist_ok=True)
     else:
         try:
             os.link(target, link)
         except OSError:
             shutil.copy2(target, link)
-    LINKED[str(link)] = target
+    p_str = str(link)
+    LINKED[p_str] = target
+    LINKED[p_str.casefold()] = target
 
 
 def symlinks_work(directory):
@@ -180,19 +186,46 @@ def symlinks_work(directory):
 
 
 def is_link(path):
-    return path.is_symlink() or str(path) in LINKED or (hasattr(path, 'is_junction') and path.is_junction())
+    p_str = str(path)
+    if path.is_symlink():
+        return True
+    if p_str in LINKED or p_str.casefold() in LINKED:
+        return True
+    if hasattr(path, 'is_junction') and path.is_junction():
+        return True
+    if os.name == 'nt':
+        try:
+            import stat
+            mode = os.lstat(path).st_mode
+            if stat.S_ISLNK(mode):
+                return True
+        except OSError:
+            pass
+    return False
 
 
 def link_target(path):
-    return LINKED.get(str(path)) or path.resolve(strict=True)
+    p_str = str(path)
+    return LINKED.get(p_str) or LINKED.get(p_str.casefold()) or path.resolve(strict=True)
 
 
 def remove_link(path):
-    if hasattr(path, 'is_junction') and path.is_junction():
-        os.rmdir(path)
-    else:
-        path.unlink()
-    LINKED.pop(str(path), None)
+    p_str = str(path)
+    try:
+        if path.is_dir() or (hasattr(path, 'is_junction') and path.is_junction()):
+            os.rmdir(path)
+        else:
+            path.unlink()
+    except OSError:
+        try:
+            if os.path.isdir(path):
+                os.rmdir(path)
+            else:
+                path.unlink()
+        except OSError:
+            pass
+    LINKED.pop(p_str, None)
+    LINKED.pop(p_str.casefold(), None)
 
 
 def expand(directory):
@@ -202,13 +235,24 @@ def expand(directory):
         if not target.is_dir():
             raise ValueError(f'File/directory conflict at {directory.name}')
         remove_link(directory)
-        directory.mkdir()
+        directory.mkdir(exist_ok=True)
         for entry in target.iterdir():
             make_link(directory / entry.name, entry)
     elif directory.exists() and not directory.is_dir():
         raise ValueError(f'File/directory conflict at {directory.name}')
     else:
         directory.mkdir(exist_ok=True)
+
+
+def on_rm_error(func, path, exc_info):
+    try:
+        os.chmod(path, 0o777)
+        if os.path.isdir(path):
+            os.rmdir(path)
+        else:
+            os.unlink(path)
+    except OSError:
+        pass
 
 
 def build_overlay(game, out, mods):
@@ -231,7 +275,7 @@ def build_overlay(game, out, mods):
     out.mkdir(parents=True, exist_ok=True)
     for old_dir in out.glob('mod-game-*'):
         if old_dir.is_dir():
-            shutil.rmtree(old_dir, ignore_errors=True)
+            shutil.rmtree(old_dir, onerror=on_rm_error)
     if os.name == 'nt' and not symlinks_work(out) and out.drive.casefold() != game.drive.casefold():
         # Hard links only reach files on the same volume: the overlay goes beside the game.
         out = game.parent
@@ -258,7 +302,7 @@ def build_overlay(game, out, mods):
         print(f'Mods: {replaced} game files replaced, {added} added', file=sys.stderr)
         return overlay
     except BaseException:
-        shutil.rmtree(overlay)
+        shutil.rmtree(overlay, onerror=on_rm_error)
         raise
 
 

@@ -34,15 +34,16 @@ fn update_xml_patches(base_dir: &Path, target_hz: u32) -> Result<(), String> {
             if let Ok(content) = fs::read_to_string(path) {
                 let mut new_lines = Vec::new();
                 for line in content.lines() {
+                    let low = line.to_lowercase();
                     if (line.contains("Delta-Time")
                         || line.contains("120 FPS")
                         || line.contains("144 FPS")
                         || line.contains("165 FPS")
                         || line.contains("240 FPS")
                         || line.contains("60 FPS"))
-                        && line.contains("value=\"")
+                        && low.contains("value=\"")
                     {
-                        if let Some(start) = line.find("value=\"") {
+                        if let Some(start) = low.find("value=\"") {
                             let prefix = &line[..start + 7];
                             if let Some(end) = line[start + 7..].find('\"') {
                                 let suffix = &line[start + 7 + end..];

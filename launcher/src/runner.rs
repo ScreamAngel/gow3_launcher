@@ -330,6 +330,127 @@ fn collect_xml_files(dir: &Path, xml_paths: &mut Vec<PathBuf>) {
     }
 }
 
+pub fn build_rust_mod_overlay(
+    game_dir: &Path,
+    out_dir: &Path,
+    mods_dir: &Path,
+    config: &LauncherConfig,
+) -> Option<PathBuf> {
+    if !game_dir.is_dir() || !mods_dir.is_dir() {
+        return None;
+    }
+
+    let mut enabled_mods = Vec::new();
+    if let Ok(entries) = fs::read_dir(mods_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if !path.is_dir() {
+                continue;
+            }
+            let name = entry.file_name().to_string_lossy().to_string();
+            if name.starts_with('.')
+                || name.eq_ignore_ascii_case("gow3-windows")
+                || name.eq_ignore_ascii_case("gow3-linux")
+                || path.join("run.py").is_file()
+            {
+                continue;
+            }
+            if !config.disabled_mods.contains(&name) {
+                enabled_mods.push((name, path));
+            }
+        }
+    }
+
+    if enabled_mods.is_empty() {
+        return None;
+    }
+
+    enabled_mods.sort_by(|a, b| a.0.cmp(&b.0));
+
+    let overlay_dir = out_dir.join("mod-game-rust-overlay");
+    let _ = fs::remove_dir_all(&overlay_dir);
+    if fs::create_dir_all(&overlay_dir).is_err() {
+        return None;
+    }
+
+    // Link or copy base game root entries into overlay
+    if let Ok(entries) = fs::read_dir(game_dir) {
+        for entry in entries.flatten() {
+            let target = entry.path();
+            let link = overlay_dir.join(entry.file_name());
+            #[cfg(unix)]
+            {
+                let _ = std::os::unix::fs::symlink(&target, &link);
+            }
+            #[cfg(windows)]
+            {
+                if target.is_dir() {
+                    let _ = std::os::windows::fs::symlink_dir(&target, &link);
+                } else if fs::hard_link(&target, &link).is_err() {
+                    let _ = fs::copy(&target, &link);
+                }
+            }
+        }
+    }
+
+    fn find_content_root(mod_path: &Path) -> Option<PathBuf> {
+        let candidates = [
+            mod_path.join("dvdroot_ps4"),
+            mod_path.join("app0/dvdroot_ps4"),
+            mod_path.join("Game/EXEC"),
+            mod_path.join("EXEC"),
+        ];
+        for c in candidates {
+            if c.is_dir() {
+                return Some(c);
+            }
+        }
+        None
+    }
+
+    fn copy_loose_files(src: &Path, dst: &Path, count: &mut usize) {
+        if let Ok(entries) = fs::read_dir(src) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                let name = entry.file_name();
+                let dest_path = dst.join(&name);
+
+                if path.is_dir() {
+                    if dest_path.is_symlink() {
+                        let _ = fs::remove_file(&dest_path);
+                    }
+                    let _ = fs::create_dir_all(&dest_path);
+                    copy_loose_files(&path, &dest_path, count);
+                } else if path.is_file() {
+                    if path.extension().map(|e| e.eq_ignore_ascii_case("xml")).unwrap_or(false) {
+                        continue;
+                    }
+                    if dest_path.exists() {
+                        let _ = fs::remove_file(&dest_path);
+                    }
+                    if fs::copy(&path, &dest_path).is_ok() {
+                        *count += 1;
+                    }
+                }
+            }
+        }
+    }
+
+    let mut applied = 0;
+    for (_name, path) in enabled_mods {
+        if let Some(root) = find_content_root(&path) {
+            copy_loose_files(&root, &overlay_dir, &mut applied);
+        }
+    }
+
+    if applied > 0 {
+        crate::log_info!("Rust mod overlay successfully built with {} modified files", applied);
+        Some(overlay_dir)
+    } else {
+        None
+    }
+}
+
 #[allow(dead_code)]
 pub fn download_windows_engine(base_dir: &Path, is_alternative: bool) -> Result<String, String> {
     let dest_bin = base_dir.join("bin");
@@ -865,6 +986,9 @@ pub fn launch_gow3(
     running_pid: Option<Arc<AtomicU32>>,
 ) -> Result<i32, String> {
     crate::log_info!("Initiating God of War III launch sequence...");
+    // Synchronize configuration files (gow3.ini, user/config.toml, etc.) before launch
+    let _ = crate::tuner::apply_settings(base_dir, config);
+
     let game_dir = Path::new(&config.game_dir);
     if !game_dir.join("eboot.bin").is_file() {
         let msg = format!("Oyun klasöründe ('{}') 'eboot.bin' bulunamadı!", game_dir.display());
@@ -935,6 +1059,7 @@ pub fn launch_gow3(
     }
 
     let mut effective_app0 = game_dir.to_path_buf();
+    let mut mods_applied = false;
 
     if let Ok(output) = mods_cmd
         .env("PYTHONPATH", &scripts_path)
@@ -953,8 +1078,16 @@ pub fn launch_gow3(
                 if candidate.is_dir() {
                     crate::log_info!("Mods active. Mounting overlay directory: {:?}", candidate);
                     effective_app0 = candidate;
+                    mods_applied = true;
                 }
             }
+        }
+    }
+
+    if !mods_applied && mods_dir.is_dir() {
+        if let Some(rust_overlay) = build_rust_mod_overlay(game_dir, &out_dir, &mods_dir, config) {
+            crate::log_info!("Rust mod overlay active (fallback). Mounting overlay: {:?}", rust_overlay);
+            effective_app0 = rust_overlay;
         }
     }
 
@@ -1077,7 +1210,20 @@ pub fn launch_gow3(
         patch_list.push("Skip Any Video With X Button".to_string());
     }
     if config.patch_delta_time {
-        patch_list.push(format!("Frame Rate Patch - {} FPS", config.target_fps));
+        let fps_patch = match config.target_fps {
+            30 => Some("Frame Rate Patch - 30 FPS"),
+            40 => Some("Frame Rate Patch - 40 FPS"),
+            60 => Some("Frame Rate Patch - 60 FPS"),
+            90 => Some("Frame Rate Patch - 90 FPS"),
+            120 => Some("Frame Rate Patch - 120 FPS"),
+            144 => Some("Frame Rate Patch - 144 FPS"),
+            165 => Some("Frame Rate Patch - 165 FPS"),
+            240 => Some("Frame Rate Patch - 240 FPS"),
+            _ => None,
+        };
+        if let Some(p) = fps_patch {
+            patch_list.push(p.to_string());
+        }
     }
     if config.disable_motion_blur {
         patch_list.push("Graphics - Disable Motion Blur".to_string());
@@ -1352,18 +1498,28 @@ pub fn launch_gow3(
     cmd.env("GOW3_PRESENT_THREAD", "1");
     cmd.env("GOW3_ASYNC_FENCES", "1");
     cmd.env("GOW3_ASYNC_SHADERS", "1");
-    cmd.env("GOW3_FPS_LIMIT", config.target_fps.to_string());
+
+    let target_fps_str = if config.target_fps > 0 {
+        config.target_fps.to_string()
+    } else {
+        "0".to_string()
+    };
+    cmd.env("GOW3_FPS_LIMIT", &target_fps_str);
+    cmd.env("GOW3_ENGINE_FPS", if config.target_fps > 0 { &target_fps_str } else { "60" });
+    cmd.env("GOW3_DEFAULT_ENGINE_FPS", if config.target_fps > 0 { &target_fps_str } else { "60" });
+    cmd.env("GOW3_VBLANK_HZ", if config.target_fps > 0 { &target_fps_str } else { "60" });
+    cmd.env("GOW3_VSYNC", if config.vsync { "1" } else { "0" });
 
     let effective_budget = config.get_effective_vram_budget();
     cmd.env("GOW3_GC_BUDGET_MB", effective_budget.to_string());
     cmd.env("GOW3_DMEM_POOL_MB", config.dmem_mb.to_string());
     cmd.env("GOW3_DMEM_MB", config.dmem_mb.to_string());
-    cmd.env("GOW3_DEFAULT_ENGINE_FPS", config.target_fps.to_string());
-    cmd.env("GOW3_VBLANK_HZ", config.target_fps.to_string());
     cmd.env("GOW3_PATCHES", &patches_str);
     cmd.env("GOW3_PATCHES_ONLY", "1");
     cmd.env("GOW3_CONFIG", &config_ini);
     cmd.env("GOW3_GAME_DIR", game_dir);
+    cmd.env("GOW3_MODS_DIR", &effective_app0);
+    cmd.env("GOW3_MOD_TRACE", "1");
     cmd.env(
         "GOW3_FULLSCREEN",
         if config.display_mode != crate::config::DisplayMode::Windowed {
@@ -1437,6 +1593,10 @@ pub fn launch_gow3(
         pid_holder.store(child_pid, Ordering::SeqCst);
     }
 
+    // Windows Input Bridge: Install low-level mouse hook & 1ms timer resolution while the game is running
+    #[cfg(target_os = "windows")]
+    let _win_input_guard = crate::win_input::start_mouse_hook(child_pid, config.hide_mouse_cursor);
+
     #[cfg(target_os = "windows")]
     if config.display_mode == crate::config::DisplayMode::Windowed {
         adjust_windows_windowed_mode(child_pid);
@@ -1499,6 +1659,33 @@ mod tests {
         let mut collected = Vec::new();
         collect_xml_files(&temp_dir, &mut collected);
         assert_eq!(collected.len(), 2);
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_build_rust_mod_overlay() {
+        let temp_dir = std::env::temp_dir().join("gow3_test_rust_mod_overlay");
+        let _ = fs::remove_dir_all(&temp_dir);
+
+        let game_dir = temp_dir.join("CUSA01715");
+        let out_dir = temp_dir.join("out");
+        let mods_dir = temp_dir.join("mods");
+
+        fs::create_dir_all(game_dir.join("EXEC/WAD")).unwrap();
+        fs::write(game_dir.join("EXEC/WAD/ORIG.WAD"), b"ORIG").unwrap();
+
+        let mod_a = mods_dir.join("ModA/dvdroot_ps4/EXEC/WAD");
+        fs::create_dir_all(&mod_a).unwrap();
+        fs::write(mod_a.join("ORIG.WAD"), b"MODDED").unwrap();
+
+        let config = LauncherConfig::default();
+        let overlay = build_rust_mod_overlay(&game_dir, &out_dir, &mods_dir, &config);
+        assert!(overlay.is_some());
+        let ov = overlay.unwrap();
+        let modded_file = ov.join("EXEC/WAD/ORIG.WAD");
+        assert!(modded_file.is_file());
+        assert_eq!(fs::read(&modded_file).unwrap(), b"MODDED");
 
         let _ = fs::remove_dir_all(&temp_dir);
     }

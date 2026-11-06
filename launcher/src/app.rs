@@ -4367,6 +4367,7 @@ impl eframe::App for LauncherApp {
             ctx.request_repaint();
 
             // Poll progress updates from monitor thread
+            let mut game_ready_now = false;
             while let Ok(msg) = sl.rx.try_recv() {
                 if msg.total > 0 {
                     sl.total_shaders = msg.total;
@@ -4384,10 +4385,20 @@ impl eframe::App for LauncherApp {
                         sl.completed_at = Some(std::time::Instant::now());
                     }
                 }
+                if msg.game_window_ready {
+                    game_ready_now = true;
+                }
             }
 
             let elapsed = sl.start_time.elapsed().as_secs_f32();
             let pid = self.running_pid.load(Ordering::SeqCst);
+
+            // Auto-detect game window on Windows / Linux if rendered
+            if !game_ready_now && pid > 0 && elapsed > 2.0 {
+                if crate::win_input::find_game_hwnd(pid).is_some() {
+                    game_ready_now = true;
+                }
+            }
 
             // Auto-complete triggers if game engine is up and running or after warmup phase
             if (pid > 0 && elapsed > 5.5) || elapsed > 8.5 {
@@ -4434,11 +4445,15 @@ impl eframe::App for LauncherApp {
                 self.discord_rpc.set_in_game(now, self.config.target_fps, is_modded);
             }
 
-            // Oyun start aldıktan 20 saniye sonra açılış/shader ekranı otomatik olarak kapanır (arkada ekstra olarak durmaz)
-            if elapsed >= 20.0 {
+            // Oyun penceresi açıldığında veya 20 saniye dolduğunda shader ekranını kapat, launcher'ı küçült ve oyunu en öne getir
+            if game_ready_now || elapsed >= 20.0 {
                 ctx.send_viewport_cmd(egui::ViewportCommand::WindowLevel(egui::WindowLevel::Normal));
                 ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(false));
+                ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(true));
                 self.shader_loading = None;
+
+                // Oyun penceresini Windows üzerinde doğrudan en öne odakla
+                crate::win_input::bring_game_window_to_front(pid);
             } else if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
                 // Güvenlik: Kullanıcı ESC tuşuna basarak ekranı erken kapatabilir
                 ctx.send_viewport_cmd(egui::ViewportCommand::WindowLevel(egui::WindowLevel::Normal));

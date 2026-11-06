@@ -11,6 +11,7 @@ mod updater;
 mod shader_downloader;
 pub mod mods_manager;
 pub mod discord_rpc;
+pub mod win_input;
 
 use app::LauncherApp;
 use eframe::egui;

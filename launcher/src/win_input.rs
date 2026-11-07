@@ -328,6 +328,9 @@ mod stub {
     }
     pub fn bring_game_window_to_front(pid: u32) {
         if pid > 0 {
+            let _ = std::process::Command::new("hyprctl")
+                .args(["dispatch", "focuswindow", &format!("pid:{}", pid)])
+                .output();
             let _ = std::process::Command::new("xdotool")
                 .args(["search", "--pid", &pid.to_string(), "windowactivate"])
                 .output();

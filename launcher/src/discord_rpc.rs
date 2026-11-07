@@ -156,6 +156,7 @@ struct GameWatcherState {
     is_modded: bool,
     last_check: Instant,
     last_detected_state: String,
+    last_detected_details: String,
 }
 
 fn run_rpc_worker(rx: Receiver<DiscordRpcMsg>, mut enabled: bool) {
@@ -190,10 +191,9 @@ fn run_rpc_worker(rx: Receiver<DiscordRpcMsg>, mut enabled: bool) {
                     target_fps,
                     is_modded,
                 } => {
-                    // Initial game state
-                    let (init_state, small_tip) = build_initial_game_state(&base_dir, target_fps, is_modded);
+                    let (init_state, init_details, small_tip) = build_initial_game_state(&base_dir, target_fps, is_modded);
                     let act = DiscordActivity {
-                        details: "God of War III: Remastered".to_string(),
+                        details: init_details.clone(),
                         state: init_state.clone(),
                         start_timestamp: Some(start_unix_secs),
                         large_image: Some(GOW3_COVER_ICON_URL.to_string()),
@@ -222,6 +222,7 @@ fn run_rpc_worker(rx: Receiver<DiscordRpcMsg>, mut enabled: bool) {
                         is_modded,
                         last_check: Instant::now(),
                         last_detected_state: init_state,
+                        last_detected_details: init_details,
                     });
                 }
                 DiscordRpcMsg::StopGameWatcher => {
@@ -277,12 +278,13 @@ fn run_rpc_worker(rx: Receiver<DiscordRpcMsg>, mut enabled: bool) {
                     if w.last_check.elapsed() >= Duration::from_millis(2500) {
                         w.last_check = Instant::now();
 
-                        let (new_state, small_tip) = build_initial_game_state(&w.base_dir, w.target_fps, w.is_modded);
-                        if new_state != w.last_detected_state {
+                        let (new_state, new_details, small_tip) = build_initial_game_state(&w.base_dir, w.target_fps, w.is_modded);
+                        if new_state != w.last_detected_state || new_details != w.last_detected_details {
                             w.last_detected_state = new_state.clone();
+                            w.last_detected_details = new_details.clone();
 
                             let act = DiscordActivity {
-                                details: "God of War III: Remastered".to_string(),
+                                details: new_details,
                                 state: new_state,
                                 start_timestamp: Some(w.start_unix_secs),
                                 large_image: Some(GOW3_COVER_ICON_URL.to_string()),
@@ -314,22 +316,64 @@ fn run_rpc_worker(rx: Receiver<DiscordRpcMsg>, mut enabled: bool) {
     }
 }
 
-fn build_initial_game_state(base_dir: &Path, target_fps: u32, is_modded: bool) -> (String, String) {
+/// Resolves the newest active gow3_log.txt across candidate paths
+pub fn resolve_game_log_path(base_dir: &Path) -> Option<PathBuf> {
+    let mut candidates = vec![
+        base_dir.join("gow3_log.txt"),
+        base_dir.join("gow3-linux/gow3_log.txt"),
+    ];
+    if let Some(parent) = base_dir.parent() {
+        candidates.push(parent.join("gow3_log.txt"));
+        candidates.push(parent.join("gow3-linux/gow3_log.txt"));
+    }
+    if let Ok(cur) = std::env::current_dir() {
+        candidates.push(cur.join("gow3_log.txt"));
+        candidates.push(cur.join("gow3-linux/gow3_log.txt"));
+    }
+
+    let mut newest: Option<(PathBuf, std::time::SystemTime)> = None;
+    for path in candidates {
+        if path.is_file() {
+            if let Ok(meta) = path.metadata() {
+                if let Ok(mod_time) = meta.modified() {
+                    if newest.as_ref().map(|(_, t)| mod_time > *t).unwrap_or(true) {
+                        newest = Some((path, mod_time));
+                    }
+                }
+            }
+        }
+    }
+    newest.map(|(p, _)| p)
+}
+
+fn build_initial_game_state(base_dir: &Path, target_fps: u32, is_modded: bool) -> (String, String, String) {
     let save_info = find_latest_save_info(base_dir);
-    let log_path = base_dir.join("gow3_log.txt");
+    let log_path = resolve_game_log_path(base_dir).unwrap_or_else(|| base_dir.join("gow3_log.txt"));
     let wads = parse_recent_wads_from_log(&log_path);
 
     let state = detect_current_state(&wads, save_info.as_ref());
 
     let mut small_parts = Vec::new();
+    let mut details = "God of War III: Remastered".to_string();
+
     if let Some(ref info) = save_info {
         if let Some(diff_line) = info.details.lines().next() {
             let clean_diff = diff_line.replace("Zorluk: ", "").replace("Difficulty: ", "").trim().to_string();
             if !clean_diff.is_empty() {
-                small_parts.push(clean_diff);
+                small_parts.push(clean_diff.clone());
+                details = format!("Zorluk: {}", clean_diff);
             }
         }
     }
+
+    if state.contains("Mücadele") {
+        details = "Olympus Mücadeleleri".to_string();
+    } else if state.contains("Arena") {
+        details = "Savaş Arenası".to_string();
+    } else if state == "Ana Menüde" {
+        details = "God of War III: Remastered".to_string();
+    }
+
     if target_fps > 0 {
         small_parts.push(format!("{} FPS", target_fps));
     }
@@ -343,7 +387,7 @@ fn build_initial_game_state(base_dir: &Path, target_fps: u32, is_modded: bool) -
         small_parts.join(" | ")
     };
 
-    (state, small_tip)
+    (state, details, small_tip)
 }
 
 /// SFO param.bin parser extracting chapter and difficulty details from God of War III save data
@@ -366,27 +410,51 @@ pub fn parse_param_bin(data: &[u8]) -> Option<SaveParamInfo> {
     }
 }
 
-/// Scans savedata directories for the latest modified save param.bin
+/// Scans savedata directories recursively for the latest modified save param.bin
 pub fn find_latest_save_info(base_dir: &Path) -> Option<SaveParamInfo> {
-    let candidate_dirs = [
-        base_dir.join("user/savedata/1/CUSA01715"),
-        base_dir.join("gow3-linux/user/savedata/1/CUSA01715"),
+    let mut candidate_roots = vec![
+        base_dir.join("user/savedata"),
+        base_dir.join("gow3-linux/user/savedata"),
     ];
+    if let Some(parent) = base_dir.parent() {
+        candidate_roots.push(parent.join("user/savedata"));
+        candidate_roots.push(parent.join("gow3-linux/user/savedata"));
+    }
+    if let Ok(cur) = std::env::current_dir() {
+        candidate_roots.push(cur.join("user/savedata"));
+        candidate_roots.push(cur.join("gow3-linux/user/savedata"));
+    }
 
     let mut latest_file: Option<(PathBuf, std::time::SystemTime)> = None;
 
-    for dir in &candidate_dirs {
-        if let Ok(entries) = std::fs::read_dir(dir) {
-            for entry in entries.flatten() {
-                let path = entry.path();
-                let file_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
-                if file_name.ends_with(".sce_sys") && !file_name.starts_with("USERDATA") {
-                    let param_path = path.join("param.bin");
-                    if param_path.is_file() {
-                        if let Ok(meta) = param_path.metadata() {
-                            if let Ok(modified) = meta.modified() {
-                                if latest_file.as_ref().map(|(_, t)| modified > *t).unwrap_or(true) {
-                                    latest_file = Some((param_path, modified));
+    for root in &candidate_roots {
+        if !root.is_dir() {
+            continue;
+        }
+        // Scan user directories (e.g. "1", "0", "00000001")
+        if let Ok(user_entries) = std::fs::read_dir(root) {
+            for u_entry in user_entries.flatten() {
+                let u_path = u_entry.path();
+                let title_dirs = if u_path.is_dir() {
+                    vec![u_path.join("CUSA01715"), u_path]
+                } else {
+                    vec![]
+                };
+                for t_dir in title_dirs {
+                    if let Ok(entries) = std::fs::read_dir(&t_dir) {
+                        for entry in entries.flatten() {
+                            let path = entry.path();
+                            let file_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                            if file_name.ends_with(".sce_sys") && !file_name.starts_with("USERDATA") {
+                                let param_path = path.join("param.bin");
+                                if param_path.is_file() {
+                                    if let Ok(meta) = param_path.metadata() {
+                                        if let Ok(modified) = meta.modified() {
+                                            if latest_file.as_ref().map(|(_, t)| modified > *t).unwrap_or(true) {
+                                                latest_file = Some((param_path, modified));
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -404,7 +472,7 @@ pub fn find_latest_save_info(base_dir: &Path) -> Option<SaveParamInfo> {
     None
 }
 
-/// Reads the tail (up to 64 KB) of gow3_log.txt and extracts all recent WAD load markers
+/// Reads the tail (up to 2 MB) of gow3_log.txt and extracts all real runtime WAD load markers
 pub fn parse_recent_wads_from_log(log_path: &Path) -> Vec<String> {
     if !log_path.is_file() {
         return Vec::new();
@@ -416,7 +484,7 @@ pub fn parse_recent_wads_from_log(log_path: &Path) -> Vec<String> {
     };
 
     let file_len = file.metadata().map(|m| m.len()).unwrap_or(0);
-    let read_start = file_len.saturating_sub(65536);
+    let read_start = file_len.saturating_sub(2 * 1024 * 1024);
     let _ = file.seek(SeekFrom::Start(read_start));
 
     let mut buf = Vec::new();
@@ -432,10 +500,17 @@ pub fn parse_recent_wads_from_log(log_path: &Path) -> Vec<String> {
             if !name.is_empty() {
                 wads.push(name.to_uppercase());
             }
-        } else if let Some(pos) = trimmed.find("LoadWadSizeData: WAD_") {
-            let part = &trimmed[pos + 21..];
-            let name = part.split_whitespace().next().unwrap_or("").trim();
-            if !name.is_empty() {
+        } else if let Some(pos) = trimmed.find("/WAD/PS4_LE/") {
+            let part = &trimmed[pos + 12..];
+            let name = part
+                .split('.')
+                .next()
+                .unwrap_or("")
+                .split_whitespace()
+                .next()
+                .unwrap_or("")
+                .trim();
+            if !name.is_empty() && name != "REGION" && name != "DEPENDENCYGRAPH" {
                 wads.push(name.to_uppercase());
             }
         }
@@ -443,22 +518,116 @@ pub fn parse_recent_wads_from_log(log_path: &Path) -> Vec<String> {
     wads
 }
 
+/// Identifies primary story level areas (POS050, HDS025, OLY100, etc.)
+pub fn is_main_area_wad(w: &str) -> bool {
+    let prefixes = ["POS", "HDS", "OLY", "ICA", "BAS", "CAV", "GAZ", "LAB", "CRN"];
+    if w.contains("SKYBOX")
+        || w.contains("AI")
+        || w.contains("TEST")
+        || w.contains("HRCHAINS")
+        || w == "SHELL"
+    {
+        return false;
+    }
+    for p in prefixes {
+        if w.starts_with(p) {
+            let rest = &w[p.len()..];
+            if !rest.is_empty() && rest.chars().next().map(|c| c.is_ascii_digit()).unwrap_or(false) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// Maps boss encounter WADs to Turkish boss fight Rich Presence statuses
+pub fn check_boss_wad(w: &str) -> Option<&'static str> {
+    // Poseidon Boss Fight: Mount Olympus
+    if w.starts_with("R_POSHORSE")
+        || w.starts_with("R_POSEIDON")
+        || w.starts_with("R_POSMAIN")
+        || w.starts_with("R_POSHADES")
+        || w == "TITANFIGHT"
+    {
+        return Some("Olympus Dağı (Poseidon Boss Fight)");
+    }
+    // Hades Boss Fight: The Underworld
+    if w.starts_with("R_HADES") || w.starts_with("HDS666") || w.starts_with("HDS675") {
+        return Some("Yeraltı Dünyası (Hades Boss Fight)");
+    }
+    // Helios Boss Fight / Chariot crash confrontation: City of Olympia
+    if w == "R_HELIOS" || w == "OLY220" || w == "OLY225" || w == "OLY230" {
+        return Some("Olimpiya Şehri (Helios Boss Fight)");
+    }
+    // Hermes Chase & Fight: City of Olympia
+    if w == "HERMES"
+        || w == "HERMES10"
+        || w.starts_with("R_HERMES")
+        || w == "OLY900"
+        || w == "OLY905"
+        || w == "OLY910"
+    {
+        return Some("Olimpiya Şehri (Hermes Kovalamacası)");
+    }
+    // Hercules Boss Fight: Olympus Forum
+    if w.starts_with("R_HERCULES") || w == "BAS500" || w == "BAS510" {
+        return Some("Olympus Forumu (Hercules Boss Fight)");
+    }
+    // Cronos Boss Fight: Pit of Tartarus
+    if w.starts_with("CRN") {
+        return Some("Tartarus Çukuru (Cronos Boss Fight)");
+    }
+    // Hephaestus Boss Fight: The Forge
+    if w.starts_with("R_HEPHAESTUS") {
+        return Some("Demirhane (Hephaestus Boss Fight)");
+    }
+    // Skorpius Boss Fight (Giant Scorpion): Caverns of Olympus
+    if w.starts_with("R_SKORPIUS") || w == "CAV700" || w == "CAV800" {
+        return Some("Olimpos Mağaraları (Skorpius Boss Fight)");
+    }
+    // Zeus Final Boss Fight: Summit of Olympus / Heart of Gaia
+    if w.starts_with("R_ZEUS")
+        || w.contains("KRATOSFEAR")
+        || w.contains("PANDZEUS")
+        || w.contains("ATHENAFEAR")
+        || w.contains("WIFEFEAR")
+        || w.contains("KIDFEAR")
+    {
+        return Some("Olympus Tepesi (Zeus Boss Fight)");
+    }
+    None
+}
+
 /// Computes the exact Rich Presence location & boss fight state based on WAD logs and save checkpoints
 pub fn detect_current_state(recent_wads: &[String], save_info: Option<&SaveParamInfo>) -> String {
-    // 1. Check Challenges, Combat Arena, Main Menu, Epilogue
+    let clean_save = save_info
+        .map(|s| {
+            s.chapter
+                .replace("(Oto. Kayıt) ", "")
+                .replace("(Auto Save) ", "")
+                .replace("(Oto. Kayıt)", "")
+                .trim()
+                .to_string()
+        })
+        .unwrap_or_default();
+
+    // Iterate backwards: newest gameplay event determines the active chapter/boss
     for w in recent_wads.iter().rev() {
+        // 1. Challenges
         if w.starts_with("CHALLENGE") {
             return match w.as_str() {
-                "CHALLENGE01" => "Olimpos Mücadelesi 1 (Taşlaşmış)".to_string(),
-                "CHALLENGE02" => "Olimpos Mücadelesi 2 (Çıplak ve Cesur)".to_string(),
-                "CHALLENGE03" => "Olimpos Mücadelesi 3 (Kıyma Makinesi)".to_string(),
-                "CHALLENGE04" => "Olimpos Mücadelesi 4 (Koyun Avı)".to_string(),
-                "CHALLENGE05" => "Olimpos Mücadelesi 5 (Temizleme)".to_string(),
-                "CHALLENGE06" => "Olimpos Mücadelesi 6 (Yok Edici)".to_string(),
-                "CHALLENGE07" => "Olimpos Mücadelesi 7 (Kör Nokta)".to_string(),
-                _ => "Olimpos Mücadeleleri (Challenge of Olympus)".to_string(),
+                "CHALLENGE01" => "Olympus Mücadelesi 1 (Taşlaşmış)".to_string(),
+                "CHALLENGE02" => "Olympus Mücadelesi 2 (Çıplak ve Cesur)".to_string(),
+                "CHALLENGE03" => "Olympus Mücadelesi 3 (Kıyma Makinesi)".to_string(),
+                "CHALLENGE04" => "Olympus Mücadelesi 4 (Koyun Avı)".to_string(),
+                "CHALLENGE05" => "Olympus Mücadelesi 5 (Temizleme)".to_string(),
+                "CHALLENGE06" => "Olympus Mücadelesi 6 (Yok Edici)".to_string(),
+                "CHALLENGE07" => "Olympus Mücadelesi 7 (Kör Nokta)".to_string(),
+                _ => "Olympus Mücadeleleri".to_string(),
             };
         }
+
+        // 2. Arena, Epilogue, Main Menu
         if w.starts_with("FREE0") || w.starts_with("ARENA") {
             return "Savaş Arenası (Combat Arena)".to_string();
         }
@@ -468,104 +637,98 @@ pub fn detect_current_state(recent_wads: &[String], save_info: Option<&SaveParam
         if w == "SHELL" {
             return "Ana Menüde".to_string();
         }
+
+        // 3. Boss Encounter
+        if let Some(boss) = check_boss_wad(w) {
+            return boss.to_string();
+        }
+
+        // 4. Main Area / Level
+        if is_main_area_wad(w) {
+            if w.starts_with("POS") {
+                if !clean_save.is_empty() && clean_save.contains("Gaia") {
+                    return "Olympus Dağı (Gaia)".to_string();
+                }
+                return "Olympus Dağı".to_string();
+            }
+            if w.starts_with("HDS") {
+                if !clean_save.is_empty() {
+                    return format!("Yeraltı Dünyası ({})", clean_save);
+                }
+                return "Yeraltı Dünyası".to_string();
+            }
+            if w.starts_with("OLY") {
+                if !clean_save.is_empty() {
+                    return format!("Olimpiya Şehri ({})", clean_save);
+                }
+                return "Olimpiya Şehri".to_string();
+            }
+            if w.starts_with("ICA") {
+                return "Denge Zinciri (Eos Yolu)".to_string();
+            }
+            if w.starts_with("BAS") {
+                if !clean_save.is_empty() {
+                    return format!("Olimpos Tapınağı ({})", clean_save);
+                }
+                return "Olimpos Tapınağı".to_string();
+            }
+            if w.starts_with("CAV") {
+                return "Olimpos Mağaraları".to_string();
+            }
+            if w.starts_with("GAZ") {
+                if clean_save.contains("Afrodit") {
+                    return "Afrodit'in Odası".to_string();
+                }
+                return "Olimpos Bahçeleri".to_string();
+            }
+            if w.starts_with("LAB") {
+                if !clean_save.is_empty() {
+                    return format!("Labirent ({})", clean_save);
+                }
+                return "Labirent".to_string();
+            }
+            if w.starts_with("CRN") {
+                return "Tartarus Çukuru".to_string();
+            }
+        }
     }
 
-    // 2. Check Boss Fights (highest gameplay priority)
-    for w in recent_wads.iter().rev() {
-        if w.starts_with("R_POSHORSE")
-            || w.starts_with("R_POSEIDON")
-            || w.starts_with("R_POSMAIN")
-            || w == "TITANFIGHT"
+    // Fallback: If no level WAD logged yet, use save checkpoint if available
+    if !clean_save.is_empty() {
+        if clean_save.contains("Gaia") {
+            return "Olympus Dağı (Gaia)".to_string();
+        }
+        if clean_save.contains("Ares")
+            || clean_save.contains("Yargıç")
+            || clean_save.contains("Hades")
         {
-            return "Olympus Dağı (Poseidon Boss Fight)".to_string();
+            return format!("Yeraltı Dünyası ({})", clean_save);
         }
-        if w.starts_with("R_HADES") || w.starts_with("HDS666") || w.starts_with("HDS675") {
-            return "Yeraltı Dünyası (Hades Boss Fight)".to_string();
+        if clean_save.contains("Olimpiya") {
+            return format!("Olimpiya Şehri ({})", clean_save);
         }
-        if w.starts_with("CRN") || w.contains("CRONOS") {
-            return "Tartarus (Kronos Boss Fight)".to_string();
+        if clean_save.contains("Alev") {
+            return format!("Olimpos Tapınağı ({})", clean_save);
         }
-        if w.starts_with("R_HERCULES") || w == "BAS500" {
-            return "Forum (Herkül Boss Fight)".to_string();
+        if clean_save.contains("Forum") {
+            return "Olympus Forumu".to_string();
         }
-        if w.starts_with("R_ZEUS") || w.contains("KRATOSFEAR") || w.contains("PANDZEUS") {
-            return "Olimpos Zirvesi (Zeus Boss Fight)".to_string();
+        if clean_save.contains("Afrodit") {
+            return "Afrodit'in Odası".to_string();
         }
-        if w.contains("HEPHAESTUS") {
-            return "Demirhane (Hephaistos Boss Fight)".to_string();
+        if clean_save.contains("Tartarus") {
+            return "Tartarus Çukuru".to_string();
         }
-        if w.contains("SKORPIUS") {
-            return "Mağaralar (Skorpius Boss Fight)".to_string();
+        if clean_save.contains("Labirent")
+            || clean_save.contains("Yıkık Odalar")
+            || clean_save.contains("Işık Odaları")
+        {
+            return format!("Labirent ({})", clean_save);
         }
-        if w.contains("HERMES") {
-            return "Olimpos Yolu (Hermes Boss Fight)".to_string();
-        }
-        if w.contains("HELIOS") {
-            return "Olimpiya Şehri (Helios Boss Fight)".to_string();
-        }
+        return clean_save;
     }
 
-    // 3. Check Save Checkpoint Chapter
-    if let Some(info) = save_info {
-        let sc = info
-            .chapter
-            .replace("(Oto. Kayıt) ", "")
-            .replace("(Auto Save) ", "")
-            .replace("(Oto. Kayıt)", "")
-            .trim()
-            .to_string();
-
-        if !sc.is_empty() {
-            if sc.contains("Labirent") || sc.contains("Yıkık Odalar") || sc.contains("Işık Odaları") {
-                return format!("Labirent ({})", sc);
-            }
-            if sc.contains("Ares") || sc.contains("Yargıç") || sc.contains("Hades") || sc.contains("Athena") {
-                return format!("Yeraltı Dünyası ({})", sc);
-            }
-            if sc.contains("Olimpiya") {
-                return format!("Olimpiya Şehri ({})", sc);
-            }
-            if sc.contains("Alev") {
-                return format!("Alev Odası ({})", sc);
-            }
-            if sc.contains("Tartarus") {
-                return format!("Tartarus ({})", sc);
-            }
-            if sc.contains("Afrodit") {
-                return "Afrodit'in Odası".to_string();
-            }
-            if sc.contains("Forum") {
-                return "Olimpos Forumu".to_string();
-            }
-            return sc;
-        }
-    }
-
-    // 4. Fallback WAD Region Mapping
-    for w in recent_wads.iter().rev() {
-        if w.starts_with("POS") {
-            return "Olympus Dağı".to_string();
-        }
-        if w.starts_with("HDS") {
-            return "Yeraltı Dünyası".to_string();
-        }
-        if w.starts_with("OLY") {
-            return "Olimpiya Şehri".to_string();
-        }
-        if w.starts_with("BAS") {
-            return "Olimpos Tapınağı".to_string();
-        }
-        if w.starts_with("CAV") {
-            return "Olimpos Mağaraları".to_string();
-        }
-        if w.starts_with("GAZ") {
-            return "Olimpos Bahçeleri".to_string();
-        }
-        if w.starts_with("LAB") || w.starts_with("ICA") {
-            return "Labirent".to_string();
-        }
-    }
-
+    // In-game default when game starts
     "Olympus Dağı".to_string()
 }
 
@@ -583,17 +746,71 @@ fn try_connect_and_handshake(client_id: &str) -> Option<IpcStream> {
         return None;
     }
 
-    // Read Discord dispatch response to verify connection and clear buffer
-    let mut header = [0u8; 8];
-    if stream.read_exact(&mut header).is_ok() {
-        let length = u32::from_le_bytes([header[4], header[5], header[6], header[7]]) as usize;
-        if length > 0 && length < 65536 {
-            let mut buf = vec![0u8; length];
-            let _ = stream.read_exact(&mut buf);
+    #[cfg(unix)]
+    {
+        // Read Discord dispatch response to verify connection and clear buffer
+        let mut header = [0u8; 8];
+        if stream.read_exact(&mut header).is_ok() {
+            let length = u32::from_le_bytes([header[4], header[5], header[6], header[7]]) as usize;
+            if length > 0 && length < 65536 {
+                let mut buf = vec![0u8; length];
+                let _ = stream.read_exact(&mut buf);
+            }
+        }
+    }
+
+    #[cfg(windows)]
+    {
+        // Safe non-blocking peek on Windows Named Pipe
+        let mut header = [0u8; 8];
+        for _ in 0..10 {
+            if peek_pipe_bytes(&stream) >= 8 {
+                if stream.read_exact(&mut header).is_ok() {
+                    let length = u32::from_le_bytes([header[4], header[5], header[6], header[7]]) as usize;
+                    if length > 0 && length < 65536 {
+                        let mut buf = vec![0u8; length];
+                        let _ = stream.read_exact(&mut buf);
+                    }
+                }
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(20));
         }
     }
 
     Some(stream)
+}
+
+#[cfg(windows)]
+fn peek_pipe_bytes(stream: &IpcStream) -> u32 {
+    use std::os::windows::io::AsRawHandle;
+    unsafe extern "system" {
+        fn PeekNamedPipe(
+            hNamedPipe: *mut std::ffi::c_void,
+            lpBuffer: *mut std::ffi::c_void,
+            nBufferSize: u32,
+            lpBytesRead: *mut u32,
+            lpTotalBytesAvail: *mut u32,
+            lpBytesLeftThisMessage: *mut u32,
+        ) -> i32;
+    }
+    unsafe {
+        let handle = stream.as_raw_handle() as *mut std::ffi::c_void;
+        let mut bytes_avail: u32 = 0;
+        let res = PeekNamedPipe(
+            handle,
+            std::ptr::null_mut(),
+            0,
+            std::ptr::null_mut(),
+            &mut bytes_avail,
+            std::ptr::null_mut(),
+        );
+        if res != 0 {
+            bytes_avail
+        } else {
+            0
+        }
+    }
 }
 
 #[cfg(unix)]
@@ -744,18 +961,19 @@ mod tests {
     #[test]
     fn test_activity_payload_formatting() {
         let act = DiscordActivity {
-            details: "God of War III: Remastered".to_string(),
+            details: "Zorluk: Tanrı (Normal)".to_string(),
             state: "Olympus Dağı (Poseidon Boss Fight)".to_string(),
             start_timestamp: Some(1700000000),
             large_image: Some(GOW3_COVER_ICON_URL.to_string()),
             large_text: Some("God of War III: Remastered".to_string()),
             small_image: Some(GOW3_BADGE_ICON_URL.to_string()),
-            small_text: Some("Zorluk: Tanrı (Normal)".to_string()),
+            small_text: Some("144 FPS | Modlu".to_string()),
         };
 
         let json_str = build_activity_payload(&act, 42);
         assert!(json_str.contains("SET_ACTIVITY"));
         assert!(json_str.contains("Olympus Dağı (Poseidon Boss Fight)"));
+        assert!(json_str.contains("Zorluk: Tanrı (Normal)"));
         assert!(json_str.contains("1700000000"));
         assert!(json_str.contains("\"nonce\":\"42\""));
     }
@@ -770,64 +988,110 @@ mod tests {
 
     #[test]
     fn test_detect_current_state_boss_and_chapters() {
-        // Poseidon Boss Fight
-        let wads_pos = vec!["POS050".to_string(), "R_POSHORSE00".to_string()];
+        // 1. Poseidon Boss Fight: Mount Olympus
+        let wads_pos = vec!["SHELL".to_string(), "POS050".to_string(), "R_POSHORSE00".to_string()];
         assert_eq!(
             detect_current_state(&wads_pos, None),
             "Olympus Dağı (Poseidon Boss Fight)"
         );
 
-        // Underworld Hades Boss Fight
-        let wads_hades = vec!["HDS675".to_string(), "R_HADES".to_string()];
+        // 2. Progression after Poseidon fight to slopes of Olympus
+        let wads_slopes = vec!["SHELL".to_string(), "POS050".to_string(), "R_POSHORSE00".to_string(), "POS200".to_string()];
+        assert_eq!(
+            detect_current_state(&wads_slopes, None),
+            "Olympus Dağı"
+        );
+
+        // 3. Underworld Hades Boss Fight
+        let wads_hades = vec!["HDS025".to_string(), "HDS675".to_string(), "R_HADES".to_string()];
         assert_eq!(
             detect_current_state(&wads_hades, None),
             "Yeraltı Dünyası (Hades Boss Fight)"
         );
 
-        // Tartarus Cronos Boss Fight
+        // 4. Tartarus Cronos Boss Fight
         let wads_crn = vec!["CRN100".to_string()];
         assert_eq!(
             detect_current_state(&wads_crn, None),
-            "Tartarus (Kronos Boss Fight)"
+            "Tartarus Çukuru (Cronos Boss Fight)"
         );
 
-        // Hercules Boss Fight
-        let wads_herc = vec!["BAS500".to_string(), "R_HERCULES".to_string()];
+        // 5. Hercules Boss Fight
+        let wads_herc = vec!["BAS100".to_string(), "BAS500".to_string(), "R_HERCULES".to_string()];
         assert_eq!(
             detect_current_state(&wads_herc, None),
-            "Forum (Herkül Boss Fight)"
+            "Olympus Forumu (Hercules Boss Fight)"
         );
 
-        // Zeus Boss Fight
+        // 6. Helios Boss Fight
+        let wads_helios = vec!["OLY100".to_string(), "OLY220".to_string(), "R_HELIOS".to_string()];
+        assert_eq!(
+            detect_current_state(&wads_helios, None),
+            "Olimpiya Şehri (Helios Boss Fight)"
+        );
+
+        // 7. Hermes Chase
+        let wads_hermes = vec!["OLY100".to_string(), "HERMES".to_string()];
+        assert_eq!(
+            detect_current_state(&wads_hermes, None),
+            "Olimpiya Şehri (Hermes Kovalamacası)"
+        );
+
+        // 8. Zeus Boss Fight
         let wads_zeus = vec!["R_ZEUS00".to_string()];
         assert_eq!(
             detect_current_state(&wads_zeus, None),
-            "Olimpos Zirvesi (Zeus Boss Fight)"
+            "Olympus Tepesi (Zeus Boss Fight)"
         );
 
-        // Challenges
-        let wads_chal = vec!["CHALLENGE01".to_string()];
+        // 9. Challenges of Olympus
+        let wads_chal1 = vec!["CHALLENGE01".to_string()];
         assert_eq!(
-            detect_current_state(&wads_chal, None),
-            "Olimpos Mücadelesi 1 (Taşlaşmış)"
+            detect_current_state(&wads_chal1, None),
+            "Olympus Mücadelesi 1 (Taşlaşmış)"
         );
 
-        // Arena
+        // 10. Combat Arena
         let wads_arena = vec!["FREE0".to_string()];
         assert_eq!(
             detect_current_state(&wads_arena, None),
             "Savaş Arenası (Combat Arena)"
         );
 
-        // Save Checkpoint
-        let save = SaveParamInfo {
+        // 11. Epilogue
+        let wads_end = vec!["ENDOFGAME".to_string()];
+        assert_eq!(
+            detect_current_state(&wads_end, None),
+            "Oyun Sonu (Epilogue)"
+        );
+
+        // 12. Main Menu return
+        let wads_shell = vec!["POS050".to_string(), "SHELL".to_string()];
+        assert_eq!(
+            detect_current_state(&wads_shell, None),
+            "Ana Menüde"
+        );
+
+        // 13. Save Checkpoint Integration (Underworld)
+        let save_hds = SaveParamInfo {
             chapter: "(Oto. Kayıt) Ares'in Mezarı".to_string(),
             details: "Zorluk: Tanrı (Normal)\nOynanış süresi: 0:13:36".to_string(),
         };
         let wads_hds_plain = vec!["HDS025".to_string()];
         assert_eq!(
-            detect_current_state(&wads_hds_plain, Some(&save)),
+            detect_current_state(&wads_hds_plain, Some(&save_hds)),
             "Yeraltı Dünyası (Ares'in Mezarı)"
+        );
+
+        // 14. Save Checkpoint Integration (Olympus Mount)
+        let save_gaia = SaveParamInfo {
+            chapter: "(Oto. Kayıt) Gaia".to_string(),
+            details: "Zorluk: Tanrı (Normal)\nOynanış süresi: 0:00:52".to_string(),
+        };
+        let wads_pos_plain = vec!["POS050".to_string()];
+        assert_eq!(
+            detect_current_state(&wads_pos_plain, Some(&save_gaia)),
+            "Olympus Dağı (Gaia)"
         );
     }
 

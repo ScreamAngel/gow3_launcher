@@ -1689,9 +1689,9 @@ impl LauncherApp {
             self.shader_loading = None;
             let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0);
             let is_modded = self.installed_mods.iter().any(|m| m.is_enabled);
-            self.discord_rpc.set_in_game(self.base_dir.clone(), now, self.config.target_fps, is_modded);
+            self.discord_rpc.set_in_game(self.base_dir.clone(), now, self.config.target_fps, is_modded, &self.config.language);
         } else {
-            self.discord_rpc.set_compiling_shaders(Some(0.0));
+            self.discord_rpc.set_compiling_shaders(Some(0.0), &self.config.language);
             // Pre-warm all shaders to 100% with the full Spartan Rage bar before game window is displayed
             ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(true));
             #[cfg(target_os = "windows")]
@@ -2235,6 +2235,8 @@ impl LauncherApp {
                         self.current_lang = *lang;
                         self.config.language = lang.code().to_string();
                         let _ = self.config.save(&self.base_dir);
+                        self.discord_rpc.update_language(lang.code());
+                        self.discord_rpc.set_in_menu(lang.code());
                     }
                 }
             });
@@ -4442,7 +4444,7 @@ impl eframe::App for LauncherApp {
 
                 let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0);
                 let is_modded = self.installed_mods.iter().any(|m| m.is_enabled);
-                self.discord_rpc.set_in_game(self.base_dir.clone(), now, self.config.target_fps, is_modded);
+                self.discord_rpc.set_in_game(self.base_dir.clone(), now, self.config.target_fps, is_modded, &self.config.language);
             }
 
             // Oyun penceresi açıldığında oyun ekranını en öne getir ve launcher'ı Normal seviyeye çek

@@ -307,7 +307,7 @@ fn default_discord_client_id() -> String {
 }
 
 fn default_language() -> String {
-    "tr".to_string()
+    crate::discord_rpc::detect_system_language().to_string()
 }
 fn default_target_fps() -> u32 {
     60

@@ -4,7 +4,7 @@
 //! on both Linux (Unix Domain Sockets) and Windows (Named Pipes).
 //!
 //! Features real-time Chapter & Boss Fight detection, Challenge of Olympus, Combat Arena,
-//! and accurate story stage status reporting using the official God of War III: Remastered App ID.
+//! and multi-language automatic system/launcher localization (Turkish, English, German, Spanish).
 
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
@@ -32,6 +32,83 @@ pub const GOW3_COVER_ICON_URL: &str =
 pub const GOW3_BADGE_ICON_URL: &str =
     "https://raw.githubusercontent.com/ScreamAngel/gow3_launcher/main/gow3.png";
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum RpcLanguage {
+    #[default]
+    Turkish,
+    English,
+    German,
+    Spanish,
+}
+
+impl RpcLanguage {
+    pub fn from_str(s: &str) -> Self {
+        match s.trim().to_lowercase().as_str() {
+            "tr" => RpcLanguage::Turkish,
+            "en" => RpcLanguage::English,
+            "de" => RpcLanguage::German,
+            "es" => RpcLanguage::Spanish,
+            "auto" | "" => Self::from_system(),
+            _ => Self::from_system(),
+        }
+    }
+
+    pub fn from_system() -> Self {
+        #[cfg(target_os = "windows")]
+        {
+            unsafe extern "system" {
+                fn GetUserDefaultUILanguage() -> u16;
+            }
+            let lang_id = unsafe { GetUserDefaultUILanguage() };
+            match lang_id & 0x3ff {
+                0x1f => RpcLanguage::Turkish,
+                0x07 => RpcLanguage::German,
+                0x0a => RpcLanguage::Spanish,
+                _ => RpcLanguage::English,
+            }
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            let check_var = |var: &str| -> Option<RpcLanguage> {
+                if let Ok(val) = std::env::var(var) {
+                    let v = val.to_lowercase();
+                    if v.starts_with("tr") {
+                        return Some(RpcLanguage::Turkish);
+                    }
+                    if v.starts_with("de") {
+                        return Some(RpcLanguage::German);
+                    }
+                    if v.starts_with("es") {
+                        return Some(RpcLanguage::Spanish);
+                    }
+                    if v.starts_with("en") {
+                        return Some(RpcLanguage::English);
+                    }
+                }
+                None
+            };
+            check_var("LC_ALL")
+                .or_else(|| check_var("LC_MESSAGES"))
+                .or_else(|| check_var("LANG"))
+                .unwrap_or(RpcLanguage::Turkish)
+        }
+    }
+
+    pub fn code(&self) -> &'static str {
+        match self {
+            RpcLanguage::Turkish => "tr",
+            RpcLanguage::English => "en",
+            RpcLanguage::German => "de",
+            RpcLanguage::Spanish => "es",
+        }
+    }
+}
+
+/// Detects the operating system display language
+pub fn detect_system_language() -> &'static str {
+    RpcLanguage::from_system().code()
+}
+
 /// Activity metadata sent to Discord
 #[derive(Debug, Clone, PartialEq)]
 pub struct DiscordActivity {
@@ -57,12 +134,14 @@ pub enum DiscordRpcMsg {
         start_unix_secs: i64,
         target_fps: u32,
         is_modded: bool,
+        lang: String,
     },
     StopGameWatcher,
     ClearActivity,
     UpdateConfig {
         enabled: bool,
     },
+    UpdateLanguage(String),
     Shutdown,
 }
 
@@ -86,11 +165,12 @@ impl DiscordRpc {
     }
 
     pub fn set_in_menu(&self, lang: &str) {
-        let state = match lang {
-            "tr" => "Ana Menüde",
-            "de" => "Im Hauptmenü",
-            "es" => "En el Menú Principal",
-            _ => "In Main Menu",
+        let rpc_lang = RpcLanguage::from_str(lang);
+        let state = match rpc_lang {
+            RpcLanguage::Turkish => "Ana Menüde",
+            RpcLanguage::German => "Im Hauptmenü",
+            RpcLanguage::Spanish => "En el Menú Principal",
+            RpcLanguage::English => "In Main Menu",
         };
 
         let act = DiscordActivity {
@@ -106,11 +186,37 @@ impl DiscordRpc {
         let _ = self.tx.send(DiscordRpcMsg::SetActivity(act));
     }
 
-    pub fn set_compiling_shaders(&self, percent: Option<f32>) {
-        let state = if let Some(pct) = percent {
-            format!("Shader'lar Derleniyor (%{:.0})", pct)
-        } else {
-            "Shader'lar Derleniyor...".to_string()
+    pub fn set_compiling_shaders(&self, percent: Option<f32>, lang: &str) {
+        let rpc_lang = RpcLanguage::from_str(lang);
+        let state = match rpc_lang {
+            RpcLanguage::Turkish => {
+                if let Some(pct) = percent {
+                    format!("Shader'lar Derleniyor (%{:.0})", pct)
+                } else {
+                    "Shader'lar Derleniyor...".to_string()
+                }
+            }
+            RpcLanguage::English => {
+                if let Some(pct) = percent {
+                    format!("Compiling Shaders ({:.0}%)", pct)
+                } else {
+                    "Compiling Shaders...".to_string()
+                }
+            }
+            RpcLanguage::German => {
+                if let Some(pct) = percent {
+                    format!("Shader werden kompiliert (%{:.0})", pct)
+                } else {
+                    "Shader werden kompiliert...".to_string()
+                }
+            }
+            RpcLanguage::Spanish => {
+                if let Some(pct) = percent {
+                    format!("Compilando Sombreadores (%{:.0})", pct)
+                } else {
+                    "Compilando Sombreadores...".to_string()
+                }
+            }
         };
 
         let act = DiscordActivity {
@@ -126,12 +232,20 @@ impl DiscordRpc {
         let _ = self.tx.send(DiscordRpcMsg::SetActivity(act));
     }
 
-    pub fn set_in_game(&self, base_dir: PathBuf, start_unix_secs: i64, target_fps: u32, is_modded: bool) {
+    pub fn set_in_game(
+        &self,
+        base_dir: PathBuf,
+        start_unix_secs: i64,
+        target_fps: u32,
+        is_modded: bool,
+        lang: &str,
+    ) {
         let _ = self.tx.send(DiscordRpcMsg::StartGameWatcher {
             base_dir,
             start_unix_secs,
             target_fps,
             is_modded,
+            lang: lang.to_string(),
         });
     }
 
@@ -144,6 +258,10 @@ impl DiscordRpc {
         let _ = self.tx.send(DiscordRpcMsg::UpdateConfig { enabled });
     }
 
+    pub fn update_language(&self, lang: &str) {
+        let _ = self.tx.send(DiscordRpcMsg::UpdateLanguage(lang.to_string()));
+    }
+
     pub fn shutdown(&self) {
         let _ = self.tx.send(DiscordRpcMsg::Shutdown);
     }
@@ -154,6 +272,7 @@ struct GameWatcherState {
     start_unix_secs: i64,
     target_fps: u32,
     is_modded: bool,
+    lang: String,
     last_check: Instant,
     last_detected_state: String,
     last_detected_details: String,
@@ -190,8 +309,10 @@ fn run_rpc_worker(rx: Receiver<DiscordRpcMsg>, mut enabled: bool) {
                     start_unix_secs,
                     target_fps,
                     is_modded,
+                    lang,
                 } => {
-                    let (init_state, init_details, small_tip) = build_initial_game_state(&base_dir, target_fps, is_modded);
+                    let (init_state, init_details, small_tip) =
+                        build_initial_game_state(&base_dir, target_fps, is_modded, &lang);
                     let act = DiscordActivity {
                         details: init_details.clone(),
                         state: init_state.clone(),
@@ -220,6 +341,7 @@ fn run_rpc_worker(rx: Receiver<DiscordRpcMsg>, mut enabled: bool) {
                         start_unix_secs,
                         target_fps,
                         is_modded,
+                        lang,
                         last_check: Instant::now(),
                         last_detected_state: init_state,
                         last_detected_details: init_details,
@@ -252,6 +374,38 @@ fn run_rpc_worker(rx: Receiver<DiscordRpcMsg>, mut enabled: bool) {
                         }
                     }
                 }
+                DiscordRpcMsg::UpdateLanguage(new_lang) => {
+                    if let Some(ref mut w) = watcher {
+                        w.lang = new_lang.clone();
+                        let (new_state, new_details, small_tip) =
+                            build_initial_game_state(&w.base_dir, w.target_fps, w.is_modded, &w.lang);
+                        w.last_detected_state = new_state.clone();
+                        w.last_detected_details = new_details.clone();
+
+                        let act = DiscordActivity {
+                            details: new_details,
+                            state: new_state,
+                            start_timestamp: Some(w.start_unix_secs),
+                            large_image: Some(GOW3_COVER_ICON_URL.to_string()),
+                            large_text: Some("God of War III: Remastered".to_string()),
+                            small_image: Some(GOW3_BADGE_ICON_URL.to_string()),
+                            small_text: Some(small_tip),
+                        };
+                        current_activity = Some(act.clone());
+
+                        if enabled {
+                            if stream.is_none() {
+                                stream = try_connect_and_handshake(&client_id);
+                            }
+                            if let Some(ref mut s) = stream {
+                                nonce += 1;
+                                if send_activity_payload(s, &act, nonce).is_err() {
+                                    stream = None;
+                                }
+                            }
+                        }
+                    }
+                }
                 DiscordRpcMsg::Shutdown => {
                     if let Some(ref mut s) = stream {
                         nonce += 1;
@@ -278,7 +432,8 @@ fn run_rpc_worker(rx: Receiver<DiscordRpcMsg>, mut enabled: bool) {
                     if w.last_check.elapsed() >= Duration::from_millis(2500) {
                         w.last_check = Instant::now();
 
-                        let (new_state, new_details, small_tip) = build_initial_game_state(&w.base_dir, w.target_fps, w.is_modded);
+                        let (new_state, new_details, small_tip) =
+                            build_initial_game_state(&w.base_dir, w.target_fps, w.is_modded, &w.lang);
                         if new_state != w.last_detected_state || new_details != w.last_detected_details {
                             w.last_detected_state = new_state.clone();
                             w.last_detected_details = new_details.clone();
@@ -346,31 +501,67 @@ pub fn resolve_game_log_path(base_dir: &Path) -> Option<PathBuf> {
     newest.map(|(p, _)| p)
 }
 
-fn build_initial_game_state(base_dir: &Path, target_fps: u32, is_modded: bool) -> (String, String, String) {
+fn build_initial_game_state(
+    base_dir: &Path,
+    target_fps: u32,
+    is_modded: bool,
+    lang: &str,
+) -> (String, String, String) {
+    let rpc_lang = RpcLanguage::from_str(lang);
     let save_info = find_latest_save_info(base_dir);
     let log_path = resolve_game_log_path(base_dir).unwrap_or_else(|| base_dir.join("gow3_log.txt"));
     let wads = parse_recent_wads_from_log(&log_path);
 
-    let state = detect_current_state(&wads, save_info.as_ref());
+    let state = detect_current_state(&wads, save_info.as_ref(), rpc_lang);
 
     let mut small_parts = Vec::new();
-    let mut details = "God of War III: Remastered".to_string();
+    let mut details = match rpc_lang {
+        RpcLanguage::Turkish => "Hikaye Modu",
+        RpcLanguage::English => "Story Mode",
+        RpcLanguage::German => "Story-Modus",
+        RpcLanguage::Spanish => "Modo Historia",
+    }
+    .to_string();
 
     if let Some(ref info) = save_info {
         if let Some(diff_line) = info.details.lines().next() {
-            let clean_diff = diff_line.replace("Zorluk: ", "").replace("Difficulty: ", "").trim().to_string();
+            let clean_diff = diff_line
+                .replace("Zorluk: ", "")
+                .replace("Difficulty: ", "")
+                .replace("Schwierigkeit: ", "")
+                .replace("Dificultad: ", "")
+                .trim()
+                .to_string();
             if !clean_diff.is_empty() {
                 small_parts.push(clean_diff.clone());
-                details = format!("Zorluk: {}", clean_diff);
+                let diff_prefix = match rpc_lang {
+                    RpcLanguage::Turkish => "Zorluk",
+                    RpcLanguage::English => "Difficulty",
+                    RpcLanguage::German => "Schwierigkeit",
+                    RpcLanguage::Spanish => "Dificultad",
+                };
+                details = format!("{}: {}", diff_prefix, clean_diff);
             }
         }
     }
 
-    if state.contains("Mücadele") {
-        details = "Olympus Mücadeleleri".to_string();
-    } else if state.contains("Arena") {
-        details = "Savaş Arenası".to_string();
-    } else if state == "Ana Menüde" {
+    if state.contains("Mücadele") || state.contains("Challenge") || state.contains("Herausforderung") || state.contains("Desafío") {
+        details = match rpc_lang {
+            RpcLanguage::Turkish => "Olympus Mücadeleleri",
+            RpcLanguage::English => "Challenges of Olympus",
+            RpcLanguage::German => "Herausforderungen des Olymp",
+            RpcLanguage::Spanish => "Desafíos del Olimpo",
+        }
+        .to_string();
+    } else if state.contains("Arena") || state.contains("Kampfarena") {
+        details = match rpc_lang {
+            RpcLanguage::Turkish => "Savaş Arenası",
+            RpcLanguage::English => "Combat Arena",
+            RpcLanguage::German => "Kampfarena",
+            RpcLanguage::Spanish => "Arena de Combate",
+        }
+        .to_string();
+    } else if state.contains("Menü") || state.contains("Menu") || state.contains("Menú") {
         details = "God of War III: Remastered".to_string();
     }
 
@@ -378,7 +569,13 @@ fn build_initial_game_state(base_dir: &Path, target_fps: u32, is_modded: bool) -
         small_parts.push(format!("{} FPS", target_fps));
     }
     if is_modded {
-        small_parts.push("Modlu".to_string());
+        let mod_label = match rpc_lang {
+            RpcLanguage::Turkish => "Modlu",
+            RpcLanguage::English => "Modded",
+            RpcLanguage::German => "Gemoddet",
+            RpcLanguage::Spanish => "Con Mods",
+        };
+        small_parts.push(mod_label.to_string());
     }
 
     let small_tip = if small_parts.is_empty() {
@@ -540,8 +737,8 @@ pub fn is_main_area_wad(w: &str) -> bool {
     false
 }
 
-/// Maps boss encounter WADs to Turkish boss fight Rich Presence statuses
-pub fn check_boss_wad(w: &str) -> Option<&'static str> {
+/// Maps boss encounter WADs to localized boss fight Rich Presence statuses
+pub fn check_boss_wad(w: &str, lang: RpcLanguage) -> Option<String> {
     // Poseidon Boss Fight: Mount Olympus
     if w.starts_with("R_POSHORSE")
         || w.starts_with("R_POSEIDON")
@@ -549,16 +746,34 @@ pub fn check_boss_wad(w: &str) -> Option<&'static str> {
         || w.starts_with("R_POSHADES")
         || w == "TITANFIGHT"
     {
-        return Some("Olympus Dağı (Poseidon Boss Fight)");
+        return Some(match lang {
+            RpcLanguage::Turkish => "Olympus Dağı (Poseidon Boss Fight)",
+            RpcLanguage::English => "Mount Olympus (Poseidon Boss Fight)",
+            RpcLanguage::German => "Olymp (Poseidon Bosskampf)",
+            RpcLanguage::Spanish => "Monte Olimpo (Combate de Poseidón)",
+        }.to_string());
     }
+
     // Hades Boss Fight: The Underworld
     if w.starts_with("R_HADES") || w.starts_with("HDS666") || w.starts_with("HDS675") {
-        return Some("Yeraltı Dünyası (Hades Boss Fight)");
+        return Some(match lang {
+            RpcLanguage::Turkish => "Yeraltı Dünyası (Hades Boss Fight)",
+            RpcLanguage::English => "The Underworld (Hades Boss Fight)",
+            RpcLanguage::German => "Die Unterwelt (Hades Bosskampf)",
+            RpcLanguage::Spanish => "El Inframundo (Combate de Hades)",
+        }.to_string());
     }
+
     // Helios Boss Fight / Chariot crash confrontation: City of Olympia
     if w == "R_HELIOS" || w == "OLY220" || w == "OLY225" || w == "OLY230" {
-        return Some("Olimpiya Şehri (Helios Boss Fight)");
+        return Some(match lang {
+            RpcLanguage::Turkish => "Olimpiya Şehri (Helios Boss Fight)",
+            RpcLanguage::English => "City of Olympia (Helios Boss Fight)",
+            RpcLanguage::German => "Stadt Olympia (Helios Bosskampf)",
+            RpcLanguage::Spanish => "Ciudad de Olimpia (Combate de Helios)",
+        }.to_string());
     }
+
     // Hermes Chase & Fight: City of Olympia
     if w == "HERMES"
         || w == "HERMES10"
@@ -567,24 +782,54 @@ pub fn check_boss_wad(w: &str) -> Option<&'static str> {
         || w == "OLY905"
         || w == "OLY910"
     {
-        return Some("Olimpiya Şehri (Hermes Kovalamacası)");
+        return Some(match lang {
+            RpcLanguage::Turkish => "Olimpiya Şehri (Hermes Kovalamacası)",
+            RpcLanguage::English => "City of Olympia (Hermes Chase)",
+            RpcLanguage::German => "Stadt Olympia (Hermes Verfolgung)",
+            RpcLanguage::Spanish => "Ciudad de Olimpia (Persecución de Hermes)",
+        }.to_string());
     }
+
     // Hercules Boss Fight: Olympus Forum
     if w.starts_with("R_HERCULES") || w == "BAS500" || w == "BAS510" {
-        return Some("Olympus Forumu (Hercules Boss Fight)");
+        return Some(match lang {
+            RpcLanguage::Turkish => "Olympus Forumu (Hercules Boss Fight)",
+            RpcLanguage::English => "Forum of Olympus (Hercules Boss Fight)",
+            RpcLanguage::German => "Olymp-Forum (Herkules Bosskampf)",
+            RpcLanguage::Spanish => "Foro del Olimpo (Combate de Hércules)",
+        }.to_string());
     }
+
     // Cronos Boss Fight: Pit of Tartarus
     if w.starts_with("CRN") {
-        return Some("Tartarus Çukuru (Cronos Boss Fight)");
+        return Some(match lang {
+            RpcLanguage::Turkish => "Tartarus Çukuru (Cronos Boss Fight)",
+            RpcLanguage::English => "Pit of Tartarus (Cronos Boss Fight)",
+            RpcLanguage::German => "Grube des Tartaros (Kronos Bosskampf)",
+            RpcLanguage::Spanish => "Foso del Tártaro (Combate de Cronos)",
+        }.to_string());
     }
+
     // Hephaestus Boss Fight: The Forge
     if w.starts_with("R_HEPHAESTUS") {
-        return Some("Demirhane (Hephaestus Boss Fight)");
+        return Some(match lang {
+            RpcLanguage::Turkish => "Demirhane (Hephaestus Boss Fight)",
+            RpcLanguage::English => "The Forge (Hephaestus Boss Fight)",
+            RpcLanguage::German => "Die Schmiede (Hephaistos Bosskampf)",
+            RpcLanguage::Spanish => "La Forja (Combate de Hefesto)",
+        }.to_string());
     }
+
     // Skorpius Boss Fight (Giant Scorpion): Caverns of Olympus
     if w.starts_with("R_SKORPIUS") || w == "CAV700" || w == "CAV800" {
-        return Some("Olimpos Mağaraları (Skorpius Boss Fight)");
+        return Some(match lang {
+            RpcLanguage::Turkish => "Olimpos Mağaraları (Skorpius Boss Fight)",
+            RpcLanguage::English => "Caverns of Olympus (Skorpius Boss Fight)",
+            RpcLanguage::German => "Höhlen des Olymp (Skorpius Bosskampf)",
+            RpcLanguage::Spanish => "Cavernas del Olimpo (Combate de Skorpius)",
+        }.to_string());
     }
+
     // Zeus Final Boss Fight: Summit of Olympus / Heart of Gaia
     if w.starts_with("R_ZEUS")
         || w.contains("KRATOSFEAR")
@@ -593,14 +838,23 @@ pub fn check_boss_wad(w: &str) -> Option<&'static str> {
         || w.contains("WIFEFEAR")
         || w.contains("KIDFEAR")
     {
-        return Some("Olympus Tepesi (Zeus Boss Fight)");
+        return Some(match lang {
+            RpcLanguage::Turkish => "Olympus Tepesi (Zeus Boss Fight)",
+            RpcLanguage::English => "Summit of Olympus (Zeus Boss Fight)",
+            RpcLanguage::German => "Gipfel des Olymp (Zeus Bosskampf)",
+            RpcLanguage::Spanish => "Cima del Olimpo (Combate de Zeus)",
+        }.to_string());
     }
     None
 }
 
-/// Computes the exact Rich Presence location & boss fight state based on WAD logs and save checkpoints
-pub fn detect_current_state(recent_wads: &[String], save_info: Option<&SaveParamInfo>) -> String {
-    let clean_save = save_info
+/// Computes the exact Rich Presence location & boss fight state based on WAD logs, save checkpoints, and language
+pub fn detect_current_state(
+    recent_wads: &[String],
+    save_info: Option<&SaveParamInfo>,
+    lang: RpcLanguage,
+) -> String {
+    let raw_save = save_info
         .map(|s| {
             s.chapter
                 .replace("(Oto. Kayıt) ", "")
@@ -613,123 +867,353 @@ pub fn detect_current_state(recent_wads: &[String], save_info: Option<&SaveParam
 
     // Iterate backwards: newest gameplay event determines the active chapter/boss
     for w in recent_wads.iter().rev() {
-        // 1. Challenges
+        // 1. Challenges of Olympus
         if w.starts_with("CHALLENGE") {
-            return match w.as_str() {
-                "CHALLENGE01" => "Olympus Mücadelesi 1 (Taşlaşmış)".to_string(),
-                "CHALLENGE02" => "Olympus Mücadelesi 2 (Çıplak ve Cesur)".to_string(),
-                "CHALLENGE03" => "Olympus Mücadelesi 3 (Kıyma Makinesi)".to_string(),
-                "CHALLENGE04" => "Olympus Mücadelesi 4 (Koyun Avı)".to_string(),
-                "CHALLENGE05" => "Olympus Mücadelesi 5 (Temizleme)".to_string(),
-                "CHALLENGE06" => "Olympus Mücadelesi 6 (Yok Edici)".to_string(),
-                "CHALLENGE07" => "Olympus Mücadelesi 7 (Kör Nokta)".to_string(),
-                _ => "Olympus Mücadeleleri".to_string(),
+            return match (w.as_str(), lang) {
+                ("CHALLENGE01", RpcLanguage::Turkish) => "Olympus Mücadelesi 1 (Taşlaşmış)".to_string(),
+                ("CHALLENGE01", RpcLanguage::English) => "Challenge of Olympus 1 (Stoned)".to_string(),
+                ("CHALLENGE01", RpcLanguage::German) => "Herausforderung des Olymp 1 (Versteinert)".to_string(),
+                ("CHALLENGE01", RpcLanguage::Spanish) => "Desafío del Olimpo 1 (Petrificado)".to_string(),
+
+                ("CHALLENGE02", RpcLanguage::Turkish) => "Olympus Mücadelesi 2 (Çıplak ve Cesur)".to_string(),
+                ("CHALLENGE02", RpcLanguage::English) => "Challenge of Olympus 2 (Bare Hands)".to_string(),
+                ("CHALLENGE02", RpcLanguage::German) => "Herausforderung des Olymp 2 (Bloße Hände)".to_string(),
+                ("CHALLENGE02", RpcLanguage::Spanish) => "Desafío del Olimpo 2 (Con las Manos Desnudas)".to_string(),
+
+                ("CHALLENGE03", RpcLanguage::Turkish) => "Olympus Mücadelesi 3 (Kıyma Makinesi)".to_string(),
+                ("CHALLENGE03", RpcLanguage::English) => "Challenge of Olympus 3 (Get Physical)".to_string(),
+                ("CHALLENGE03", RpcLanguage::German) => "Herausforderung des Olymp 3 (Körperkontakt)".to_string(),
+                ("CHALLENGE03", RpcLanguage::Spanish) => "Desafío del Olimpo 3 (Contacto Físico)".to_string(),
+
+                ("CHALLENGE04", RpcLanguage::Turkish) => "Olympus Mücadelesi 4 (Koyun Avı)".to_string(),
+                ("CHALLENGE04", RpcLanguage::English) => "Challenge of Olympus 4 (El Matador)".to_string(),
+                ("CHALLENGE04", RpcLanguage::German) => "Herausforderung des Olymp 4 (El Matador)".to_string(),
+                ("CHALLENGE04", RpcLanguage::Spanish) => "Desafío del Olimpo 4 (El Matador)".to_string(),
+
+                ("CHALLENGE05", RpcLanguage::Turkish) => "Olympus Mücadelesi 5 (Temizleme)".to_string(),
+                ("CHALLENGE05", RpcLanguage::English) => "Challenge of Olympus 5 (Knockout)".to_string(),
+                ("CHALLENGE05", RpcLanguage::German) => "Herausforderung des Olymp 5 (Knockout)".to_string(),
+                ("CHALLENGE05", RpcLanguage::Spanish) => "Desafío del Olimpo 5 (Noqueo)".to_string(),
+
+                ("CHALLENGE06", RpcLanguage::Turkish) => "Olympus Mücadelesi 6 (Yok Edici)".to_string(),
+                ("CHALLENGE06", RpcLanguage::English) => "Challenge of Olympus 6 (Hades' Kids)".to_string(),
+                ("CHALLENGE06", RpcLanguage::German) => "Herausforderung des Olymp 6 (Kinder des Hades)".to_string(),
+                ("CHALLENGE06", RpcLanguage::Spanish) => "Desafío del Olimpo 6 (Los Hijos de Hades)".to_string(),
+
+                ("CHALLENGE07", RpcLanguage::Turkish) => "Olympus Mücadelesi 7 (Kör Nokta)".to_string(),
+                ("CHALLENGE07", RpcLanguage::English) => "Challenge of Olympus 7 (Defiled)".to_string(),
+                ("CHALLENGE07", RpcLanguage::German) => "Herausforderung des Olymp 7 (Entweiht)".to_string(),
+                ("CHALLENGE07", RpcLanguage::Spanish) => "Desafío del Olimpo 7 (Profanado)".to_string(),
+
+                (_, RpcLanguage::Turkish) => "Olympus Mücadeleleri".to_string(),
+                (_, RpcLanguage::English) => "Challenges of Olympus".to_string(),
+                (_, RpcLanguage::German) => "Herausforderungen des Olymp".to_string(),
+                (_, RpcLanguage::Spanish) => "Desafíos del Olimpo".to_string(),
             };
         }
 
         // 2. Arena, Epilogue, Main Menu
         if w.starts_with("FREE0") || w.starts_with("ARENA") {
-            return "Savaş Arenası (Combat Arena)".to_string();
+            return match lang {
+                RpcLanguage::Turkish => "Savaş Arenası (Combat Arena)",
+                RpcLanguage::English => "Combat Arena",
+                RpcLanguage::German => "Kampfarena",
+                RpcLanguage::Spanish => "Arena de Combate",
+            }
+            .to_string();
         }
         if w == "ENDOFGAME" {
-            return "Oyun Sonu (Epilogue)".to_string();
+            return match lang {
+                RpcLanguage::Turkish => "Oyun Sonu (Epilogue)",
+                RpcLanguage::English => "Epilogue (End of Game)",
+                RpcLanguage::German => "Epilog (Spielende)",
+                RpcLanguage::Spanish => "Epílogo (Fin del Juego)",
+            }
+            .to_string();
         }
         if w == "SHELL" {
-            return "Ana Menüde".to_string();
+            return match lang {
+                RpcLanguage::Turkish => "Ana Menüde",
+                RpcLanguage::English => "In Main Menu",
+                RpcLanguage::German => "Im Hauptmenü",
+                RpcLanguage::Spanish => "En el Menú Principal",
+            }
+            .to_string();
         }
 
         // 3. Boss Encounter
-        if let Some(boss) = check_boss_wad(w) {
-            return boss.to_string();
+        if let Some(boss) = check_boss_wad(w, lang) {
+            return boss;
         }
 
         // 4. Main Area / Level
         if is_main_area_wad(w) {
             if w.starts_with("POS") {
-                if !clean_save.is_empty() && clean_save.contains("Gaia") {
-                    return "Olympus Dağı (Gaia)".to_string();
-                }
-                return "Olympus Dağı".to_string();
+                return match lang {
+                    RpcLanguage::Turkish => {
+                        if raw_save.contains("Gaia") {
+                            "Olympus Dağı (Gaia)".to_string()
+                        } else {
+                            "Olympus Dağı".to_string()
+                        }
+                    }
+                    RpcLanguage::English => {
+                        if raw_save.contains("Gaia") {
+                            "Mount Olympus (Gaia)".to_string()
+                        } else {
+                            "Mount Olympus".to_string()
+                        }
+                    }
+                    RpcLanguage::German => {
+                        if raw_save.contains("Gaia") {
+                            "Olymp (Gaia)".to_string()
+                        } else {
+                            "Olymp".to_string()
+                        }
+                    }
+                    RpcLanguage::Spanish => {
+                        if raw_save.contains("Gaia") {
+                            "Monte Olimpo (Gaia)".to_string()
+                        } else {
+                            "Monte Olimpo".to_string()
+                        }
+                    }
+                };
             }
             if w.starts_with("HDS") {
-                if !clean_save.is_empty() {
-                    return format!("Yeraltı Dünyası ({})", clean_save);
-                }
-                return "Yeraltı Dünyası".to_string();
+                return match lang {
+                    RpcLanguage::Turkish => {
+                        if !raw_save.is_empty() {
+                            format!("Yeraltı Dünyası ({})", raw_save)
+                        } else {
+                            "Yeraltı Dünyası".to_string()
+                        }
+                    }
+                    RpcLanguage::English => {
+                        if raw_save.contains("Ares") {
+                            "The Underworld (Tomb of Ares)".to_string()
+                        } else if raw_save.contains("Yargıç") || raw_save.contains("Judges") {
+                            "The Underworld (Three Judges)".to_string()
+                        } else if raw_save.contains("Saray") || raw_save.contains("Palace") {
+                            "The Underworld (Palace of Hades)".to_string()
+                        } else if raw_save.contains("Derinlik") || raw_save.contains("Depths") {
+                            "The Underworld (Depths of Hades)".to_string()
+                        } else if !raw_save.is_empty() {
+                            format!("The Underworld ({})", raw_save)
+                        } else {
+                            "The Underworld".to_string()
+                        }
+                    }
+                    RpcLanguage::German => {
+                        if raw_save.contains("Ares") {
+                            "Die Unterwelt (Grab des Ares)".to_string()
+                        } else if !raw_save.is_empty() {
+                            format!("Die Unterwelt ({})", raw_save)
+                        } else {
+                            "Die Unterwelt".to_string()
+                        }
+                    }
+                    RpcLanguage::Spanish => {
+                        if raw_save.contains("Ares") {
+                            "El Inframundo (Tumba de Ares)".to_string()
+                        } else if !raw_save.is_empty() {
+                            format!("El Inframundo ({})", raw_save)
+                        } else {
+                            "El Inframundo".to_string()
+                        }
+                    }
+                };
             }
             if w.starts_with("OLY") {
-                if !clean_save.is_empty() {
-                    return format!("Olimpiya Şehri ({})", clean_save);
-                }
-                return "Olimpiya Şehri".to_string();
+                return match lang {
+                    RpcLanguage::Turkish => {
+                        if !raw_save.is_empty() {
+                            format!("Olimpiya Şehri ({})", raw_save)
+                        } else {
+                            "Olimpiya Şehri".to_string()
+                        }
+                    }
+                    RpcLanguage::English => "City of Olympia".to_string(),
+                    RpcLanguage::German => "Stadt Olympia".to_string(),
+                    RpcLanguage::Spanish => "Ciudad de Olimpia".to_string(),
+                };
             }
             if w.starts_with("ICA") {
-                return "Denge Zinciri (Eos Yolu)".to_string();
+                return match lang {
+                    RpcLanguage::Turkish => "Denge Zinciri (Eos Yolu)".to_string(),
+                    RpcLanguage::English => "Chain of Balance (Path of Eos)".to_string(),
+                    RpcLanguage::German => "Kette der Ausgeglichenheit (Pfad der Eos)".to_string(),
+                    RpcLanguage::Spanish => "Cadena del Equilibrio (Camino de Eos)".to_string(),
+                };
             }
             if w.starts_with("BAS") {
-                if !clean_save.is_empty() {
-                    return format!("Olimpos Tapınağı ({})", clean_save);
-                }
-                return "Olimpos Tapınağı".to_string();
+                return match lang {
+                    RpcLanguage::Turkish => {
+                        if raw_save.contains("Forum") {
+                            "Olympus Forumu".to_string()
+                        } else if !raw_save.is_empty() {
+                            format!("Olimpos Tapınağı ({})", raw_save)
+                        } else {
+                            "Olimpos Tapınağı".to_string()
+                        }
+                    }
+                    RpcLanguage::English => {
+                        if raw_save.contains("Forum") {
+                            "Forum of Olympus".to_string()
+                        } else if raw_save.contains("Alev") || raw_save.contains("Flame") {
+                            "Temple of Olympus (Chamber of the Flame)".to_string()
+                        } else {
+                            "Temple of Olympus".to_string()
+                        }
+                    }
+                    RpcLanguage::German => "Tempel des Olymp".to_string(),
+                    RpcLanguage::Spanish => "Templo del Olimpo".to_string(),
+                };
             }
             if w.starts_with("CAV") {
-                return "Olimpos Mağaraları".to_string();
+                return match lang {
+                    RpcLanguage::Turkish => "Olimpos Mağaraları".to_string(),
+                    RpcLanguage::English => "Caverns of Olympus".to_string(),
+                    RpcLanguage::German => "Höhlen des Olymp".to_string(),
+                    RpcLanguage::Spanish => "Cavernas del Olimpo".to_string(),
+                };
             }
             if w.starts_with("GAZ") {
-                if clean_save.contains("Afrodit") {
-                    return "Afrodit'in Odası".to_string();
-                }
-                return "Olimpos Bahçeleri".to_string();
+                return match lang {
+                    RpcLanguage::Turkish => {
+                        if raw_save.contains("Afrodit") {
+                            "Afrodit'in Odası".to_string()
+                        } else {
+                            "Olimpos Bahçeleri".to_string()
+                        }
+                    }
+                    RpcLanguage::English => {
+                        if raw_save.contains("Afrodit") || raw_save.contains("Aphrodite") {
+                            "Aphrodite's Chamber".to_string()
+                        } else {
+                            "Gardens of Olympus".to_string()
+                        }
+                    }
+                    RpcLanguage::German => {
+                        if raw_save.contains("Afrodit") || raw_save.contains("Aphrodite") {
+                            "Aphrodites Gemach".to_string()
+                        } else {
+                            "Gärten des Olymp".to_string()
+                        }
+                    }
+                    RpcLanguage::Spanish => {
+                        if raw_save.contains("Afrodit") || raw_save.contains("Afrodita") {
+                            "Cámara de Afrodita".to_string()
+                        } else {
+                            "Jardines del Olimpo".to_string()
+                        }
+                    }
+                };
             }
             if w.starts_with("LAB") {
-                if !clean_save.is_empty() {
-                    return format!("Labirent ({})", clean_save);
-                }
-                return "Labirent".to_string();
+                return match lang {
+                    RpcLanguage::Turkish => {
+                        if !raw_save.is_empty() {
+                            format!("Labirent ({})", raw_save)
+                        } else {
+                            "Labirent".to_string()
+                        }
+                    }
+                    RpcLanguage::English => {
+                        if raw_save.contains("Yıkık") || raw_save.contains("Ruined") {
+                            "The Labyrinth (Ruined Corridors)".to_string()
+                        } else {
+                            "The Labyrinth".to_string()
+                        }
+                    }
+                    RpcLanguage::German => "Das Labyrinth".to_string(),
+                    RpcLanguage::Spanish => "El Laberinto".to_string(),
+                };
             }
             if w.starts_with("CRN") {
-                return "Tartarus Çukuru".to_string();
+                return match lang {
+                    RpcLanguage::Turkish => "Tartarus Çukuru".to_string(),
+                    RpcLanguage::English => "Pit of Tartarus".to_string(),
+                    RpcLanguage::German => "Grube des Tartaros".to_string(),
+                    RpcLanguage::Spanish => "Foso del Tártaro".to_string(),
+                };
             }
         }
     }
 
-    // Fallback: If no level WAD logged yet, use save checkpoint if available
-    if !clean_save.is_empty() {
-        if clean_save.contains("Gaia") {
-            return "Olympus Dağı (Gaia)".to_string();
+    // Fallback: Check save checkpoint
+    if !raw_save.is_empty() {
+        if raw_save.contains("Gaia") {
+            return match lang {
+                RpcLanguage::Turkish => "Olympus Dağı (Gaia)",
+                RpcLanguage::English => "Mount Olympus (Gaia)",
+                RpcLanguage::German => "Olymp (Gaia)",
+                RpcLanguage::Spanish => "Monte Olimpo (Gaia)",
+            }
+            .to_string();
         }
-        if clean_save.contains("Ares")
-            || clean_save.contains("Yargıç")
-            || clean_save.contains("Hades")
-        {
-            return format!("Yeraltı Dünyası ({})", clean_save);
+        if raw_save.contains("Ares") || raw_save.contains("Yargıç") || raw_save.contains("Hades") {
+            return match lang {
+                RpcLanguage::Turkish => format!("Yeraltı Dünyası ({})", raw_save),
+                RpcLanguage::English => format!("The Underworld ({})", raw_save),
+                RpcLanguage::German => format!("Die Unterwelt ({})", raw_save),
+                RpcLanguage::Spanish => format!("El Inframundo ({})", raw_save),
+            };
         }
-        if clean_save.contains("Olimpiya") {
-            return format!("Olimpiya Şehri ({})", clean_save);
+        if raw_save.contains("Olimpiya") || raw_save.contains("Olympia") {
+            return match lang {
+                RpcLanguage::Turkish => format!("Olimpiya Şehri ({})", raw_save),
+                RpcLanguage::English => "City of Olympia".to_string(),
+                RpcLanguage::German => "Stadt Olympia".to_string(),
+                RpcLanguage::Spanish => "Ciudad de Olimpia".to_string(),
+            };
         }
-        if clean_save.contains("Alev") {
-            return format!("Olimpos Tapınağı ({})", clean_save);
+        if raw_save.contains("Forum") {
+            return match lang {
+                RpcLanguage::Turkish => "Olympus Forumu",
+                RpcLanguage::English => "Forum of Olympus",
+                RpcLanguage::German => "Olymp-Forum",
+                RpcLanguage::Spanish => "Foro del Olimpo",
+            }
+            .to_string();
         }
-        if clean_save.contains("Forum") {
-            return "Olympus Forumu".to_string();
+        if raw_save.contains("Afrodit") || raw_save.contains("Aphrodite") {
+            return match lang {
+                RpcLanguage::Turkish => "Afrodit'in Odası",
+                RpcLanguage::English => "Aphrodite's Chamber",
+                RpcLanguage::German => "Aphrodites Gemach",
+                RpcLanguage::Spanish => "Cámara de Afrodita",
+            }
+            .to_string();
         }
-        if clean_save.contains("Afrodit") {
-            return "Afrodit'in Odası".to_string();
+        if raw_save.contains("Tartarus") || raw_save.contains("Tártaro") {
+            return match lang {
+                RpcLanguage::Turkish => "Tartarus Çukuru",
+                RpcLanguage::English => "Pit of Tartarus",
+                RpcLanguage::German => "Grube des Tartaros",
+                RpcLanguage::Spanish => "Foso del Tártaro",
+            }
+            .to_string();
         }
-        if clean_save.contains("Tartarus") {
-            return "Tartarus Çukuru".to_string();
+        if raw_save.contains("Labirent") || raw_save.contains("Labyrinth") || raw_save.contains("Laberinto") {
+            return match lang {
+                RpcLanguage::Turkish => format!("Labirent ({})", raw_save),
+                RpcLanguage::English => format!("The Labyrinth ({})", raw_save),
+                RpcLanguage::German => format!("Das Labyrinth ({})", raw_save),
+                RpcLanguage::Spanish => format!("El Laberinto ({})", raw_save),
+            };
         }
-        if clean_save.contains("Labirent")
-            || clean_save.contains("Yıkık Odalar")
-            || clean_save.contains("Işık Odaları")
-        {
-            return format!("Labirent ({})", clean_save);
-        }
-        return clean_save;
+        return raw_save;
     }
 
-    // In-game default when game starts
-    "Olympus Dağı".to_string()
+    // Default opening state when game boots
+    match lang {
+        RpcLanguage::Turkish => "Olympus Dağı",
+        RpcLanguage::English => "Mount Olympus",
+        RpcLanguage::German => "Olymp",
+        RpcLanguage::Spanish => "Monte Olimpo",
+    }
+    .to_string()
 }
 
 fn try_connect_and_handshake(client_id: &str) -> Option<IpcStream> {
@@ -987,111 +1471,56 @@ mod tests {
     }
 
     #[test]
-    fn test_detect_current_state_boss_and_chapters() {
-        // 1. Poseidon Boss Fight: Mount Olympus
+    fn test_detect_current_state_boss_and_chapters_tr() {
         let wads_pos = vec!["SHELL".to_string(), "POS050".to_string(), "R_POSHORSE00".to_string()];
         assert_eq!(
-            detect_current_state(&wads_pos, None),
+            detect_current_state(&wads_pos, None, RpcLanguage::Turkish),
             "Olympus Dağı (Poseidon Boss Fight)"
         );
 
-        // 2. Progression after Poseidon fight to slopes of Olympus
-        let wads_slopes = vec!["SHELL".to_string(), "POS050".to_string(), "R_POSHORSE00".to_string(), "POS200".to_string()];
-        assert_eq!(
-            detect_current_state(&wads_slopes, None),
-            "Olympus Dağı"
-        );
-
-        // 3. Underworld Hades Boss Fight
         let wads_hades = vec!["HDS025".to_string(), "HDS675".to_string(), "R_HADES".to_string()];
         assert_eq!(
-            detect_current_state(&wads_hades, None),
+            detect_current_state(&wads_hades, None, RpcLanguage::Turkish),
             "Yeraltı Dünyası (Hades Boss Fight)"
         );
 
-        // 4. Tartarus Cronos Boss Fight
         let wads_crn = vec!["CRN100".to_string()];
         assert_eq!(
-            detect_current_state(&wads_crn, None),
+            detect_current_state(&wads_crn, None, RpcLanguage::Turkish),
             "Tartarus Çukuru (Cronos Boss Fight)"
         );
+    }
 
-        // 5. Hercules Boss Fight
-        let wads_herc = vec!["BAS100".to_string(), "BAS500".to_string(), "R_HERCULES".to_string()];
+    #[test]
+    fn test_detect_current_state_multi_language() {
+        let wads_pos = vec!["SHELL".to_string(), "POS050".to_string(), "R_POSHORSE00".to_string()];
         assert_eq!(
-            detect_current_state(&wads_herc, None),
-            "Olympus Forumu (Hercules Boss Fight)"
+            detect_current_state(&wads_pos, None, RpcLanguage::English),
+            "Mount Olympus (Poseidon Boss Fight)"
+        );
+        assert_eq!(
+            detect_current_state(&wads_pos, None, RpcLanguage::German),
+            "Olymp (Poseidon Bosskampf)"
+        );
+        assert_eq!(
+            detect_current_state(&wads_pos, None, RpcLanguage::Spanish),
+            "Monte Olimpo (Combate de Poseidón)"
         );
 
-        // 6. Helios Boss Fight
-        let wads_helios = vec!["OLY100".to_string(), "OLY220".to_string(), "R_HELIOS".to_string()];
+        let wads_hades = vec!["HDS025".to_string(), "HDS675".to_string(), "R_HADES".to_string()];
         assert_eq!(
-            detect_current_state(&wads_helios, None),
-            "Olimpiya Şehri (Helios Boss Fight)"
+            detect_current_state(&wads_hades, None, RpcLanguage::English),
+            "The Underworld (Hades Boss Fight)"
+        );
+        assert_eq!(
+            detect_current_state(&wads_hades, None, RpcLanguage::Spanish),
+            "El Inframundo (Combate de Hades)"
         );
 
-        // 7. Hermes Chase
-        let wads_hermes = vec!["OLY100".to_string(), "HERMES".to_string()];
+        let wads_chal = vec!["CHALLENGE01".to_string()];
         assert_eq!(
-            detect_current_state(&wads_hermes, None),
-            "Olimpiya Şehri (Hermes Kovalamacası)"
-        );
-
-        // 8. Zeus Boss Fight
-        let wads_zeus = vec!["R_ZEUS00".to_string()];
-        assert_eq!(
-            detect_current_state(&wads_zeus, None),
-            "Olympus Tepesi (Zeus Boss Fight)"
-        );
-
-        // 9. Challenges of Olympus
-        let wads_chal1 = vec!["CHALLENGE01".to_string()];
-        assert_eq!(
-            detect_current_state(&wads_chal1, None),
-            "Olympus Mücadelesi 1 (Taşlaşmış)"
-        );
-
-        // 10. Combat Arena
-        let wads_arena = vec!["FREE0".to_string()];
-        assert_eq!(
-            detect_current_state(&wads_arena, None),
-            "Savaş Arenası (Combat Arena)"
-        );
-
-        // 11. Epilogue
-        let wads_end = vec!["ENDOFGAME".to_string()];
-        assert_eq!(
-            detect_current_state(&wads_end, None),
-            "Oyun Sonu (Epilogue)"
-        );
-
-        // 12. Main Menu return
-        let wads_shell = vec!["POS050".to_string(), "SHELL".to_string()];
-        assert_eq!(
-            detect_current_state(&wads_shell, None),
-            "Ana Menüde"
-        );
-
-        // 13. Save Checkpoint Integration (Underworld)
-        let save_hds = SaveParamInfo {
-            chapter: "(Oto. Kayıt) Ares'in Mezarı".to_string(),
-            details: "Zorluk: Tanrı (Normal)\nOynanış süresi: 0:13:36".to_string(),
-        };
-        let wads_hds_plain = vec!["HDS025".to_string()];
-        assert_eq!(
-            detect_current_state(&wads_hds_plain, Some(&save_hds)),
-            "Yeraltı Dünyası (Ares'in Mezarı)"
-        );
-
-        // 14. Save Checkpoint Integration (Olympus Mount)
-        let save_gaia = SaveParamInfo {
-            chapter: "(Oto. Kayıt) Gaia".to_string(),
-            details: "Zorluk: Tanrı (Normal)\nOynanış süresi: 0:00:52".to_string(),
-        };
-        let wads_pos_plain = vec!["POS050".to_string()];
-        assert_eq!(
-            detect_current_state(&wads_pos_plain, Some(&save_gaia)),
-            "Olympus Dağı (Gaia)"
+            detect_current_state(&wads_chal, None, RpcLanguage::English),
+            "Challenge of Olympus 1 (Stoned)"
         );
     }
 

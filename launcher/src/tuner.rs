@@ -219,6 +219,14 @@ fn update_run_sh(base_dir: &Path, config: &LauncherConfig) -> Result<(), String>
         if config.background_controller_input { "1" } else { "0" },
     );
 
+    let icon_bmp = base_dir.join("gow3.bmp");
+    let icon_png = base_dir.join("gow3.png");
+    if icon_bmp.is_file() {
+        replace_or_insert_env(&mut content, "GOW3_WINDOW_ICON", &icon_bmp.to_string_lossy());
+    } else if icon_png.is_file() {
+        replace_or_insert_env(&mut content, "GOW3_WINDOW_ICON", &icon_png.to_string_lossy());
+    }
+
     fs::write(&run_sh, content).map_err(|e| e.to_string())?;
     Ok(())
 }

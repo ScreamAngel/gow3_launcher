@@ -70,7 +70,25 @@ pub fn ensure_runtime_assets(base_dir: &Path) -> Result<(PathBuf, PathBuf), Stri
         let _ = fs::write(&patch_xml, PATCH_GOW3_XML);
     }
 
+    ensure_game_icon_bmp(base_dir);
+
     Ok((scripts_dir, patches_dir))
+}
+
+/// Ensures gow3.bmp is available for SDL3 window icon loading.
+pub fn ensure_game_icon_bmp(base_dir: &Path) {
+    let bmp_path = base_dir.join("gow3.bmp");
+    if !bmp_path.is_file() {
+        let png_path = base_dir.join("gow3.png");
+        let img = if png_path.is_file() {
+            image::open(&png_path).ok()
+        } else {
+            image::load_from_memory(include_bytes!("../../gow3.png")).ok()
+        };
+        if let Some(img) = img {
+            let _ = img.save_with_format(&bmp_path, image::ImageFormat::Bmp);
+        }
+    }
 }
 
 /// Finds an available Python 3 interpreter (checking local runtime bundle first, then system PATH)
@@ -1520,6 +1538,15 @@ pub fn launch_gow3(
     cmd.env("GOW3_GAME_DIR", game_dir);
     cmd.env("GOW3_MODS_DIR", &effective_app0);
     cmd.env("GOW3_MOD_TRACE", "1");
+
+    // Native SDL3 window & taskbar icon for gow3-probe
+    let icon_bmp = base_dir.join("gow3.bmp");
+    let icon_png = base_dir.join("gow3.png");
+    if icon_bmp.is_file() {
+        cmd.env("GOW3_WINDOW_ICON", &icon_bmp);
+    } else if icon_png.is_file() {
+        cmd.env("GOW3_WINDOW_ICON", &icon_png);
+    }
     cmd.env(
         "GOW3_FULLSCREEN",
         if config.display_mode != crate::config::DisplayMode::Windowed {

@@ -151,6 +151,16 @@ LINKED = {}
 
 
 def make_link(link, target):
+    if link.is_symlink() or link.is_file():
+        try:
+            link.unlink()
+        except OSError:
+            pass
+    elif link.is_dir():
+        try:
+            remove_link(link)
+        except OSError:
+            pass
     try:
         link.symlink_to(target, target_is_directory=target.is_dir())
         return
@@ -212,13 +222,19 @@ def link_target(path):
 def remove_link(path):
     p_str = str(path)
     try:
-        if path.is_dir() or (hasattr(path, 'is_junction') and path.is_junction()):
+        if path.is_symlink():
+            path.unlink()
+        elif hasattr(path, 'is_junction') and path.is_junction():
+            os.rmdir(path)
+        elif path.is_dir():
             os.rmdir(path)
         else:
             path.unlink()
     except OSError:
         try:
-            if os.path.isdir(path):
+            if path.is_symlink():
+                path.unlink()
+            elif os.path.isdir(path):
                 os.rmdir(path)
             else:
                 path.unlink()

@@ -4443,15 +4443,26 @@ impl eframe::App for LauncherApp {
                 self.discord_rpc.set_in_game(self.base_dir.clone(), now, self.config.target_fps, is_modded);
             }
 
-            // Oyun penceresi açıldığında veya 20 saniye dolduğunda shader ekranını kapat, launcher'ı küçült ve oyunu en öne getir
-            if game_ready_now || elapsed >= 20.0 {
+            // Oyun penceresi açıldığında oyun ekranını en öne getir ve launcher'ı Normal seviyeye çek
+            // Shader ekranı hemen kapanmaz veya görev çubuğuna küçülmez! Oyunun arkasında 10 saniye açık kalır.
+            if game_ready_now && sl.game_ready_at.is_none() {
+                sl.game_ready_at = Some(std::time::Instant::now());
+                ctx.send_viewport_cmd(egui::ViewportCommand::WindowLevel(egui::WindowLevel::Normal));
+                crate::win_input::bring_game_window_to_front(pid);
+            }
+
+            // Oyun açıldıktan 10 saniye sonra (veya algılanamazsa güvenlik zaman aşımı 25 saniye sonra)
+            // shader ekranı arka planda kapanıp standart launcher arayüzüne döner (görev çubuğuna küçülmez!)
+            let should_close = if let Some(ready_at) = sl.game_ready_at {
+                ready_at.elapsed().as_secs_f32() >= 10.0
+            } else {
+                elapsed >= 25.0
+            };
+
+            if should_close {
                 ctx.send_viewport_cmd(egui::ViewportCommand::WindowLevel(egui::WindowLevel::Normal));
                 ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(false));
-                ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(true));
                 self.shader_loading = None;
-
-                // Oyun penceresini Windows üzerinde doğrudan en öne odakla
-                crate::win_input::bring_game_window_to_front(pid);
             } else if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
                 // Güvenlik: Kullanıcı ESC tuşuna basarak ekranı erken kapatabilir
                 ctx.send_viewport_cmd(egui::ViewportCommand::WindowLevel(egui::WindowLevel::Normal));

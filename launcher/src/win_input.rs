@@ -43,11 +43,6 @@ mod imp {
 
     const KEYEVENTF_KEYUP: u32 = 0x0002;
     const SW_RESTORE: i32 = 9;
-    const HWND_TOPMOST: HWND = -1isize as HWND;
-    const HWND_NOTOPMOST: HWND = -2isize as HWND;
-    const SWP_NOSIZE: u32 = 0x0001;
-    const SWP_NOMOVE: u32 = 0x0002;
-    const SWP_SHOWWINDOW: u32 = 0x0040;
 
     #[repr(C)]
     struct POINT {
@@ -90,8 +85,8 @@ mod imp {
         fn ShowWindow(hwnd: HWND, n_cmd_show: i32) -> i32;
         fn SetForegroundWindow(hwnd: HWND) -> i32;
         fn BringWindowToTop(hwnd: HWND) -> i32;
-        fn SetWindowPos(hwnd: HWND, hwnd_insert_after: HWND, x: i32, y: i32, cx: i32, cy: i32, u_flags: u32) -> i32;
         fn EnumWindows(lp_enum_func: unsafe extern "system" fn(hwnd: HWND, lparam: LPARAM) -> i32, lparam: LPARAM) -> i32;
+        fn IsWindowVisible(hwnd: HWND) -> i32;
         fn timeBeginPeriod(u_period: u32) -> u32;
         fn timeEndPeriod(u_period: u32) -> u32;
     }
@@ -190,7 +185,7 @@ mod imp {
         let mut pid: u32 = 0;
         unsafe {
             GetWindowThreadProcessId(hwnd, &mut pid);
-            if (p.target_pid > 0 && pid == p.target_pid) || is_game_window(hwnd) {
+            if ((p.target_pid > 0 && pid == p.target_pid) || is_game_window(hwnd)) && IsWindowVisible(hwnd) != 0 {
                 p.found_hwnd = hwnd;
                 return 0; // stop enumerating
             }
@@ -217,10 +212,8 @@ mod imp {
         if let Some(hwnd) = find_game_hwnd(pid) {
             unsafe {
                 ShowWindow(hwnd, SW_RESTORE);
-                SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
                 BringWindowToTop(hwnd);
                 SetForegroundWindow(hwnd);
-                SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
             }
         }
     }
@@ -283,7 +276,13 @@ mod stub {
     pub fn start_mouse_hook(_pid: u32, _hide_cursor: bool) -> WinInputGuard {
         WinInputGuard
     }
-    pub fn bring_game_window_to_front(_pid: u32) {}
+    pub fn bring_game_window_to_front(pid: u32) {
+        if pid > 0 {
+            let _ = std::process::Command::new("xdotool")
+                .args(["search", "--pid", &pid.to_string(), "windowactivate"])
+                .output();
+        }
+    }
     pub fn find_game_hwnd(_pid: u32) -> Option<isize> {
         None
     }

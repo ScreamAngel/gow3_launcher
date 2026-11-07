@@ -391,22 +391,72 @@ pub fn build_rust_mod_overlay(
         return None;
     }
 
+    fn link_or_copy_dir(target: &Path, link: &Path) -> bool {
+        #[cfg(unix)]
+        {
+            if std::os::unix::fs::symlink(target, link).is_ok() {
+                return true;
+            }
+        }
+        #[cfg(windows)]
+        {
+            if std::os::windows::fs::symlink_dir(target, link).is_ok() {
+                return true;
+            }
+            use std::os::windows::process::CommandExt;
+            let status = Command::new("cmd")
+                .args(["/C", "mklink", "/J"])
+                .arg(link)
+                .arg(target)
+                .creation_flags(0x08000000) // CREATE_NO_WINDOW
+                .status();
+            if let Ok(st) = status {
+                if st.success() && link.is_dir() {
+                    return true;
+                }
+            }
+        }
+
+        // Fallback: create directory and link/copy contents
+        if fs::create_dir_all(link).is_ok() {
+            if let Ok(entries) = fs::read_dir(target) {
+                for entry in entries.flatten() {
+                    let entry_target = entry.path();
+                    let entry_link = link.join(entry.file_name());
+                    if entry_target.is_dir() {
+                        let _ = link_or_copy_dir(&entry_target, &entry_link);
+                    } else {
+                        let _ = link_or_copy_file(&entry_target, &entry_link);
+                    }
+                }
+                return true;
+            }
+        }
+        false
+    }
+
+    fn link_or_copy_file(target: &Path, link: &Path) -> bool {
+        #[cfg(unix)]
+        {
+            if std::os::unix::fs::symlink(target, link).is_ok() {
+                return true;
+            }
+        }
+        if fs::hard_link(target, link).is_ok() {
+            return true;
+        }
+        fs::copy(target, link).is_ok()
+    }
+
     // Link or copy base game root entries into overlay
     if let Ok(entries) = fs::read_dir(game_dir) {
         for entry in entries.flatten() {
             let target = entry.path();
             let link = overlay_dir.join(entry.file_name());
-            #[cfg(unix)]
-            {
-                let _ = std::os::unix::fs::symlink(&target, &link);
-            }
-            #[cfg(windows)]
-            {
-                if target.is_dir() {
-                    let _ = std::os::windows::fs::symlink_dir(&target, &link);
-                } else if fs::hard_link(&target, &link).is_err() {
-                    let _ = fs::copy(&target, &link);
-                }
+            if target.is_dir() {
+                let _ = link_or_copy_dir(&target, &link);
+            } else {
+                let _ = link_or_copy_file(&target, &link);
             }
         }
     }
@@ -426,24 +476,44 @@ pub fn build_rust_mod_overlay(
         None
     }
 
-    fn copy_loose_files(src: &Path, dst: &Path, count: &mut usize) {
+    fn apply_mod_dir(src: &Path, dst: &Path, base_game_src: &Path, count: &mut usize) {
         if let Ok(entries) = fs::read_dir(src) {
             for entry in entries.flatten() {
                 let path = entry.path();
                 let name = entry.file_name();
                 let dest_path = dst.join(&name);
+                let base_child = base_game_src.join(&name);
 
                 if path.is_dir() {
-                    if dest_path.is_symlink() {
+                    let is_link = dest_path.is_symlink();
+                    if is_link {
                         let _ = fs::remove_file(&dest_path);
+                        #[cfg(windows)]
+                        let _ = fs::remove_dir(&dest_path);
+                        let _ = fs::create_dir_all(&dest_path);
+                        if base_child.is_dir() {
+                            if let Ok(base_entries) = fs::read_dir(&base_child) {
+                                for be in base_entries.flatten() {
+                                    let bet = be.path();
+                                    let bel = dest_path.join(be.file_name());
+                                    if bet.is_dir() {
+                                        let _ = link_or_copy_dir(&bet, &bel);
+                                    } else {
+                                        let _ = link_or_copy_file(&bet, &bel);
+                                    }
+                                }
+                            }
+                        }
+                    } else if !dest_path.is_dir() {
+                        let _ = fs::create_dir_all(&dest_path);
                     }
-                    let _ = fs::create_dir_all(&dest_path);
-                    copy_loose_files(&path, &dest_path, count);
+
+                    apply_mod_dir(&path, &dest_path, &base_child, count);
                 } else if path.is_file() {
                     if path.extension().map(|e| e.eq_ignore_ascii_case("xml")).unwrap_or(false) {
                         continue;
                     }
-                    if dest_path.exists() {
+                    if dest_path.is_symlink() || dest_path.is_file() {
                         let _ = fs::remove_file(&dest_path);
                     }
                     if fs::copy(&path, &dest_path).is_ok() {
@@ -457,8 +527,18 @@ pub fn build_rust_mod_overlay(
     let mut applied = 0;
     for (_name, path) in enabled_mods {
         if let Some(root) = find_content_root(&path) {
-            copy_loose_files(&root, &overlay_dir, &mut applied);
+            apply_mod_dir(&root, &overlay_dir, game_dir, &mut applied);
         }
+    }
+
+    // Safety validation: Ensure eboot.bin and EXEC directory are present in overlay.
+    // If missing, NEVER return a broken directory to avoid black screen on game launch!
+    if !overlay_dir.join("eboot.bin").is_file() || !overlay_dir.join("EXEC").is_dir() {
+        crate::log_error!(
+            "Rust mod overlay validation failed (missing eboot.bin or EXEC). Falling back to original game_dir."
+        );
+        let _ = fs::remove_dir_all(&overlay_dir);
+        return None;
     }
 
     if applied > 0 {
@@ -1106,6 +1186,7 @@ pub fn launch_gow3(
         if let Some(rust_overlay) = build_rust_mod_overlay(game_dir, &out_dir, &mods_dir, config) {
             crate::log_info!("Rust mod overlay active (fallback). Mounting overlay: {:?}", rust_overlay);
             effective_app0 = rust_overlay;
+            mods_applied = true;
         }
     }
 
@@ -1536,7 +1617,11 @@ pub fn launch_gow3(
     cmd.env("GOW3_PATCHES_ONLY", "1");
     cmd.env("GOW3_CONFIG", &config_ini);
     cmd.env("GOW3_GAME_DIR", game_dir);
-    cmd.env("GOW3_MODS_DIR", &effective_app0);
+    if mods_applied {
+        cmd.env("GOW3_MODS_DIR", &effective_app0);
+    } else {
+        cmd.env_remove("GOW3_MODS_DIR");
+    }
     cmd.env("GOW3_MOD_TRACE", "1");
 
     // Native SDL3 window & taskbar icon for gow3-probe
@@ -1701,6 +1786,7 @@ mod tests {
 
         fs::create_dir_all(game_dir.join("EXEC/WAD")).unwrap();
         fs::write(game_dir.join("EXEC/WAD/ORIG.WAD"), b"ORIG").unwrap();
+        fs::write(game_dir.join("eboot.bin"), b"EBOOT").unwrap();
 
         let mod_a = mods_dir.join("ModA/dvdroot_ps4/EXEC/WAD");
         fs::create_dir_all(&mod_a).unwrap();

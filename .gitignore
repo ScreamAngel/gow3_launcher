@@ -10,6 +10,7 @@ user/
 out/
 GLCache/
 .runtime/
+mod-game-*/
 vkd3d-proton.cache
 fsr4_shaders/
 .local/

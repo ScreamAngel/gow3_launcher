@@ -41,10 +41,28 @@ mod imp {
     const VK_F18: u8 = 0x81;
     const VK_F19: u8 = 0x82;
 
+    // Direct Windows hardware scan codes for F13-F19 mapped by SDL3's windows_scancode_table:
+    // 0x64 -> SDL_SCANCODE_F13 (Square / Light Attack)
+    // 0x65 -> SDL_SCANCODE_F14 (Triangle / Heavy Attack)
+    // 0x66 -> SDL_SCANCODE_F15 (Circle / Grab)
+    // 0x67 -> SDL_SCANCODE_F16 (Cross / Jump)
+    // 0x68 -> SDL_SCANCODE_F17
+    // 0x69 -> SDL_SCANCODE_F18
+    // 0x6A -> SDL_SCANCODE_F19
+    const SCAN_F13: u8 = 0x64;
+    const SCAN_F14: u8 = 0x65;
+    const SCAN_F15: u8 = 0x66;
+    const SCAN_F16: u8 = 0x67;
+    const SCAN_F17: u8 = 0x68;
+    const SCAN_F18: u8 = 0x69;
+    const SCAN_F19: u8 = 0x6A;
+
     const KEYEVENTF_KEYUP: u32 = 0x0002;
-    const SW_RESTORE: i32 = 9;
+    const SW_SHOW: i32 = 5;
+    const GA_ROOT: u32 = 2;
 
     #[repr(C)]
+    #[derive(Clone, Copy)]
     struct POINT {
         x: i32,
         y: i32,
@@ -89,16 +107,23 @@ mod imp {
         fn IsWindowVisible(hwnd: HWND) -> i32;
         fn timeBeginPeriod(u_period: u32) -> u32;
         fn timeEndPeriod(u_period: u32) -> u32;
+        fn WindowFromPoint(point: POINT) -> HWND;
+        fn GetAncestor(hwnd: HWND, ga_flags: u32) -> HWND;
+        fn AttachThreadInput(id_attach: u32, id_attach_to: u32, f_attach: i32) -> i32;
     }
 
     unsafe fn is_game_window(hwnd: HWND) -> bool {
         if hwnd.is_null() {
             return false;
         }
+        let my_pid = std::process::id();
         let expected_pid = GAME_PID.load(Ordering::SeqCst);
         let mut win_pid: u32 = 0;
         unsafe {
             GetWindowThreadProcessId(hwnd, &mut win_pid);
+        }
+        if win_pid == my_pid {
+            return false; // Asla launcher penceresiyle eşleşme!
         }
         if expected_pid > 0 && win_pid == expected_pid {
             return true;
@@ -108,6 +133,9 @@ mod imp {
         let len = unsafe { GetWindowTextA(hwnd, title_buf.as_mut_ptr(), 127) };
         if len > 0 {
             let title = String::from_utf8_lossy(&title_buf[..len as usize]);
+            if title.contains("Launcher") || title.contains("gow3-launcher") {
+                return false;
+            }
             if title.contains("God of War") || title.contains("gow3") {
                 return true;
             }
@@ -119,51 +147,55 @@ mod imp {
         if code >= 0 {
             unsafe {
                 let fg = GetForegroundWindow();
-                if is_game_window(fg) {
-                    let p_mouse = &*(lparam as *const MSLLHOOKSTRUCT);
+                let p_mouse = &*(lparam as *const MSLLHOOKSTRUCT);
+                let hwnd_pt = WindowFromPoint(p_mouse.pt);
+                let is_fg = is_game_window(fg);
+                let is_pt = is_game_window(hwnd_pt) || is_game_window(GetAncestor(hwnd_pt, GA_ROOT));
+
+                if is_fg || is_pt {
                     match wparam {
                         WM_LBUTTONDOWN => {
-                            keybd_event(VK_F13, 0x68, 0, 0);
+                            keybd_event(VK_F13, SCAN_F13, 0, 0);
                         }
                         WM_LBUTTONUP => {
-                            keybd_event(VK_F13, 0x68, KEYEVENTF_KEYUP, 0);
+                            keybd_event(VK_F13, SCAN_F13, KEYEVENTF_KEYUP, 0);
                         }
                         WM_RBUTTONDOWN => {
-                            keybd_event(VK_F14, 0x69, 0, 0);
+                            keybd_event(VK_F14, SCAN_F14, 0, 0);
                         }
                         WM_RBUTTONUP => {
-                            keybd_event(VK_F14, 0x69, KEYEVENTF_KEYUP, 0);
+                            keybd_event(VK_F14, SCAN_F14, KEYEVENTF_KEYUP, 0);
                         }
                         WM_MBUTTONDOWN => {
-                            keybd_event(VK_F15, 0x6A, 0, 0);
+                            keybd_event(VK_F15, SCAN_F15, 0, 0);
                         }
                         WM_MBUTTONUP => {
-                            keybd_event(VK_F15, 0x6A, KEYEVENTF_KEYUP, 0);
+                            keybd_event(VK_F15, SCAN_F15, KEYEVENTF_KEYUP, 0);
                         }
                         WM_XBUTTONDOWN => {
                             let xbtn = (p_mouse.mouse_data >> 16) as u16;
                             if xbtn == 1 {
-                                keybd_event(VK_F16, 0x6B, 0, 0);
+                                keybd_event(VK_F16, SCAN_F16, 0, 0);
                             } else if xbtn == 2 {
-                                keybd_event(VK_F17, 0x6C, 0, 0);
+                                keybd_event(VK_F17, SCAN_F17, 0, 0);
                             }
                         }
                         WM_XBUTTONUP => {
                             let xbtn = (p_mouse.mouse_data >> 16) as u16;
                             if xbtn == 1 {
-                                keybd_event(VK_F16, 0x6B, KEYEVENTF_KEYUP, 0);
+                                keybd_event(VK_F16, SCAN_F16, KEYEVENTF_KEYUP, 0);
                             } else if xbtn == 2 {
-                                keybd_event(VK_F17, 0x6C, KEYEVENTF_KEYUP, 0);
+                                keybd_event(VK_F17, SCAN_F17, KEYEVENTF_KEYUP, 0);
                             }
                         }
                         WM_MOUSEWHEEL => {
                             let delta = (p_mouse.mouse_data >> 16) as i16;
                             if delta > 0 {
-                                keybd_event(VK_F18, 0x6D, 0, 0);
-                                keybd_event(VK_F18, 0x6D, KEYEVENTF_KEYUP, 0);
+                                keybd_event(VK_F18, SCAN_F18, 0, 0);
+                                keybd_event(VK_F18, SCAN_F18, KEYEVENTF_KEYUP, 0);
                             } else if delta < 0 {
-                                keybd_event(VK_F19, 0x6E, 0, 0);
-                                keybd_event(VK_F19, 0x6E, KEYEVENTF_KEYUP, 0);
+                                keybd_event(VK_F19, SCAN_F19, 0, 0);
+                                keybd_event(VK_F19, SCAN_F19, KEYEVENTF_KEYUP, 0);
                             }
                         }
                         _ => {}
@@ -185,9 +217,17 @@ mod imp {
         let mut pid: u32 = 0;
         unsafe {
             GetWindowThreadProcessId(hwnd, &mut pid);
-            if ((p.target_pid > 0 && pid == p.target_pid) || is_game_window(hwnd)) && IsWindowVisible(hwnd) != 0 {
-                p.found_hwnd = hwnd;
-                return 0; // stop enumerating
+            if pid == std::process::id() {
+                return 1; // Launcher penceresini asla hedef alma!
+            }
+            if IsWindowVisible(hwnd) != 0 {
+                if p.target_pid > 0 && pid == p.target_pid {
+                    p.found_hwnd = hwnd;
+                    return 0; // Hedef oyun PID'sine ait görünür pencere bulundu!
+                } else if p.target_pid == 0 && is_game_window(hwnd) {
+                    p.found_hwnd = hwnd;
+                    return 0;
+                }
             }
         }
         1 // continue
@@ -211,9 +251,19 @@ mod imp {
     pub fn bring_game_window_to_front(pid: u32) {
         if let Some(hwnd) = find_game_hwnd(pid) {
             unsafe {
-                ShowWindow(hwnd, SW_RESTORE);
+                let cur_fg = GetForegroundWindow();
+                let cur_thread = GetCurrentThreadId();
+                let mut fg_pid = 0u32;
+                let fg_thread = GetWindowThreadProcessId(cur_fg, &mut fg_pid);
+                if fg_thread != 0 && cur_thread != fg_thread {
+                    AttachThreadInput(cur_thread, fg_thread, 1);
+                }
+                ShowWindow(hwnd, SW_SHOW);
                 BringWindowToTop(hwnd);
                 SetForegroundWindow(hwnd);
+                if fg_thread != 0 && cur_thread != fg_thread {
+                    AttachThreadInput(cur_thread, fg_thread, 0);
+                }
             }
         }
     }

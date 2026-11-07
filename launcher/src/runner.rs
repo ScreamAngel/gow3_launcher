@@ -983,6 +983,7 @@ pub fn adjust_windows_windowed_mode(target_pid: u32) {
 
         unsafe extern "system" {
             fn GetWindowThreadProcessId(hwnd: *mut c_void, lpdwProcessId: *mut u32) -> u32;
+            fn GetWindowTextA(hwnd: *mut c_void, lp_string: *mut u8, n_max_count: i32) -> i32;
             fn EnumWindows(lpEnumFunc: unsafe extern "system" fn(*mut c_void, isize) -> i32, lParam: isize) -> i32;
             fn IsWindowVisible(hwnd: *mut c_void) -> i32;
             fn GetWindowLongPtrA(hWnd: *mut c_void, nIndex: i32) -> isize;
@@ -998,7 +999,15 @@ pub fn adjust_windows_windowed_mode(target_pid: u32) {
                 let ctx = &mut *(lparam as *mut EnumContext);
                 let mut proc_id = 0u32;
                 GetWindowThreadProcessId(hwnd, &mut proc_id);
-                if proc_id == ctx.pid && IsWindowVisible(hwnd) != 0 {
+                if proc_id != std::process::id() && proc_id == ctx.pid && IsWindowVisible(hwnd) != 0 {
+                    let mut title_buf = [0u8; 128];
+                    let len = GetWindowTextA(hwnd, title_buf.as_mut_ptr(), 127);
+                    if len > 0 {
+                        let title = String::from_utf8_lossy(&title_buf[..len as usize]);
+                        if title.contains("Launcher") || title.contains("gow3-launcher") {
+                            return 1;
+                        }
+                    }
                     ctx.hwnd = hwnd;
                     return 0;
                 }

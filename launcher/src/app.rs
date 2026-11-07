@@ -1694,6 +1694,7 @@ impl LauncherApp {
             self.discord_rpc.set_compiling_shaders(Some(0.0));
             // Pre-warm all shaders to 100% with the full Spartan Rage bar before game window is displayed
             ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(true));
+            ctx.send_viewport_cmd(egui::ViewportCommand::Maximized(true));
             ctx.send_viewport_cmd(egui::ViewportCommand::WindowLevel(egui::WindowLevel::AlwaysOnTop));
 
             let initial_total = if self.cached_shader_count > 0 && self.cached_shader_count < 5000 {
@@ -4462,17 +4463,23 @@ impl eframe::App for LauncherApp {
             if should_close {
                 ctx.send_viewport_cmd(egui::ViewportCommand::WindowLevel(egui::WindowLevel::Normal));
                 ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(false));
+                ctx.send_viewport_cmd(egui::ViewportCommand::Maximized(false));
+                ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(1024.0, 576.0)));
                 self.shader_loading = None;
             } else if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
                 // Güvenlik: Kullanıcı ESC tuşuna basarak ekranı erken kapatabilir
                 ctx.send_viewport_cmd(egui::ViewportCommand::WindowLevel(egui::WindowLevel::Normal));
                 ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(false));
+                ctx.send_viewport_cmd(egui::ViewportCommand::Maximized(false));
+                ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(1024.0, 576.0)));
                 self.shader_loading = None;
             }
         }
 
         // If shader loading screen is active, render it full screen and return!
         if self.shader_loading.is_some() {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(true));
+            ctx.send_viewport_cmd(egui::ViewportCommand::Maximized(true));
             self.render_shader_loading_screen(ui, &ctx);
             return;
         }

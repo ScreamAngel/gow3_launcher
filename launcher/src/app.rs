@@ -1278,7 +1278,7 @@ impl LauncherApp {
         let has_engine = crate::runner::find_game_engine(&base_dir).is_some();
         let installed_mods = crate::mods_manager::scan_installed_mods(&base_dir, &config.disabled_mods);
 
-        let discord_rpc = crate::discord_rpc::DiscordRpc::new(config.discord_rpc_enabled, config.discord_client_id.clone());
+        let discord_rpc = crate::discord_rpc::DiscordRpc::new(config.discord_rpc_enabled);
         discord_rpc.set_in_menu(&config.language);
 
         let mut app = Self {
@@ -1521,7 +1521,7 @@ impl LauncherApp {
     }
 
     fn apply_all_optimizations(&mut self) {
-        self.discord_rpc.update_config(self.config.discord_rpc_enabled, self.config.discord_client_id.clone());
+        self.discord_rpc.update_config(self.config.discord_rpc_enabled);
         let res = apply_settings(&self.base_dir, &self.config);
 
         match res {
@@ -1689,7 +1689,7 @@ impl LauncherApp {
             self.shader_loading = None;
             let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0);
             let is_modded = self.installed_mods.iter().any(|m| m.is_enabled);
-            self.discord_rpc.set_in_game(now, self.config.target_fps, is_modded);
+            self.discord_rpc.set_in_game(self.base_dir.clone(), now, self.config.target_fps, is_modded);
         } else {
             self.discord_rpc.set_compiling_shaders(Some(0.0));
             // Pre-warm all shaders to 100% with the full Spartan Rage bar before game window is displayed
@@ -3089,12 +3089,12 @@ impl LauncherApp {
             // 9. Discord Rich Presence
             ui.horizontal(|ui| {
                 if toggle_switch(ui, &mut self.config.discord_rpc_enabled).changed() {
-                    self.discord_rpc.update_config(self.config.discord_rpc_enabled, self.config.discord_client_id.clone());
+                    self.discord_rpc.update_config(self.config.discord_rpc_enabled);
                 }
                 let lbl = self.t("discord_rpc_toggle");
                 if ui.add(egui::Label::new(egui::RichText::new(lbl).strong().color(egui::Color32::WHITE).size(14.5)).sense(egui::Sense::click())).clicked() {
                     self.config.discord_rpc_enabled = !self.config.discord_rpc_enabled;
-                    self.discord_rpc.update_config(self.config.discord_rpc_enabled, self.config.discord_client_id.clone());
+                    self.discord_rpc.update_config(self.config.discord_rpc_enabled);
                 }
             });
             ui.label(egui::RichText::new(self.t("discord_rpc_desc")).color(egui::Color32::from_rgb(190, 195, 210)).size(12.5));
@@ -3102,20 +3102,18 @@ impl LauncherApp {
             if self.config.discord_rpc_enabled {
                 ui.add_space(4.0);
                 ui.horizontal(|ui| {
-                    ui.label(egui::RichText::new(self.t("discord_client_id_label")).size(12.0).color(egui::Color32::from_rgb(180, 185, 200)));
-                    let id_edit = ui.add(
-                        egui::TextEdit::singleline(&mut self.config.discord_client_id)
-                            .desired_width(190.0)
-                            .font(egui::TextStyle::Monospace),
+                    ui.label(
+                        egui::RichText::new("🔒 Discord App: God of War III: Remastered (1440140183675867156)")
+                            .size(12.5)
+                            .strong()
+                            .color(egui::Color32::from_rgb(160, 220, 180)),
                     );
-                    if id_edit.changed() {
-                        self.discord_rpc.update_config(self.config.discord_rpc_enabled, self.config.discord_client_id.clone());
-                    }
-                    if ui.button(self.t("discord_reset_btn")).clicked() {
-                        self.config.discord_client_id = "1124351711486689290".to_string();
-                        self.discord_rpc.update_config(self.config.discord_rpc_enabled, self.config.discord_client_id.clone());
-                    }
                 });
+                ui.label(
+                    egui::RichText::new("Bölümler, Poseidon/Hades/Zeus boss savaşları, mücadeleler ve arena durumu otomatik paylaşılır.")
+                        .size(11.5)
+                        .color(egui::Color32::from_rgb(170, 175, 195)),
+                );
             }
 
             ui.add_space(12.0);
@@ -4442,7 +4440,7 @@ impl eframe::App for LauncherApp {
 
                 let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0);
                 let is_modded = self.installed_mods.iter().any(|m| m.is_enabled);
-                self.discord_rpc.set_in_game(now, self.config.target_fps, is_modded);
+                self.discord_rpc.set_in_game(self.base_dir.clone(), now, self.config.target_fps, is_modded);
             }
 
             // Oyun penceresi açıldığında veya 20 saniye dolduğunda shader ekranını kapat, launcher'ı küçült ve oyunu en öne getir

@@ -303,7 +303,7 @@ pub struct LauncherConfig {
 }
 
 fn default_discord_client_id() -> String {
-    "1124351711486689290".to_string()
+    crate::discord_rpc::DISCORD_GOW3_APP_ID.to_string()
 }
 
 fn default_language() -> String {
@@ -550,6 +550,10 @@ impl LauncherConfig {
                         || (cfg.keyboard_bindings.triangle == "rightbutton" && cfg.keyboard_bindings.r1 == "r")
                     {
                         cfg.keyboard_bindings = KeyboardBindings::recommended();
+                        changed = true;
+                    }
+                    if cfg.discord_client_id != crate::discord_rpc::DISCORD_GOW3_APP_ID {
+                        cfg.discord_client_id = crate::discord_rpc::DISCORD_GOW3_APP_ID.to_string();
                         changed = true;
                     }
                     if changed {
@@ -803,7 +807,7 @@ mod tests {
         assert!(def.async_readbacks);
         assert!(def.patch_readbacks);
         assert!(def.discord_rpc_enabled);
-        assert_eq!(def.discord_client_id, "1124351711486689290");
+        assert_eq!(def.discord_client_id, crate::discord_rpc::DISCORD_GOW3_APP_ID);
     }
 
     #[test]

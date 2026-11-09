@@ -1314,6 +1314,10 @@ pub fn launch_gow3(
     patch_list.push("Bug Fix - Startup Black Screen".to_string());
     patch_list.push("Bug Fix - Intro Crash Fix".to_string());
 
+    if config.bonus_play_fix {
+        patch_list.push("Bug Fix - Bonus Play QTE and Enemy Spawning Fix".to_string());
+    }
+
     if config.skip_cinematics {
         patch_list.push("Skip Any Video With X Button".to_string());
     }

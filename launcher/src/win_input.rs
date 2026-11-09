@@ -110,6 +110,14 @@ mod imp {
         fn WindowFromPoint(point: POINT) -> HWND;
         fn GetAncestor(hwnd: HWND, ga_flags: u32) -> HWND;
         fn AttachThreadInput(id_attach: u32, id_attach_to: u32, f_attach: i32) -> i32;
+        fn PlaySoundA(psz_sound: *const u8, hmod: HINSTANCE, fdw_sound: u32) -> i32;
+    }
+
+    pub fn play_sound_memory(bytes: &[u8]) {
+        unsafe {
+            // SND_ASYNC = 0x0001, SND_NODEFAULT = 0x0002, SND_MEMORY = 0x0004
+            PlaySoundA(bytes.as_ptr(), 0, 0x0001 | 0x0002 | 0x0004);
+        }
     }
 
     unsafe fn is_game_window(hwnd: HWND) -> bool {
@@ -339,6 +347,7 @@ mod stub {
     pub fn find_game_hwnd(_pid: u32) -> Option<isize> {
         None
     }
+    pub fn play_sound_memory(_bytes: &[u8]) {}
 }
 
 #[cfg(not(target_os = "windows"))]

@@ -245,6 +245,8 @@ pub struct LauncherConfig {
     #[serde(default = "default_true")]
     pub skip_cinematics: bool,
     #[serde(default = "default_true")]
+    pub bonus_play_fix: bool,
+    #[serde(default = "default_true")]
     pub use_gamemode: bool,
     #[serde(default = "default_vram_budget")]
     pub vram_gc_budget_mb: u64,
@@ -332,7 +334,7 @@ fn default_last_commit() -> String {
     "c5638d9956002b8a9f09a240028f6793ddf7b2f8".to_string()
 }
 fn default_launcher_version() -> String {
-    "v2.1".to_string()
+    "v2.2".to_string()
 }
 fn default_render_resolution() -> String {
     "native".to_string()
@@ -352,6 +354,7 @@ impl Default for LauncherConfig {
             launch_while_compiling_shaders: false,
             show_shader_compile_rage_meter: true,
             skip_cinematics: true,
+            bonus_play_fix: true,
             use_gamemode: true,
             vram_gc_budget_mb: default_vram_budget(),
             dmem_mb: default_dmem(),
@@ -801,11 +804,12 @@ mod tests {
     }
 
     #[test]
-    fn test_launcher_version_is_v20() {
-        assert_eq!(default_launcher_version(), "v2.1");
+    fn test_launcher_version_is_v22() {
+        assert_eq!(default_launcher_version(), "v2.2");
         let def = LauncherConfig::default();
         assert!(def.async_readbacks);
         assert!(def.patch_readbacks);
+        assert!(def.bonus_play_fix);
         assert!(def.discord_rpc_enabled);
         assert_eq!(def.discord_client_id, crate::discord_rpc::DISCORD_GOW3_APP_ID);
     }

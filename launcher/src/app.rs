@@ -18,6 +18,7 @@ pub enum ViewMode {
     #[default]
     MainMenu,
     Settings,
+    Trophies,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -1209,6 +1210,10 @@ pub struct LauncherApp {
 
     // Discord Rich Presence
     pub discord_rpc: crate::discord_rpc::DiscordRpc,
+
+    // PS4 Trophy System
+    pub trophy_manager: Arc<std::sync::Mutex<crate::trophy::TrophyManager>>,
+    pub trophy_watcher: Option<crate::trophy::TrophyWatcherService>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1281,6 +1286,13 @@ impl LauncherApp {
         let discord_rpc = crate::discord_rpc::DiscordRpc::new(config.discord_rpc_enabled);
         discord_rpc.set_in_menu(&config.language);
 
+        let trophy_manager = Arc::new(std::sync::Mutex::new(crate::trophy::TrophyManager::new(&base_dir)));
+        let trophy_watcher = Some(crate::trophy::TrophyWatcherService::start(
+            base_dir.clone(),
+            trophy_manager.clone(),
+            config.language.clone(),
+        ));
+
         let mut app = Self {
             base_dir: base_dir.clone(),
             config,
@@ -1342,6 +1354,8 @@ impl LauncherApp {
             launcher_version,
             installed_mods,
             discord_rpc,
+            trophy_manager,
+            trophy_watcher,
         };
 
         crate::log_info!("Launcher UI initialized successfully. Version: {}", app.launcher_version);
@@ -2150,7 +2164,7 @@ impl LauncherApp {
         );
         ui.painter().rect_filled(top_vignette, 0.0, egui::Color32::from_rgba_unmultiplied(0, 0, 0, 130));
 
-        let bottom_vignette_height = 145.0;
+        let bottom_vignette_height = 168.0;
         let bottom_vignette = egui::Rect::from_min_max(
             egui::pos2(screen_rect.min.x, screen_rect.max.y - bottom_vignette_height),
             screen_rect.max,
@@ -2237,6 +2251,9 @@ impl LauncherApp {
                         let _ = self.config.save(&self.base_dir);
                         self.discord_rpc.update_language(lang.code());
                         self.discord_rpc.set_in_menu(lang.code());
+                        if let Some(ref watcher) = self.trophy_watcher {
+                            watcher.set_language(lang.code().to_string());
+                        }
                     }
                 }
             });
@@ -2465,12 +2482,12 @@ impl LauncherApp {
             }
         }
 
-        // 7. Bottom-Left: Console Action Menu Items (Row 1: Latest News, Row 2: Mods, Row 3: Options)
+        // 7. Bottom-Left: Console Action Menu Items (Row 1: Latest News, Row 2: Trophies, Row 3: Mods, Row 4: Options)
         let bl_x = screen_rect.min.x + 28.0;
-        let bl_y = screen_rect.max.y - 124.0;
+        let bl_y = screen_rect.max.y - 156.0;
         let bl_rect = egui::Rect::from_min_size(
             egui::pos2(bl_x, bl_y),
-            egui::vec2(280.0, 114.0),
+            egui::vec2(280.0, 146.0),
         );
         ui.scope_builder(egui::UiBuilder::new().max_rect(bl_rect), |ui| {
             ui.vertical(|ui| {
@@ -2489,7 +2506,20 @@ impl LauncherApp {
                     self.show_release_notes_modal = true;
                 }
 
-                // Row 2: 📦 MODLAR / MODS
+                // Row 2: 🏆 KUPALAR / TROPHIES
+                if render_console_action_button(
+                    ui,
+                    "btn_trophies",
+                    "🏆",
+                    self.t("menu_trophies"),
+                    14.5,
+                    false,
+                ) {
+                    self.view_mode = ViewMode::Trophies;
+                    self.view_transition_start = std::time::Instant::now();
+                }
+
+                // Row 3: 📦 MODLAR / MODS
                 if render_console_action_button(
                     ui,
                     "btn_mods",
@@ -2503,7 +2533,7 @@ impl LauncherApp {
                     self.view_transition_start = std::time::Instant::now();
                 }
 
-                // Row 3: ⚙️ AYARLAR / OPTIONS
+                // Row 4: ⚙️ AYARLAR / OPTIONS
                 if render_console_action_button(
                     ui,
                     "btn_options",
@@ -2774,6 +2804,36 @@ impl LauncherApp {
                 },
             );
         });
+    }
+
+    pub fn render_trophies_screen(&mut self, ui: &mut egui::Ui, _ctx: &egui::Context) {
+        let screen_rect = ui.max_rect();
+
+        // 1. Fullscreen Wallpaper (pic1.png)
+        if let Some(ref bg) = self.bg_texture {
+            let uv = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
+            ui.painter().image(bg.id(), screen_rect, uv, egui::Color32::from_white_alpha(90));
+        }
+
+        // 2. Dark Frosted Backdrop
+        ui.painter().rect_filled(
+            screen_rect,
+            0.0,
+            egui::Color32::from_rgba_unmultiplied(10, 11, 16, 238),
+        );
+
+        let mut back_clicked = false;
+        let lang = self.current_lang.code().to_string();
+
+        ui.add_space(8.0);
+        if let Ok(mut mgr) = self.trophy_manager.lock() {
+            crate::trophy::render_trophy_dashboard(ui, &mut mgr, &lang, &mut back_clicked);
+        }
+
+        if back_clicked {
+            self.view_mode = ViewMode::MainMenu;
+            self.view_transition_start = std::time::Instant::now();
+        }
     }
 
     // ==========================================
@@ -3119,6 +3179,17 @@ impl LauncherApp {
                         .color(egui::Color32::from_rgb(170, 175, 195)),
                 );
             }
+
+            ui.add_space(8.0);
+            // 10. Bonus Play QTE and Enemy Spawning Fix
+            ui.horizontal(|ui| {
+                toggle_switch(ui, &mut self.config.bonus_play_fix);
+                let lbl = self.t("bonus_play_fix_toggle");
+                if ui.add(egui::Label::new(egui::RichText::new(lbl).strong().color(egui::Color32::WHITE).size(14.5)).sense(egui::Sense::click())).clicked() {
+                    self.config.bonus_play_fix = !self.config.bonus_play_fix;
+                }
+            });
+            ui.label(egui::RichText::new(self.t("bonus_play_fix_desc")).color(egui::Color32::from_rgb(190, 195, 210)).size(12.5));
 
             ui.add_space(12.0);
             ui.separator();
@@ -4532,10 +4603,11 @@ impl eframe::App for LauncherApp {
             s.spacing.scroll.foreground_color = true;
         });
 
-        // --- MAIN VIEW ROUTING: CONSOLE MAIN MENU OR SETTINGS SCREEN ---
+        // --- MAIN VIEW ROUTING: CONSOLE MAIN MENU, SETTINGS SCREEN OR TROPHIES ---
         match self.view_mode {
             ViewMode::MainMenu => self.render_console_main_menu(ui, &ctx),
             ViewMode::Settings => self.render_settings_screen(ui, &ctx),
+            ViewMode::Trophies => self.render_trophies_screen(ui, &ctx),
         }
 
         // Dim background if any modal dialog is currently active
@@ -5463,12 +5535,28 @@ impl eframe::App for LauncherApp {
                     });
                 });
         }
+
+        // --- PS4 STYLE TROPHY TOAST NOTIFICATION RENDERER ---
+        let toast_to_render = if let Ok(mut mgr) = self.trophy_manager.lock() {
+            mgr.advance_queue(self.current_lang.code());
+            mgr.active_toast.clone()
+        } else {
+            None
+        };
+
+        if let Some(ref toast) = toast_to_render {
+            crate::trophy::render_ps4_toast(ui, toast, self.current_lang.code(), false);
+            ctx.request_repaint();
+        }
     }
 }
 
 impl Drop for LauncherApp {
     fn drop(&mut self) {
         self.discord_rpc.shutdown();
+        if let Some(ref watcher) = self.trophy_watcher {
+            watcher.stop();
+        }
     }
 }
 

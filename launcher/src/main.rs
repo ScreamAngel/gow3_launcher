@@ -12,6 +12,7 @@ mod shader_downloader;
 pub mod mods_manager;
 pub mod discord_rpc;
 pub mod win_input;
+pub mod trophy;
 
 use app::LauncherApp;
 use eframe::egui;

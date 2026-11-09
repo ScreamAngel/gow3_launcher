@@ -80,7 +80,7 @@ pub struct TrophyDefinition {
     pub icon_bytes: &'static [u8],
 }
 
-pub static ALL_TROPHIES: [TrophyDefinition; 36] = [
+pub static ALL_TROPHIES: [TrophyDefinition; 35] = [
     TrophyDefinition {
         id: 0,
         name_en: "King of the Hill",
@@ -143,303 +143,293 @@ pub static ALL_TROPHIES: [TrophyDefinition; 36] = [
     },
     TrophyDefinition {
         id: 6,
-        name_en: "I didn’t do it... But I wish I did!",
-        name_tr: "Ben Yapmadım... Keşke Yapsaydım!",
-        desc_en: "Kill the Poseidon Princess",
-        desc_tr: "Poseidon'un Prensesini öldür",
-        grade: TrophyGrade::Bronze,
-        hidden: true,
-        icon_bytes: trop_icon!("006"),
-    },
-    TrophyDefinition {
-        id: 7,
         name_en: "Ladies Man",
         name_tr: "Kadınların Gözdesi",
         desc_en: "Successfully entertain Aphrodite",
         desc_tr: "Afrodit'i zevkten bulutlara çıkar",
         grade: TrophyGrade::Bronze,
         hidden: true,
-        icon_bytes: trop_icon!("007"),
+        icon_bytes: trop_icon!("006"),
     },
     TrophyDefinition {
-        id: 8,
+        id: 7,
         name_en: "Handy Man",
         name_tr: "Becerikli Kratos",
         desc_en: "Sever Gaia’s hand",
         desc_tr: "Gaia'nın elini kopar",
         grade: TrophyGrade::Bronze,
         hidden: true,
-        icon_bytes: trop_icon!("008"),
+        icon_bytes: trop_icon!("007"),
     },
     TrophyDefinition {
-        id: 9,
+        id: 8,
         name_en: "Open Sesame",
         name_tr: "Açıl Susam Açıl",
         desc_en: "Open the Gates of Tisiphone",
         desc_tr: "Tisiphone'un Kapıları'nı aç",
         grade: TrophyGrade::Bronze,
         hidden: true,
-        icon_bytes: trop_icon!("009"),
+        icon_bytes: trop_icon!("008"),
     },
     TrophyDefinition {
-        id: 10,
+        id: 9,
         name_en: "Rescue Me",
         name_tr: "Kurtar Beni",
         desc_en: "Save Pandora",
         desc_tr: "Pandora'yı kurtar",
         grade: TrophyGrade::Bronze,
         hidden: true,
-        icon_bytes: trop_icon!("010"),
+        icon_bytes: trop_icon!("009"),
     },
     TrophyDefinition {
-        id: 11,
+        id: 10,
         name_en: "Three Wise Men",
         name_tr: "Üç Bilge Adam",
         desc_en: "Solve the Three Judges",
         desc_tr: "Üç Yargıç bulmacasını çöz",
         grade: TrophyGrade::Bronze,
         hidden: true,
-        icon_bytes: trop_icon!("011"),
+        icon_bytes: trop_icon!("010"),
     },
     TrophyDefinition {
-        id: 12,
+        id: 11,
         name_en: "Hit Man",
         name_tr: "Vur Kaç",
         desc_en: "Perform a 1000-hit combo",
         desc_tr: "1000 vuruşluk bir kombo gerçekleştir",
         grade: TrophyGrade::Bronze,
         hidden: false,
-        icon_bytes: trop_icon!("012"),
+        icon_bytes: trop_icon!("011"),
     },
     TrophyDefinition {
-        id: 13,
+        id: 12,
         name_en: "Rip One!",
         name_tr: "Parçala!",
         desc_en: "Rip apart 1 Olympus Sentry",
         desc_tr: "1 Olimpos Gözcüsünü ikiye ayır",
         grade: TrophyGrade::Bronze,
         hidden: false,
-        icon_bytes: trop_icon!("013"),
+        icon_bytes: trop_icon!("012"),
     },
     TrophyDefinition {
-        id: 14,
+        id: 13,
         name_en: "Nice Tan",
         name_tr: "Güzel Bronzluk",
         desc_en: "Blind 100 enemies with the Head of Helios",
         desc_tr: "Helios'un Başı ile 100 düşmanı kör et",
         grade: TrophyGrade::Bronze,
         hidden: false,
-        icon_bytes: trop_icon!("014"),
+        icon_bytes: trop_icon!("013"),
     },
     TrophyDefinition {
-        id: 15,
+        id: 14,
         name_en: "Obedience School",
         name_tr: "İtaat Eğitimi",
         desc_en: "Deliver 50 kicks to Hounds",
         desc_tr: "Yeraltı tazılarına 50 tekme at",
         grade: TrophyGrade::Bronze,
         hidden: false,
-        icon_bytes: trop_icon!("015"),
+        icon_bytes: trop_icon!("014"),
     },
     TrophyDefinition {
-        id: 16,
+        id: 15,
         name_en: "It’s getting hot in here...",
         name_tr: "Hava Isınmaya Başladı...",
         desc_en: "Burn 100 enemies with the Bow of Apollo",
         desc_tr: "Apollo'nun Yayı ile 100 düşmanı yak",
         grade: TrophyGrade::Bronze,
         hidden: false,
-        icon_bytes: trop_icon!("016"),
+        icon_bytes: trop_icon!("015"),
     },
     TrophyDefinition {
-        id: 17,
+        id: 16,
         name_en: "Souled Out",
         name_tr: "Ruhların Efendisi",
         desc_en: "Summon every Soul with the Claws of Hades",
         desc_tr: "Hades'in Pençeleri ile her Ruh türünü çağır",
         grade: TrophyGrade::Bronze,
         hidden: false,
-        icon_bytes: trop_icon!("017"),
+        icon_bytes: trop_icon!("016"),
     },
     TrophyDefinition {
-        id: 18,
+        id: 17,
         name_en: "Bloody Hell",
         name_tr: "Kan Banyosu",
         desc_en: "Cover Kratos in 500 buckets of blood by killing the enemies",
         desc_tr: "Düşmanları öldürerek Kratos'u 500 kova dolusu kanla kapla",
         grade: TrophyGrade::Bronze,
         hidden: false,
-        icon_bytes: trop_icon!("018"),
+        icon_bytes: trop_icon!("017"),
     },
     TrophyDefinition {
-        id: 19,
+        id: 18,
         name_en: "No Guts, No Glory",
         name_tr: "Bağırsak Söken",
         desc_en: "Gut 3 Centaur Generals",
         desc_tr: "3 Sentor Generalinin karnını deş",
         grade: TrophyGrade::Bronze,
         hidden: false,
-        icon_bytes: trop_icon!("019"),
+        icon_bytes: trop_icon!("018"),
     },
     TrophyDefinition {
-        id: 20,
+        id: 19,
         name_en: "Hitting Your Stride",
         name_tr: "Formunu Yakalamak",
         desc_en: "Upgrade any weapon to the next level",
         desc_tr: "Herhangi bir silahı bir üst seviyeye yükselt",
         grade: TrophyGrade::Bronze,
         hidden: false,
-        icon_bytes: trop_icon!("020"),
+        icon_bytes: trop_icon!("019"),
     },
     TrophyDefinition {
-        id: 21,
+        id: 20,
         name_en: "Sibling Rivalry",
         name_tr: "Kardeş Rekabeti",
         desc_en: "Kill Hercules",
         desc_tr: "Herkül'ü öldür",
         grade: TrophyGrade::Silver,
         hidden: true,
-        icon_bytes: trop_icon!("021"),
+        icon_bytes: trop_icon!("020"),
     },
     TrophyDefinition {
-        id: 22,
+        id: 21,
         name_en: "Titan Slayer",
         name_tr: "Titan Katili",
         desc_en: "Kill Cronos",
         desc_tr: "Kronos'u öldür",
         grade: TrophyGrade::Silver,
         hidden: true,
-        icon_bytes: trop_icon!("022"),
+        icon_bytes: trop_icon!("021"),
     },
     TrophyDefinition {
-        id: 23,
+        id: 22,
         name_en: "Retribution",
         name_tr: "Hak Edilen Ceza",
         desc_en: "Kill Zeus",
         desc_tr: "Zeus'u öldür",
         grade: TrophyGrade::Silver,
         hidden: true,
-        icon_bytes: trop_icon!("023"),
+        icon_bytes: trop_icon!("022"),
     },
     TrophyDefinition {
-        id: 24,
+        id: 23,
         name_en: "Hooker",
         name_tr: "Kancacı",
         desc_en: "Kill Hades",
         desc_tr: "Hades'i öldür",
         grade: TrophyGrade::Silver,
         hidden: true,
-        icon_bytes: trop_icon!("024"),
+        icon_bytes: trop_icon!("023"),
     },
     TrophyDefinition {
-        id: 25,
+        id: 24,
         name_en: "Freezer Burn",
         name_tr: "Donma Isırığı",
         desc_en: "Acquire the Boreas Icestorm",
         desc_tr: "Boreas Buz Fırtınası'nı ele geçir",
         grade: TrophyGrade::Silver,
         hidden: true,
-        icon_bytes: trop_icon!("025"),
+        icon_bytes: trop_icon!("024"),
     },
     TrophyDefinition {
-        id: 26,
+        id: 25,
         name_en: "Seeing things from a different perspective",
         name_tr: "Farklı Bir Bakış Açısı",
         desc_en: "Solve Hera's Gardens",
         desc_tr: "Hera'nın Bahçesi bulmacasını çöz",
         grade: TrophyGrade::Silver,
         hidden: true,
-        icon_bytes: trop_icon!("026"),
+        icon_bytes: trop_icon!("025"),
     },
     TrophyDefinition {
-        id: 27,
+        id: 26,
         name_en: "Eye Candy",
         name_tr: "Göz Ziyafeti",
         desc_en: "Collect all of the Gorgon Eyes",
         desc_tr: "Tüm Gorgon Gözleri'ni topla",
         grade: TrophyGrade::Silver,
         hidden: false,
-        icon_bytes: trop_icon!("027"),
+        icon_bytes: trop_icon!("026"),
     },
     TrophyDefinition {
-        id: 28,
+        id: 27,
         name_en: "Feather Plucker",
         name_tr: "Tüy Yolucu",
         desc_en: "Collect all of the Phoenix Feathers",
         desc_tr: "Tüm Anka Kuşu Tüyleri'ni topla",
         grade: TrophyGrade::Silver,
         hidden: false,
-        icon_bytes: trop_icon!("028"),
+        icon_bytes: trop_icon!("027"),
     },
     TrophyDefinition {
-        id: 29,
+        id: 28,
         name_en: "Are You Horny to Win?",
         name_tr: "Boynuz Koleksiyoncusu",
         desc_en: "Collect all of the Minotaur Horns",
         desc_tr: "Tüm Minotaur Boynuzları'nı topla",
         grade: TrophyGrade::Silver,
         hidden: false,
-        icon_bytes: trop_icon!("029"),
+        icon_bytes: trop_icon!("028"),
     },
     TrophyDefinition {
-        id: 30,
+        id: 29,
         name_en: "Maxed Out!",
         name_tr: "Formunun Zirvesinde!",
         desc_en: "Completely upgrade all weapons",
         desc_tr: "Tüm silahları son seviyeye kadar yükselt",
         grade: TrophyGrade::Silver,
         hidden: false,
-        icon_bytes: trop_icon!("030"),
+        icon_bytes: trop_icon!("029"),
     },
     TrophyDefinition {
-        id: 31,
+        id: 30,
         name_en: "Vengeance Complete",
         name_tr: "İntikam Tamamlandı",
         desc_en: "Beat the game",
         desc_tr: "Oyunu tamamla",
         grade: TrophyGrade::Gold,
         hidden: false,
-        icon_bytes: trop_icon!("031"),
+        icon_bytes: trop_icon!("030"),
     },
     TrophyDefinition {
-        id: 32,
+        id: 31,
         name_en: "Up to the Challenge",
         name_tr: "Meydan Okumaya Değer",
         desc_en: "Beat the Challenge of Olympus",
         desc_tr: "Olimpos Mücadelesi'ni tamamla",
         grade: TrophyGrade::Gold,
         hidden: false,
-        icon_bytes: trop_icon!("032"),
+        icon_bytes: trop_icon!("031"),
     },
     TrophyDefinition {
-        id: 33,
+        id: 32,
         name_en: "Unhuman",
         name_tr: "İnsanüstü",
         desc_en: "Beat Titan Mode",
         desc_tr: "Oyunu Titan Modunda tamamla",
         grade: TrophyGrade::Gold,
         hidden: false,
-        icon_bytes: trop_icon!("033"),
+        icon_bytes: trop_icon!("032"),
     },
     TrophyDefinition {
-        id: 34,
+        id: 33,
         name_en: "Priceless",
         name_tr: "Paha Biçilemez",
         desc_en: "Collect all of the ‘Godly Possessions’",
         desc_tr: "Tüm Tanrısal Eşyaları topla",
         grade: TrophyGrade::Gold,
         hidden: false,
-        icon_bytes: trop_icon!("034"),
+        icon_bytes: trop_icon!("033"),
     },
     TrophyDefinition {
-        id: 35,
+        id: 34,
         name_en: "aMAZEd",
         name_tr: "Şaşırtıcı Labirent",
         desc_en: "Beat the Labyrinth without dying or failing",
         desc_tr: "Labirenti hiç ölmeden veya başarısız olmadan tamamla",
         grade: TrophyGrade::Gold,
         hidden: true,
-        icon_bytes: trop_icon!("035"),
+        icon_bytes: trop_icon!("034"),
     },
 ];
 
@@ -555,127 +545,11 @@ impl TrophyStateDatabase {
             }
         }
 
-        let save_synced = db.sync_from_savegames(base_dir);
-
-        if !loaded || save_synced {
+        if !loaded {
             db.save(base_dir);
         }
 
         db
-    }
-
-    pub fn sync_from_savegames(&mut self, base_dir: &Path) -> bool {
-        let mut any_new = false;
-        let mut candidates = Vec::new();
-
-        let save_dirs = [
-            base_dir.join("user/savedata/1/CUSA01715"),
-            base_dir.join("user/savedata/CUSA01715"),
-            base_dir.join("savedata/1/CUSA01715"),
-            base_dir.join("user/home/1/savedata/CUSA01715"),
-            base_dir.join("gow3-linux/user/savedata/1/CUSA01715"),
-        ];
-
-        for sd in &save_dirs {
-            if sd.is_dir() {
-                if let Ok(entries) = fs::read_dir(sd) {
-                    for entry in entries.flatten() {
-                        let path = entry.path();
-                        if path.is_dir() {
-                            let sf = path.join("SAVEDATA");
-                            if sf.is_file() {
-                                candidates.push(sf);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        for save_file in candidates {
-            let mtime = fs::metadata(&save_file)
-                .and_then(|m| m.modified())
-                .ok()
-                .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
-                .map(|d| d.as_secs())
-                .unwrap_or_else(|| {
-                    SystemTime::now()
-                        .duration_since(UNIX_EPOCH)
-                        .unwrap_or_default()
-                        .as_secs()
-                });
-
-            if let Ok(data) = fs::read(&save_file) {
-                let data_str = String::from_utf8_lossy(&data);
-
-                let past_poseidon = data_str.contains("WAD_Hds")
-                    || data_str.contains("WAD_Bas")
-                    || data_str.contains("WAD_Oly")
-                    || data_str.contains("WAD_Crn")
-                    || data_str.contains("WAD_Gaz")
-                    || data_str.contains("Hds100")
-                    || data_str.contains("Hds200")
-                    || data_str.contains("Hds350")
-                    || data_str.contains("Hds525")
-                    || data_str.contains("Hds666")
-                    || data_str.contains("PosHades")
-                    || data_str.contains("HadesDead")
-                    || data_str.contains("HadesSoul");
-
-                if past_poseidon {
-                    if self.unlock(1, mtime) {
-                        any_new = true;
-                    }
-                    if self.unlock(8, mtime.saturating_sub(60)) {
-                        any_new = true;
-                    }
-                }
-
-                let past_apollo = data_str.contains("WAD_Hds350")
-                    || data_str.contains("WAD_Hds525")
-                    || data_str.contains("WAD_Hds666")
-                    || data_str.contains("WAD_Bas")
-                    || data_str.contains("WAD_Oly")
-                    || data_str.contains("WAD_Crn")
-                    || data_str.contains("WAD_Gaz")
-                    || data_str.contains("HadesDead");
-
-                if past_apollo && self.unlock(2, mtime) {
-                    any_new = true;
-                }
-
-                let past_hades = data_str.contains("HadesDead")
-                    || data_str.contains("ephPostHades")
-                    || data_str.contains("WAD_Bas")
-                    || data_str.contains("WAD_Oly")
-                    || data_str.contains("WAD_Crn")
-                    || data_str.contains("WAD_Gaz");
-
-                if past_hades && self.unlock(24, mtime) {
-                    any_new = true;
-                }
-
-                let past_helios = data_str.contains("WAD_Oly700")
-                    || data_str.contains("WAD_Crn")
-                    || data_str.contains("WAD_Gaz");
-
-                if past_helios && self.unlock(4, mtime) {
-                    any_new = true;
-                }
-
-                let past_hermes = data_str.contains("WAD_Crn") || data_str.contains("WAD_Gaz");
-                if past_hermes && self.unlock(5, mtime) {
-                    any_new = true;
-                }
-
-                let past_cronos = data_str.contains("WAD_Gaz");
-                if past_cronos && self.unlock(22, mtime) {
-                    any_new = true;
-                }
-            }
-        }
-
-        any_new
     }
 
     pub fn import_from_xml(&mut self, xml: &str) {
@@ -683,7 +557,7 @@ impl TrophyStateDatabase {
             if line.contains("<trophy") && line.contains("unlockstate=\"true\"") {
                 if let Some(id_str) = extract_attribute(line, "id") {
                     if let Ok(id) = id_str.parse::<u32>() {
-                        if id <= 35 {
+                        if id <= 34 {
                             let entry = self.trophies.entry(id).or_default();
                             if !entry.unlocked {
                                 entry.unlocked = true;
@@ -719,7 +593,7 @@ impl TrophyStateDatabase {
     }
 
     pub fn unlock(&mut self, id: u32, timestamp: u64) -> bool {
-        if id > 35 {
+        if id > 34 {
             return false;
         }
         let entry = self.trophies.entry(id).or_default();
@@ -885,9 +759,9 @@ impl TrophyManager {
             // Add to FIFO queue
             self.queue.push_back(id);
 
-            // Check if platinum (id 0) should be unlocked (if all 35 other trophies unlocked)
+            // Check if platinum (id 0) should be unlocked (if all 34 other trophies unlocked)
             if id != 0 && !self.db.is_unlocked(0) {
-                let non_plat_unlocked = (1..=35).all(|i| self.db.is_unlocked(i));
+                let non_plat_unlocked = (1..=34).all(|i| self.db.is_unlocked(i));
                 if non_plat_unlocked {
                     self.db.unlock(0, now + 1);
                     self.db.save(&self.base_dir);
@@ -939,7 +813,7 @@ impl TrophyManager {
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .subsec_millis()
-            % 36) as u32;
+            % 35) as u32;
 
         if let Some(def) = get_trophy_def(test_id) {
             let title = if lang.starts_with("tr") {
@@ -956,130 +830,6 @@ impl TrophyManager {
                 title,
                 start_time: Instant::now(),
             });
-        }
-    }
-
-    pub fn sync_savegames_and_notify(&mut self, lang: &str) -> bool {
-        let mut newly_unlocked = Vec::new();
-
-        let save_dirs = [
-            self.base_dir.join("user/savedata/1/CUSA01715"),
-            self.base_dir.join("user/savedata/CUSA01715"),
-            self.base_dir.join("savedata/1/CUSA01715"),
-            self.base_dir.join("user/home/1/savedata/CUSA01715"),
-            self.base_dir.join("gow3-linux/user/savedata/1/CUSA01715"),
-        ];
-
-        let mut candidates = Vec::new();
-        for sd in &save_dirs {
-            if sd.is_dir() {
-                if let Ok(entries) = fs::read_dir(sd) {
-                    for entry in entries.flatten() {
-                        let path = entry.path();
-                        if path.is_dir() {
-                            let sf = path.join("SAVEDATA");
-                            if sf.is_file() {
-                                candidates.push(sf);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        for save_file in candidates {
-            let mtime = fs::metadata(&save_file)
-                .and_then(|m| m.modified())
-                .ok()
-                .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
-                .map(|d| d.as_secs())
-                .unwrap_or_else(|| {
-                    SystemTime::now()
-                        .duration_since(UNIX_EPOCH)
-                        .unwrap_or_default()
-                        .as_secs()
-                });
-
-            if let Ok(data) = fs::read(&save_file) {
-                let data_str = String::from_utf8_lossy(&data);
-
-                let past_poseidon = data_str.contains("WAD_Hds")
-                    || data_str.contains("WAD_Bas")
-                    || data_str.contains("WAD_Oly")
-                    || data_str.contains("WAD_Crn")
-                    || data_str.contains("WAD_Gaz")
-                    || data_str.contains("Hds100")
-                    || data_str.contains("Hds200")
-                    || data_str.contains("Hds350")
-                    || data_str.contains("Hds525")
-                    || data_str.contains("Hds666")
-                    || data_str.contains("PosHades")
-                    || data_str.contains("HadesDead")
-                    || data_str.contains("HadesSoul");
-
-                if past_poseidon {
-                    if self.db.unlock(1, mtime) {
-                        newly_unlocked.push(1);
-                    }
-                    if self.db.unlock(8, mtime.saturating_sub(60)) {
-                        newly_unlocked.push(8);
-                    }
-                }
-
-                let past_apollo = data_str.contains("WAD_Hds350")
-                    || data_str.contains("WAD_Hds525")
-                    || data_str.contains("WAD_Hds666")
-                    || data_str.contains("WAD_Bas")
-                    || data_str.contains("WAD_Oly")
-                    || data_str.contains("WAD_Crn")
-                    || data_str.contains("WAD_Gaz")
-                    || data_str.contains("HadesDead");
-
-                if past_apollo && self.db.unlock(2, mtime) {
-                    newly_unlocked.push(2);
-                }
-
-                let past_hades = data_str.contains("HadesDead")
-                    || data_str.contains("ephPostHades")
-                    || data_str.contains("WAD_Bas")
-                    || data_str.contains("WAD_Oly")
-                    || data_str.contains("WAD_Crn")
-                    || data_str.contains("WAD_Gaz");
-
-                if past_hades && self.db.unlock(24, mtime) {
-                    newly_unlocked.push(24);
-                }
-
-                let past_helios = data_str.contains("WAD_Oly700")
-                    || data_str.contains("WAD_Crn")
-                    || data_str.contains("WAD_Gaz");
-
-                if past_helios && self.db.unlock(4, mtime) {
-                    newly_unlocked.push(4);
-                }
-
-                let past_hermes = data_str.contains("WAD_Crn") || data_str.contains("WAD_Gaz");
-                if past_hermes && self.db.unlock(5, mtime) {
-                    newly_unlocked.push(5);
-                }
-
-                let past_cronos = data_str.contains("WAD_Gaz");
-                if past_cronos && self.db.unlock(22, mtime) {
-                    newly_unlocked.push(22);
-                }
-            }
-        }
-
-        if !newly_unlocked.is_empty() {
-            self.db.save(&self.base_dir);
-            for id in newly_unlocked {
-                self.queue.push_back(id);
-            }
-            play_trophy_sound(&self.base_dir);
-            self.advance_queue(lang);
-            true
-        } else {
-            false
         }
     }
 }
@@ -1115,9 +865,18 @@ impl TrophyWatcherService {
                     base_dir.join("gow3-linux/gow3_log.txt"),
                 ];
 
-                let mut last_log_size: u64 = 0;
                 let mut last_file_idx = 0;
-                let mut poll_counter: u64 = 0;
+                let mut last_log_size: u64 = 0;
+
+                // Crucial fix: Initialize last_log_size to current log length so old lines from previous sessions
+                // (such as stale "Runtime: trophy 12 unlocked") are NEVER replayed on launcher startup!
+                for (i, p) in log_candidates.iter().enumerate() {
+                    if let Ok(meta) = fs::metadata(p) {
+                        last_file_idx = i;
+                        last_log_size = meta.len();
+                        break;
+                    }
+                }
 
                 while !stop_clone.load(Ordering::Relaxed) {
                     let active_lang = if let Ok(l) = lang_clone.lock() {
@@ -1125,13 +884,6 @@ impl TrophyWatcherService {
                     } else {
                         "tr".to_string()
                     };
-
-                    poll_counter += 1;
-                    if poll_counter % 20 == 0 {
-                        if let Ok(mut mgr) = shared_manager.lock() {
-                            mgr.sync_savegames_and_notify(&active_lang);
-                        }
-                    }
 
                     // 1. Log Tailer: Inspect gow3_log.txt for new unlock lines
                     for (i, p) in log_candidates.iter().enumerate() {
@@ -1246,7 +998,7 @@ fn parse_log_for_trophies(
             if w == "trophy" || w == "unlocked" || w == "id" {
                 if i + 1 < words.len() {
                     if let Ok(id) = words[i + 1].parse::<u32>() {
-                        if id <= 35 {
+                        if id <= 34 {
                             found_id = Some(id);
                             break;
                         }
@@ -1254,7 +1006,7 @@ fn parse_log_for_trophies(
                 }
                 if i + 2 < words.len() && (words[i + 1] == "unlocked" || words[i + 1] == "id") {
                     if let Ok(id) = words[i + 2].parse::<u32>() {
-                        if id <= 35 {
+                        if id <= 34 {
                             found_id = Some(id);
                             break;
                         }
@@ -1280,7 +1032,7 @@ fn parse_xml_for_trophies(
         if line.contains("<trophy") && line.contains("unlockstate=\"true\"") {
             if let Some(id_str) = extract_attribute(line, "id") {
                 if let Ok(id) = id_str.parse::<u32>() {
-                    if id <= 35 {
+                    if id <= 34 {
                         if let Ok(mut mgr) = shared_manager.lock() {
                             if !mgr.db.is_unlocked(id) {
                                 mgr.unlock_and_notify(id, lang);
@@ -1795,7 +1547,7 @@ mod tests {
 
     #[test]
     fn test_all_trophies_count_and_grades() {
-        assert_eq!(ALL_TROPHIES.len(), 36);
+        assert_eq!(ALL_TROPHIES.len(), 35);
 
         let mut plat = 0;
         let mut gold = 0;
@@ -1821,7 +1573,7 @@ mod tests {
         assert_eq!(plat, 1);
         assert_eq!(gold, 5);
         assert_eq!(silver, 10);
-        assert_eq!(bronze, 20);
+        assert_eq!(bronze, 19);
         assert_eq!(ALL_TROPHIES[0].grade, TrophyGrade::Platinum);
     }
 
@@ -1831,7 +1583,7 @@ mod tests {
         let _ = fs::create_dir_all(&tmp_dir);
 
         let mut db = TrophyStateDatabase::load(&tmp_dir);
-        assert_eq!(db.total_count(), 36);
+        assert_eq!(db.total_count(), 35);
         assert_eq!(db.unlocked_count(), 0);
         assert_eq!(db.percentage(), 0.0);
         assert!(!db.is_mastered());
@@ -1840,7 +1592,7 @@ mod tests {
         assert!(db.unlock(1, now));
         assert!(db.unlock(5, now + 100));
         assert_eq!(db.unlocked_count(), 2);
-        assert!((db.percentage() - (2.0 / 36.0 * 100.0)).abs() < 0.01);
+        assert!((db.percentage() - (2.0 / 35.0 * 100.0)).abs() < 0.01);
 
         db.save(&tmp_dir);
 
@@ -1865,11 +1617,11 @@ mod tests {
         let mut mgr = TrophyManager::new(&tmp_dir);
         assert!(!mgr.db.is_unlocked(0));
 
-        for i in 1..=35 {
+        for i in 1..=34 {
             mgr.unlock_and_notify(i, "tr");
         }
 
-        assert_eq!(mgr.db.unlocked_count(), 36);
+        assert_eq!(mgr.db.unlocked_count(), 35);
         assert!(mgr.db.is_unlocked(0));
         assert!(mgr.db.is_mastered());
         assert_eq!(mgr.db.percentage(), 100.0);
@@ -1898,24 +1650,6 @@ Trophy unlocked: 12
         assert!(m.db.is_unlocked(7));
         assert!(m.db.is_unlocked(12));
         assert!(!m.db.is_unlocked(2));
-
-        let _ = fs::remove_dir_all(&tmp_dir);
-    }
-
-    #[test]
-    fn test_sync_from_savegames() {
-        let tmp_dir = std::env::temp_dir().join(format!("gow3_save_test_{}", std::process::id()));
-        let save_dir = tmp_dir.join("user/savedata/1/CUSA01715/AUTOSAVE");
-        let _ = fs::create_dir_all(&save_dir);
-
-        let fake_save = b"WAD_Hds100\0PosHades00\0HadesDead\0";
-        fs::write(save_dir.join("SAVEDATA"), fake_save).unwrap();
-
-        let mgr = TrophyManager::new(&tmp_dir);
-        assert!(mgr.db.is_unlocked(1));
-        assert!(mgr.db.is_unlocked(8));
-        assert!(mgr.db.is_unlocked(24));
-        assert!(!mgr.db.is_unlocked(22));
 
         let _ = fs::remove_dir_all(&tmp_dir);
     }

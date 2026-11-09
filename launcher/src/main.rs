@@ -82,6 +82,7 @@ fn main() -> eframe::Result<()> {
         native_options,
         Box::new(move |cc| {
             egui_extras::install_image_loaders(&cc.egui_ctx);
+            cc.egui_ctx.set_embed_viewports(false);
 
             // Register God of War Font and make it primary for Spartan style with unicode fallback
             let mut fonts = egui::FontDefinitions::default();

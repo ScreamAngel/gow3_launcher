@@ -5545,7 +5545,39 @@ impl eframe::App for LauncherApp {
         };
 
         if let Some(ref toast) = toast_to_render {
-            crate::trophy::render_ps4_toast(ui, toast, self.current_lang.code(), false);
+            // 1. Standalone in-game overlay viewport (always on top of game screen at top-right)
+            let (pos_x, pos_y) = if let Some(mon) = ctx.input(|i| i.viewport().monitor_size) {
+                (mon.x - 390.0, 24.0)
+            } else {
+                (1920.0 - 390.0, 24.0)
+            };
+
+            ctx.show_viewport_immediate(
+                egui::ViewportId::from_hash_of("gow3_trophy_toast_overlay"),
+                egui::ViewportBuilder::default()
+                    .with_title("God of War III Trophy Toast")
+                    .with_always_on_top()
+                    .with_decorations(false)
+                    .with_transparent(true)
+                    .with_mouse_passthrough(true)
+                    .with_active(false)
+                    .with_visible(true)
+                    .with_inner_size([380.0, 88.0])
+                    .with_position([pos_x, pos_y]),
+                |ctx, _class| {
+                    egui::CentralPanel::default()
+                        .frame(egui::Frame::new().fill(egui::Color32::TRANSPARENT))
+                        .show(ctx, |ui| {
+                            crate::trophy::render_ps4_toast(ui, toast, self.current_lang.code(), true);
+                        });
+                },
+            );
+
+            // 2. Also render in the launcher window when the launcher is visible and game is not running
+            if !self.is_game_running {
+                crate::trophy::render_ps4_toast(ui, toast, self.current_lang.code(), false);
+            }
+
             ctx.request_repaint();
         }
     }

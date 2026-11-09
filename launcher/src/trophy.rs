@@ -700,6 +700,99 @@ pub fn play_trophy_sound(_base_dir: &Path) {
     }
 }
 
+pub fn send_desktop_notification(
+    _base_dir: &Path,
+    _trophy_id: u32,
+    def: &TrophyDefinition,
+    lang: &str,
+) {
+    #[cfg(not(target_os = "windows"))]
+    {
+        let is_tr = lang.starts_with("tr");
+        let header = if is_tr {
+            format!("🏆 Kupa Kazanıldı! ({})", def.grade.name_tr())
+        } else if lang.starts_with("de") {
+            format!("🏆 Trophäe Erhalten! ({})", def.grade.name_en())
+        } else if lang.starts_with("es") {
+            format!("🏆 ¡Trofeo Conseguido! ({})", def.grade.name_en())
+        } else {
+            format!("🏆 Trophy Earned! ({})", def.grade.name_en())
+        };
+
+        let title = if is_tr { def.name_tr } else { def.name_en };
+        let desc = if is_tr { def.desc_tr } else { def.desc_en };
+        let body = format!("{}\n{}", title, desc);
+
+        let custom_icon = _base_dir.join(format!("user/custom_trophy/TROP{:03}.PNG", _trophy_id));
+        let asset_icon = _base_dir.join(format!("launcher/assets/trophies/TROP{:03}.PNG", _trophy_id));
+        let grade_filename = match def.grade {
+            TrophyGrade::Platinum => "platinum.png",
+            TrophyGrade::Gold => "gold.png",
+            TrophyGrade::Silver => "silver.png",
+            TrophyGrade::Bronze => "bronze.png",
+        };
+        let grade_icon = _base_dir.join(format!("launcher/assets/{}", grade_filename));
+
+        let icon_path = if custom_icon.is_file() {
+            custom_icon
+        } else if asset_icon.is_file() {
+            asset_icon
+        } else if grade_icon.is_file() {
+            grade_icon
+        } else {
+            _base_dir.join(format!("user/custom_trophy/{}", grade_filename))
+        };
+
+        let icon_str = icon_path.to_string_lossy().to_string();
+
+        std::thread::spawn(move || {
+            let _ = std::process::Command::new("notify-send")
+                .arg("-a")
+                .arg("God of War® III Remastered")
+                .arg("-i")
+                .arg(&icon_str)
+                .arg("-u")
+                .arg("normal")
+                .arg("-t")
+                .arg("4500")
+                .arg(&header)
+                .arg(&body)
+                .status();
+        });
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        let is_tr = lang.starts_with("tr");
+        let header = if is_tr {
+            format!("🏆 Kupa Kazanıldı! ({})", def.grade.name_tr())
+        } else {
+            format!("🏆 Trophy Earned! ({})", def.grade.name_en())
+        };
+        let title = if is_tr { def.name_tr } else { def.name_en };
+        let desc = if is_tr { def.desc_tr } else { def.desc_en };
+
+        let escaped_header = header.replace('\'', "''");
+        let escaped_body = format!("{}\n{}", title, desc).replace('\'', "''");
+        std::thread::spawn(move || {
+            let script = format!(
+                "[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] > $null; \
+                 $template = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent([Windows.UI.Notifications.ToastTemplateType]::ToastText02); \
+                 $textNodes = $template.GetElementsByTagName('text'); \
+                 $textNodes.Item(0).AppendChild($template.CreateTextNode('{}')) > $null; \
+                 $textNodes.Item(1).AppendChild($template.CreateTextNode('{}')) > $null; \
+                 $notifier = [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('God of War III'); \
+                 $notification = [Windows.UI.Notifications.ToastNotification]::new($template); \
+                 $notifier.Show($notification);",
+                escaped_header, escaped_body
+            );
+            let _ = std::process::Command::new("powershell")
+                .args(["-NoProfile", "-WindowStyle", "Hidden", "-Command", &script])
+                .status();
+        });
+    }
+}
+
 // ---------------------------------------------------------------------------
 // NOTIFICATION & TOAST MANAGER
 // ---------------------------------------------------------------------------
@@ -753,9 +846,6 @@ impl TrophyManager {
         if self.db.unlock(id, now) {
             self.db.save(&self.base_dir);
 
-            // Play sound immediately on unlock
-            play_trophy_sound(&self.base_dir);
-
             // Add to FIFO queue
             self.queue.push_back(id);
 
@@ -801,8 +891,9 @@ impl TrophyManager {
                         start_time: Instant::now(),
                     });
 
-                    // Play pop SFX for newly popped toast if more than one in queue
+                    // Play pop SFX & dispatch top-right desktop notification for newly popped toast
                     play_trophy_sound(&self.base_dir);
+                    send_desktop_notification(&self.base_dir, next_id, def, lang);
                 }
             }
         }
@@ -823,6 +914,7 @@ impl TrophyManager {
             };
 
             play_trophy_sound(&self.base_dir);
+            send_desktop_notification(&self.base_dir, test_id, def, lang);
 
             self.active_toast = Some(ActiveToast {
                 trophy_id: test_id,
@@ -1544,6 +1636,14 @@ fn render_trophy_card(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_send_desktop_notification() {
+        let temp_dir = std::env::temp_dir();
+        if let Some(def) = get_trophy_def(1) {
+            send_desktop_notification(&temp_dir, 1, def, "tr");
+        }
+    }
 
     #[test]
     fn test_all_trophies_count_and_grades() {

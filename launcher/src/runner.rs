@@ -1346,15 +1346,25 @@ pub fn launch_gow3(
     }
     let patches_str = patch_list.join(";");
 
-    // Prepare active patches directory: copy built-in patch XML + XML patches from enabled mods
+    // Prepare active patches directory: copy custom XML patches (excluding built-in) + XML patches from enabled mods
     let active_patches_dir = out_dir.join("active_patches");
     let _ = fs::remove_dir_all(&active_patches_dir);
     let _ = fs::create_dir_all(&active_patches_dir);
 
-    // Copy built-in XML
-    let builtin_xml = patches_path.join("God_of_War_III_Remastered.xml");
-    if builtin_xml.is_file() {
-        let _ = fs::copy(&builtin_xml, active_patches_dir.join("God_of_War_III_Remastered.xml"));
+    // Copy any custom XML patches from patches_path (excluding built-in God_of_War_III_Remastered.xml)
+    if patches_path.is_dir() {
+        if let Ok(entries) = fs::read_dir(&patches_path) {
+            for entry in entries.flatten() {
+                let p = entry.path();
+                if p.is_file() && p.extension().map_or(false, |ext| ext.eq_ignore_ascii_case("xml")) {
+                    if let Some(file_name) = p.file_name() {
+                        if !file_name.eq_ignore_ascii_case("God_of_War_III_Remastered.xml") {
+                            let _ = fs::copy(&p, active_patches_dir.join(file_name));
+                        }
+                    }
+                }
+            }
+        }
     }
 
     // Collect and copy all XML patches from enabled mods

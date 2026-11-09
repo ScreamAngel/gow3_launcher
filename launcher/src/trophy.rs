@@ -555,11 +555,127 @@ impl TrophyStateDatabase {
             }
         }
 
-        if !loaded {
+        let save_synced = db.sync_from_savegames(base_dir);
+
+        if !loaded || save_synced {
             db.save(base_dir);
         }
 
         db
+    }
+
+    pub fn sync_from_savegames(&mut self, base_dir: &Path) -> bool {
+        let mut any_new = false;
+        let mut candidates = Vec::new();
+
+        let save_dirs = [
+            base_dir.join("user/savedata/1/CUSA01715"),
+            base_dir.join("user/savedata/CUSA01715"),
+            base_dir.join("savedata/1/CUSA01715"),
+            base_dir.join("user/home/1/savedata/CUSA01715"),
+            base_dir.join("gow3-linux/user/savedata/1/CUSA01715"),
+        ];
+
+        for sd in &save_dirs {
+            if sd.is_dir() {
+                if let Ok(entries) = fs::read_dir(sd) {
+                    for entry in entries.flatten() {
+                        let path = entry.path();
+                        if path.is_dir() {
+                            let sf = path.join("SAVEDATA");
+                            if sf.is_file() {
+                                candidates.push(sf);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        for save_file in candidates {
+            let mtime = fs::metadata(&save_file)
+                .and_then(|m| m.modified())
+                .ok()
+                .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+                .map(|d| d.as_secs())
+                .unwrap_or_else(|| {
+                    SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_secs()
+                });
+
+            if let Ok(data) = fs::read(&save_file) {
+                let data_str = String::from_utf8_lossy(&data);
+
+                let past_poseidon = data_str.contains("WAD_Hds")
+                    || data_str.contains("WAD_Bas")
+                    || data_str.contains("WAD_Oly")
+                    || data_str.contains("WAD_Crn")
+                    || data_str.contains("WAD_Gaz")
+                    || data_str.contains("Hds100")
+                    || data_str.contains("Hds200")
+                    || data_str.contains("Hds350")
+                    || data_str.contains("Hds525")
+                    || data_str.contains("Hds666")
+                    || data_str.contains("PosHades")
+                    || data_str.contains("HadesDead")
+                    || data_str.contains("HadesSoul");
+
+                if past_poseidon {
+                    if self.unlock(1, mtime) {
+                        any_new = true;
+                    }
+                    if self.unlock(8, mtime.saturating_sub(60)) {
+                        any_new = true;
+                    }
+                }
+
+                let past_apollo = data_str.contains("WAD_Hds350")
+                    || data_str.contains("WAD_Hds525")
+                    || data_str.contains("WAD_Hds666")
+                    || data_str.contains("WAD_Bas")
+                    || data_str.contains("WAD_Oly")
+                    || data_str.contains("WAD_Crn")
+                    || data_str.contains("WAD_Gaz")
+                    || data_str.contains("HadesDead");
+
+                if past_apollo && self.unlock(2, mtime) {
+                    any_new = true;
+                }
+
+                let past_hades = data_str.contains("HadesDead")
+                    || data_str.contains("ephPostHades")
+                    || data_str.contains("WAD_Bas")
+                    || data_str.contains("WAD_Oly")
+                    || data_str.contains("WAD_Crn")
+                    || data_str.contains("WAD_Gaz");
+
+                if past_hades && self.unlock(24, mtime) {
+                    any_new = true;
+                }
+
+                let past_helios = data_str.contains("WAD_Oly700")
+                    || data_str.contains("WAD_Crn")
+                    || data_str.contains("WAD_Gaz");
+
+                if past_helios && self.unlock(4, mtime) {
+                    any_new = true;
+                }
+
+                let past_hermes = data_str.contains("WAD_Crn") || data_str.contains("WAD_Gaz");
+                if past_hermes && self.unlock(5, mtime) {
+                    any_new = true;
+                }
+
+                let past_cronos = data_str.contains("WAD_Gaz");
+                if past_cronos && self.unlock(22, mtime) {
+                    any_new = true;
+                }
+            }
+        }
+
+        any_new
     }
 
     pub fn import_from_xml(&mut self, xml: &str) {
@@ -842,6 +958,130 @@ impl TrophyManager {
             });
         }
     }
+
+    pub fn sync_savegames_and_notify(&mut self, lang: &str) -> bool {
+        let mut newly_unlocked = Vec::new();
+
+        let save_dirs = [
+            self.base_dir.join("user/savedata/1/CUSA01715"),
+            self.base_dir.join("user/savedata/CUSA01715"),
+            self.base_dir.join("savedata/1/CUSA01715"),
+            self.base_dir.join("user/home/1/savedata/CUSA01715"),
+            self.base_dir.join("gow3-linux/user/savedata/1/CUSA01715"),
+        ];
+
+        let mut candidates = Vec::new();
+        for sd in &save_dirs {
+            if sd.is_dir() {
+                if let Ok(entries) = fs::read_dir(sd) {
+                    for entry in entries.flatten() {
+                        let path = entry.path();
+                        if path.is_dir() {
+                            let sf = path.join("SAVEDATA");
+                            if sf.is_file() {
+                                candidates.push(sf);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        for save_file in candidates {
+            let mtime = fs::metadata(&save_file)
+                .and_then(|m| m.modified())
+                .ok()
+                .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+                .map(|d| d.as_secs())
+                .unwrap_or_else(|| {
+                    SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_secs()
+                });
+
+            if let Ok(data) = fs::read(&save_file) {
+                let data_str = String::from_utf8_lossy(&data);
+
+                let past_poseidon = data_str.contains("WAD_Hds")
+                    || data_str.contains("WAD_Bas")
+                    || data_str.contains("WAD_Oly")
+                    || data_str.contains("WAD_Crn")
+                    || data_str.contains("WAD_Gaz")
+                    || data_str.contains("Hds100")
+                    || data_str.contains("Hds200")
+                    || data_str.contains("Hds350")
+                    || data_str.contains("Hds525")
+                    || data_str.contains("Hds666")
+                    || data_str.contains("PosHades")
+                    || data_str.contains("HadesDead")
+                    || data_str.contains("HadesSoul");
+
+                if past_poseidon {
+                    if self.db.unlock(1, mtime) {
+                        newly_unlocked.push(1);
+                    }
+                    if self.db.unlock(8, mtime.saturating_sub(60)) {
+                        newly_unlocked.push(8);
+                    }
+                }
+
+                let past_apollo = data_str.contains("WAD_Hds350")
+                    || data_str.contains("WAD_Hds525")
+                    || data_str.contains("WAD_Hds666")
+                    || data_str.contains("WAD_Bas")
+                    || data_str.contains("WAD_Oly")
+                    || data_str.contains("WAD_Crn")
+                    || data_str.contains("WAD_Gaz")
+                    || data_str.contains("HadesDead");
+
+                if past_apollo && self.db.unlock(2, mtime) {
+                    newly_unlocked.push(2);
+                }
+
+                let past_hades = data_str.contains("HadesDead")
+                    || data_str.contains("ephPostHades")
+                    || data_str.contains("WAD_Bas")
+                    || data_str.contains("WAD_Oly")
+                    || data_str.contains("WAD_Crn")
+                    || data_str.contains("WAD_Gaz");
+
+                if past_hades && self.db.unlock(24, mtime) {
+                    newly_unlocked.push(24);
+                }
+
+                let past_helios = data_str.contains("WAD_Oly700")
+                    || data_str.contains("WAD_Crn")
+                    || data_str.contains("WAD_Gaz");
+
+                if past_helios && self.db.unlock(4, mtime) {
+                    newly_unlocked.push(4);
+                }
+
+                let past_hermes = data_str.contains("WAD_Crn") || data_str.contains("WAD_Gaz");
+                if past_hermes && self.db.unlock(5, mtime) {
+                    newly_unlocked.push(5);
+                }
+
+                let past_cronos = data_str.contains("WAD_Gaz");
+                if past_cronos && self.db.unlock(22, mtime) {
+                    newly_unlocked.push(22);
+                }
+            }
+        }
+
+        if !newly_unlocked.is_empty() {
+            self.db.save(&self.base_dir);
+            for id in newly_unlocked {
+                self.queue.push_back(id);
+            }
+            play_trophy_sound(&self.base_dir);
+            self.advance_queue(lang);
+            true
+        } else {
+            false
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -877,6 +1117,7 @@ impl TrophyWatcherService {
 
                 let mut last_log_size: u64 = 0;
                 let mut last_file_idx = 0;
+                let mut poll_counter: u64 = 0;
 
                 while !stop_clone.load(Ordering::Relaxed) {
                     let active_lang = if let Ok(l) = lang_clone.lock() {
@@ -884,6 +1125,13 @@ impl TrophyWatcherService {
                     } else {
                         "tr".to_string()
                     };
+
+                    poll_counter += 1;
+                    if poll_counter % 20 == 0 {
+                        if let Ok(mut mgr) = shared_manager.lock() {
+                            mgr.sync_savegames_and_notify(&active_lang);
+                        }
+                    }
 
                     // 1. Log Tailer: Inspect gow3_log.txt for new unlock lines
                     for (i, p) in log_candidates.iter().enumerate() {
@@ -1650,6 +1898,24 @@ Trophy unlocked: 12
         assert!(m.db.is_unlocked(7));
         assert!(m.db.is_unlocked(12));
         assert!(!m.db.is_unlocked(2));
+
+        let _ = fs::remove_dir_all(&tmp_dir);
+    }
+
+    #[test]
+    fn test_sync_from_savegames() {
+        let tmp_dir = std::env::temp_dir().join(format!("gow3_save_test_{}", std::process::id()));
+        let save_dir = tmp_dir.join("user/savedata/1/CUSA01715/AUTOSAVE");
+        let _ = fs::create_dir_all(&save_dir);
+
+        let fake_save = b"WAD_Hds100\0PosHades00\0HadesDead\0";
+        fs::write(save_dir.join("SAVEDATA"), fake_save).unwrap();
+
+        let mgr = TrophyManager::new(&tmp_dir);
+        assert!(mgr.db.is_unlocked(1));
+        assert!(mgr.db.is_unlocked(8));
+        assert!(mgr.db.is_unlocked(24));
+        assert!(!mgr.db.is_unlocked(22));
 
         let _ = fs::remove_dir_all(&tmp_dir);
     }

@@ -9,6 +9,7 @@
   "launch_while_compiling_shaders": false,
   "show_shader_compile_rage_meter": false,
   "skip_cinematics": true,
+  "bonus_play_fix": true,
   "use_gamemode": true,
   "vram_gc_budget_mb": 6144,
   "dmem_mb": 9216,
@@ -22,19 +23,16 @@
     "cpu_threads": 20
   },
   "last_git_commit": "0b4abe07acb711848d1b5d72402a9de8c0ad9844",
-  "launcher_version": "v2.1",
-  "discord_rpc_enabled": true,
-  "discord_client_id": "1124351711486689290",
+  "launcher_version": "v2.2",
   "disabled_mods": [
     "(OPTIONAL) God Armor",
-    "Blades of Athena Damage Boost",
-    "CJ (Mod by Gamer JP)",
     "game",
     "Game",
     "god armor By Richarito v2",
-    "Golden Blades",
     "DiamondSword v1.1 Author YT @MustopuhGGI",
-    "Skeleton Kratos Skin"
+    "Skeleton Kratos Skin",
+    "Golden Blades",
+    "CJ (Mod by Gamer JP)"
   ],
   "render_resolution": "native",
   "fsr_enabled": false,
@@ -49,10 +47,10 @@
   "deadzone_left": 2,
   "deadzone_right": 2,
   "keyboard_bindings": {
-    "triangle": "u",
-    "circle": "j",
-    "cross": "g",
-    "square": "t",
+    "triangle": "mouse2",
+    "circle": "f",
+    "cross": "space",
+    "square": "mouse1",
     "l1": "q",
     "r1": "e",
     "l2": "z",
@@ -73,5 +71,7 @@
     "axis_right_x_plus": "kp6",
     "axis_right_y_minus": "kp8",
     "axis_right_y_plus": "kp2"
-  }
+  },
+  "discord_rpc_enabled": true,
+  "discord_client_id": "1440140183675867156"
 }

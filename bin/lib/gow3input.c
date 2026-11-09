@@ -415,3 +415,22 @@ void _ZN5ImGui11ProgressBarEfRK6ImVec2PKc(float fraction, const void* size_arg, 
     (void)overlay;
 }
 
+#ifdef _WIN32
+BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpReserved) {
+    (void)hinstDLL;
+    (void)lpReserved;
+    if (fdwReason == DLL_PROCESS_ATTACH) {
+        setvbuf(stdout, NULL, _IONBF, 0);
+        setvbuf(stderr, NULL, _IONBF, 0);
+    }
+    return TRUE;
+}
+#else
+__attribute__((constructor))
+static void gow3_runtime_preinit(void) {
+    setvbuf(stdout, NULL, _IONBF, 0);
+    setvbuf(stderr, NULL, _IONBF, 0);
+}
+#endif
+
+

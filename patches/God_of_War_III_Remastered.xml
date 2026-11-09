@@ -207,4 +207,12 @@
             <Line Type="bytes" Address="0x00566090" Value="c3"/>
         </PatchList>
     </Metadata>
+    <Metadata Title="God of War III Remastered" Name="Bug Fix - Trophy Unlock Fix" Note="Fixes emulator trophy count bounds check in eboot.bin, enabling all 36 trophies to unlock seamlessly." Author="gow3-launcher" PatchVer="1.0" AppVer="01.02" AppElf="eboot.bin" isEnabled="true">
+        <PatchList>
+            <Line Type="bytes" Address="0x005f0510" Value="b840000000c3"/>
+            <Line Type="bytes" Address="0x00425330" Value="9090"/>
+            <Line Type="bytes" Address="0x0041f73a" Value="9090"/>
+            <Line Type="bytes" Address="0x0041efce" Value="909090909090"/>
+        </PatchList>
+    </Metadata>
 </Patch>
